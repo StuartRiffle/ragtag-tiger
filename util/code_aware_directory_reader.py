@@ -1,3 +1,7 @@
+
+from llama_index import SimpleDirectoryReader, Document
+from llama_index.text_splitter import CodeSplitter
+
 class CodeAwareDirectoryReader(SimpleDirectoryReader):
     """Chunks source code files in a roughly language-aware way."""
 

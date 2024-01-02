@@ -6,6 +6,10 @@ from llama_index import VectorStoreIndex, SimpleDirectoryReader, Document, Stora
 from llama_index import load_index_from_storage, download_loader
 from llama_index.text_splitter import CodeSplitter
 
+from util.code_aware_directory_reader import CodeAwareDirectoryReader
+from util.find_files_using_gitignore import find_files_using_gitignore
+
+
 program_name = "RAG/TAG Tiger"
 program_version = "1.0.0"
 start_time = time.time()
@@ -70,7 +74,7 @@ files_to_load = []
 
 for folder in args.source_folder or []:
     print(f"Searching for files under \"{folder}\"...")
-    folder_files = find_files_recursively(folder, args.use_gitignore)
+    folder_files = find_files_using_gitignore(folder, args.use_gitignore)
     files_to_load.extend(folder_files)
     print_verbose(f"\t{len(folder_files)} found")
 
@@ -261,7 +265,7 @@ if len(queries) > 0:
             "latency": response_time,
         })
 
-    # Write out the logs
+    # Write out the response logs
 
     if args.output_text:
         print(f"Writing log to \"{args.output_text}\"...")
@@ -273,6 +277,8 @@ if len(queries) > 0:
         with open(args.output_json, "w", encoding="utf-8") as f:
             raw_text = json.dumps(json_log, indent=4)
             f.write(raw_text)
+
+    # Queries are all done!
 
     print_verbose(f"All queries completed in {time.time() - time_before_queries:.3f} seconds")
 
@@ -328,8 +334,6 @@ if args.chat:
             all_lines = "\n".join(chat_lines) 
             f.write(all_lines + "\n")
 
-    print("Bye!")
-    
-# That's as good as it's going to get
+# Tiger out
 
 print(f"Done in {time.time() - start_time:.3f} seconds")
