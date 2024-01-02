@@ -1,7 +1,7 @@
 import os
 import pathspec
 
-def find_files_recursively(folder, use_gitignore=True, parent_gitignore=None):
+def find_files_using_gitignore(folder, use_gitignore=True, parent_gitignore=None):
     """Recursively find all files in a folder, filtering them using nested .gitignore files."""
     file_list = []
     
