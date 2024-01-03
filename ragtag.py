@@ -2,13 +2,10 @@
 
 import os, argparse, time, datetime, json, pathspec
 from transformers import AutoModelForCausalLM
-from llama_index import VectorStoreIndex, SimpleDirectoryReader, Document, StorageContext
+from llama_index import VectorStoreIndex, StorageContext
 from llama_index import load_index_from_storage, download_loader
-from llama_index.text_splitter import CodeSplitter
-
 from util.code_aware_directory_reader import CodeAwareDirectoryReader
 from util.find_files_using_gitignore import find_files_using_gitignore
-
 
 program_name = "RAG/TAG Tiger"
 program_version = "1.0.0"
@@ -33,11 +30,11 @@ arg("--exclude-spec",   help="Exclude files matching a pathspec, like \"**/.vs/*
 arg("--use-gitignore",  help="Exclude files specified by .gitignore files", action="store_true")
 
 arg = parser.add_argument_group("Language model").add_argument
+arg("--llm-model-name", help="Path or HF model for local inference (overrides server and provider)", metavar="PATH")
+arg("--llm-provider",   help="Commercial inference provider (overrides server)", choices=["openai", "claude", "bing", "gemini"])
 arg("--llm-server",     help="LLM inference server URL", default="http://localhost:8080", metavar="URL")
 arg("--llm-api-key",    help="API key for inference server (if needed)", default="", metavar="KEY")
 arg("--llm-secret",     help="Secret for inference server (if needed)", default="", metavar="SECRET")
-arg("--llm-provider",   help="Commercial inference provider (overrides server)", choices=["openai", "claude", "bing", "gemini"])
-arg("--llm-model-name", help="Path or HF model for local inference (overrides server and provider)", metavar="PATH")
 arg("--llm-param",      help="Inference parameter, like \"temperature=0.9\" etc", nargs="+", metavar="PARAM_AND_VALUE")
 arg("--context",        help="Command line context", nargs="+", metavar="TEXT")
 arg("--context-file",   help="File containing a snippet of context", nargs="+", metavar="FILE")
@@ -50,11 +47,13 @@ arg("--query-log",      help="Log queries and responses to a text file", metavar
 arg("--query-log-json", help="Log queries and responses (plus some metadata) to a JSON file", metavar="FILE")
 arg("--query-memory",   help="Maintain history between queries", action="store_true")
 arg("--query-mode",     help="Query response mode", choices=["accumulate", "compact", "compact_accumulate", "generation", "no_text", "refine", "simple_summarize", "tree_summarize"], default="tree_summarize")
-arg("--name-queries",   help="The name/header in the transcript for user queries", metavar="NAME", default="Query")
-arg("--name-responses", help="The name/header in the transcript for engine responses", metavar="NAME", default="Response")
+arg("--tag-queries",    help="The name/header in the transcript for user queries", metavar="NAME", default="Query")
+arg("--tag-responses",  help="The name/header in the transcript for engine responses", metavar="NAME", default="Response")
 
 arg = parser.add_argument_group("Interactive chat").add_argument
 arg("--chat",           help="Enter chat after any query processing", action="store_true")
+arg("--chat-init",      help="Short extra instructions/personality for the chat LLM", nargs="+", metavar="TEXT")
+arg("--chat-init-file", help="File containing a snippet of chat LLM instructions", nargs="+", metavar="FILE")
 arg("--chat-log",       help="Append chat queries and responses to a text file", metavar="FILE")
 arg("--chat-mode",      help="Chat response mode", choices=["best", "context", "condense_question", "simple", "react", "openai"], default="best")
 
@@ -78,20 +77,39 @@ for folder in args.source_folder or []:
     files_to_load.extend(folder_files)
     print_verbose(f"\t{len(folder_files)} found")
 
-for file in args.source_list or []:
-    print(f"Loading file list from from \"{file}\"...")
-    with open(file, "r", encoding="utf-8") as f:
-        source_list_files = f.read().splitlines()
-        source_list_files = [name for name in source_list_files if name.strip()]
-        files_to_load.extend(source_list_files)
-        print_verbose(f"\t{len(source_list_files)} found")
-
 for spec in args.source_spec or []:
     print(f"Finding files matching \"{spec}\"...")
     spec = pathspec.PathSpec.from_lines('gitwildmatch', [spec])
     spec_files = os.glob(spec)
     files_to_load.extend(spec_files)
     print_verbose(f"\t{len(spec_files)} found")
+
+for file in args.source_list or []:
+    print(f"Loading file/spec list from from \"{file}\"...")
+    with open(file, "r", encoding="utf-8") as f:
+        source_list_files = f.read().splitlines()
+        source_list_files = [name for name in source_list_files if name.strip()]
+
+        total = 0
+        for list_file in source_list_files:
+            print_verbose(f"\t{list_file}")
+
+            found_files = []
+            if os.path.isfile(list_file):
+                found_files.append(list_file)
+            else:
+                spec = pathspec.PathSpec.from_lines('gitwildmatch', [list_file])
+                spec_files = os.glob(spec, recursive=True)
+                if len(spec_files) > 0:
+                    found_files.extend(spec_files)
+                else:
+                    print_verbose(f"\t\tWARNING: can't resolve to a file name or pathspec")
+
+            if len(found_files) > 0:
+                files_to_load.extend(found_files)
+                total += len(found_files)
+
+        print_verbose(f"\t{total} files found")
 
 # Filter out ones we don't actually want
     
@@ -252,10 +270,10 @@ if len(queries) > 0:
             preface += text_log
 
         query_start_time = time.time()
-        response = query_engine.query(f"{preface}\n{args.name_query}: {query}", verbose=args.verbose)
+        response = query_engine.query(f"{preface}\n{args.tag_queries}: {query}", verbose=args.verbose)
         response_time = time.time() - query_start_time
 
-        interaction = f"{args.name_query}: {query}\n{args.name_response}: {response}\n"
+        interaction = f"{args.tag_queries}: {query}\n{args.tag_responses}: {response}\n"
         print_verbose(interaction)
         
         text_log += interaction
@@ -280,7 +298,7 @@ if len(queries) > 0:
 
     # Queries are all done!
 
-    print_verbose(f"All queries completed in {time.time() - time_before_queries:.3f} seconds")
+    print(f"All queries completed in {time.time() - time_before_queries:.3f} seconds\n")
 
 # Chat mode
 
@@ -290,11 +308,17 @@ if args.chat:
     print(f" - Hit CTRL-C to interrupt a response in progress")
     print(f" - Say \"bye\" or something similar when you're done")
     print()
+    
+    chat_init = args.chat_init or []
+    for file in args.chat_init_file or []:
+        print_verbose(f"Loading chat context/instructions from \"{file}\"...")
+        with open(file, "r", encoding="utf-8") as f:
+            chat_init_text = f.read().strip()
+            chat_init.append(chat_init_text)
 
-    exit_commands = ["bye", "goodbye", "exit", "quit", "done", "stop", "end", "thanks", "peace"]
     chat_engine_params = {
         "chat_mode": args.chat_mode,
-        "system_prompt": context,
+        "system_prompt": f"{context}\n{chat_init}",
         "verbose": args.verbose, 
     }
 
@@ -304,6 +328,7 @@ if args.chat:
         chat_engine = vector_index.as_chat_engine(server_url=args.llm_server, api_key=args.llm_api_key, **chat_engine_params)
 
     chat_lines = []
+    exit_commands = ["bye", "goodbye", "exit", "quit", "done", "stop", "end", "thanks", "peace"]
 
     while True:
         try:
@@ -313,7 +338,7 @@ if args.chat:
         except KeyboardInterrupt:
             continue
 
-        chat_lines.append(f"{args.name_query}: {message}")
+        chat_lines.append(f"{args.tag_queries}: {message}")
         response_line = ""
 
         try:
@@ -324,7 +349,7 @@ if args.chat:
         except KeyboardInterrupt:
             print("[response interrupted]")
 
-        chat_lines.append(f"{args.name_response}: {response_line}")
+        chat_lines.append(f"{args.tag_responses}: {response_line}")
         print()
 
     if args.chat_log and len(chat_lines) > 0:
@@ -334,6 +359,6 @@ if args.chat:
             all_lines = "\n".join(chat_lines) 
             f.write(all_lines + "\n")
 
-# Tiger out
-
+# Tiger out, peace
+            
 print(f"Done in {time.time() - start_time:.3f} seconds")

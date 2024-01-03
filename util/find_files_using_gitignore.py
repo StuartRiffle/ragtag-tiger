@@ -18,7 +18,7 @@ def find_files_using_gitignore(folder, use_gitignore=True, parent_gitignore=None
     for item in os.listdir(folder):
         full_path = os.path.join(folder, item)
         if os.path.isdir(full_path):
-            file_list += find_files_recursively(full_path, use_gitignore, parent_gitignore=gitignore)
+            file_list += find_files_using_gitignore(full_path, use_gitignore, parent_gitignore=gitignore)
         elif os.path.isfile(full_path):
             rel_path = os.path.relpath(full_path, start=folder)
             if gitignore and gitignore.match_file(rel_path):
