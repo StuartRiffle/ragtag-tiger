@@ -15,7 +15,7 @@ It is mostly the same boilerplate/glue you were going to have to write anyway, s
 `python ragtag.py --help`
 
 - runs queries on a local LLM, an internal inference server, or a commercial endpoint
-- loads/updates/stores the vector index to avoid redundant processing
+- loads/updates/stores a vector index to avoid redundant processing
 - provides fine grained control over which files to index or be excluded
 - downloads loaders from the LlamaIndex hub to support custom file types
 - allows tuning of LLM inference parameters (temperature, etc)
