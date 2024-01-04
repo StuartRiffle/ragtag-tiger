@@ -12,7 +12,6 @@ program_name = "RAG/TAG Tiger"
 program_version = "0.1.0"
 program_license = "MIT"
 program_copyright = "Copyright (c) 2024 Stuart Riffle"
-start_time = time.time()
 
 parser = argparse.ArgumentParser(
     description="Update and query a vector document store using LlamaIndex", 
@@ -31,7 +30,7 @@ arg("--source-spec",    help="Index files matching a pathspec, like \"**/*.(cpp|
 arg("--source-list",    help="Text file with a list of filenames/pathspecs to index", nargs="+", metavar="FILE")
 arg("--exclude-spec",   help="Exclude files matching a pathspec, like \"**/.vs/**/*\"", nargs="+", metavar="SPEC")
 arg("--use-gitignore",  help="Exclude files specified by .gitignore files", action="store_true")
-arg("--custom-loader",  help="Download/use loaders from LlamaIndex hub, like \"JPEGReader:jpg,jpeg\" etc" , nargs="+", metavar="SPEC")
+arg("--custom-loader",  help="Use loaders from LlamaIndex hub, specify like \"JPEGReader:jpg,jpeg\"" , nargs="+", metavar="SPEC")
 
 arg = parser.add_argument_group("Language model").add_argument
 arg("--llm-model-name", help="Path or HF model for local inference (overrides server and provider)", metavar="PATH")
@@ -49,7 +48,7 @@ arg("--query-list",     help="File containing short queries, one per line", narg
 arg("--query-file",     help="File containing one long query", nargs="+", metavar="FILE")
 arg("--query-log",      help="Log queries and responses to a text file", metavar="FILE")
 arg("--query-log-json", help="Log queries and responses (plus some metadata) to a JSON file", metavar="FILE")
-arg("--query-memory",   help="Maintain history between queries", action="store_true")
+arg("--query-memory",   help="Maintain \"chat\" history between queries", action="store_true")
 arg("--query-mode",     help="Query response mode", choices=["accumulate", "compact", "compact_accumulate", "generation", "no_text", "refine", "simple_summarize", "tree_summarize"], default="tree_summarize")
 arg("--tag-queries",    help="The name/header in the transcript for user queries", metavar="NAME", default="Query")
 arg("--tag-responses",  help="The name/header in the transcript for engine responses", metavar="NAME", default="Response")
@@ -70,6 +69,8 @@ args = parser.parse_args()
 if args.version:
     exit(0)
 
+start_time = time.time()
+
 # Find all the files to be indexed
 
 files_to_load = []
@@ -83,7 +84,7 @@ for folder in args.source_folder or []:
 for spec in args.source_spec or []:
     print(f"Finding files matching \"{spec}\"...")
     spec = pathspec.PathSpec.from_lines('gitwildmatch', [spec])
-    spec_files = os.glob(spec)
+    spec_files = os.glob(spec, recursive=True, include_files=True)
     files_to_load.extend(spec_files)
     print_verbose(f"\t{len(spec_files)} found")
 
@@ -135,7 +136,7 @@ if len(files_to_load) > 0:
     if len(files_to_load) < previous_length:
         print_verbose(f"\t{previous_length - len(files_to_load)} removed")
 
-# Download custom loaders
+# Download custom loaders from the hub
 
 file_extractor_list = {}
 
@@ -155,9 +156,9 @@ for loader_spec in loader_specs:
         for extension in extensions.split(","):
             file_extractor_list["." + extension.strip(". ")] = loader()
     except:
-        print(f"\t\tWARNING: failure downloading \"{loader_class}\"")
+        print(f"\tWARNING: failure downloading \"{loader_class}\"")
 
-# Load and chunk the files
+# Load and chunk the documents
 
 if len(files_to_load) > 0:
     print(f"Loading and chunking {len(files_to_load)} files...")
@@ -173,7 +174,7 @@ if len(files_to_load) > 0:
     except:
         print(f"\tERROR: failure while loading documents")
 
-# Update the vector index with these documents
+# Update the vector index
 
 if args.index_load:
     print(f"Loading existing vector index from \"{args.index_load}\"...")
@@ -211,7 +212,7 @@ if args.index_store:
     except:
         print(f"\tERROR: failure while storing index")
 
-# Construct the LLM system prompt/context from text file snippets
+# Construct the LLM context/system prompt from text snippets
 
 context = ""
 snippets = args.context or []
@@ -323,18 +324,18 @@ if len(queries) > 0:
     }
 
     for query in queries:
-        query_start_time = time.time()
         preface = context
         if args.query_memory:
             preface += text_log
 
         try:
+            query_start_time = time.time()
             response = query_engine.query(f"{preface}\n{args.tag_queries}: {query}", verbose=args.verbose)
+            response_time = time.time() - query_start_time
         except:
             print(f"\tERROR: failure while running query")
             continue
 
-        response_time = time.time() - query_start_time
         interaction = f"{args.tag_queries}: {query}\n{args.tag_responses}: {response}\n"
         print_verbose(interaction)
         
@@ -345,7 +346,7 @@ if len(queries) > 0:
             "latency": response_time,
         })
 
-    # Write out the response logs
+    # Commit the logs
 
     if args.output_text:
         print(f"Writing log to \"{args.output_text}\"...")
@@ -364,7 +365,7 @@ if len(queries) > 0:
         except:
             print(f"\tERROR: failure while writing JSON log")
 
-    # Queries are all done!
+    # Queries all done!
 
     print(f"All queries completed in {time.time() - time_before_queries:.3f} seconds\n")
 
@@ -374,7 +375,7 @@ if args.chat:
     print(f"Entering interactive chat...")
     print(f" - The response mode is \"{args.chat_mode}\"")
     print(f" - Hit CTRL-C to interrupt a response in progress")
-    print(f" - Say \"bye\" or something similar when you're done")
+    print(f" - Say \"bye\" or something like that when you're done")
     print()
     
     chat_init = args.chat_init or []
@@ -401,6 +402,7 @@ if args.chat:
             chat_engine = vector_index.as_chat_engine(server_url=args.llm_server, api_key=args.llm_api_key, **chat_engine_params)
     except:
         print(f"\tERROR: failure while initializing chat engine")
+        exit(1)
 
     chat_lines = []
     exit_commands = ["bye", "goodbye", "exit", "quit", "done", "stop", "end", "thanks", "peace"]
@@ -424,8 +426,8 @@ if args.chat:
         except KeyboardInterrupt:
             print("[response interrupted]")
 
-        print()
         chat_lines.append(f"{args.tag_responses}: {response_line}")
+        print()
 
     if args.chat_log and len(chat_lines) > 0:
         write_action = "Appending" if os.path.exists(args.chat_log) else "Writing"
