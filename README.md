@@ -19,7 +19,7 @@ It is mostly the same boilerplate/glue you were going to have to write anyway, s
 - provides fine grained control over which files to index or be excluded
 - downloads loaders from the LlamaIndex hub to support custom file types
 - allows tuning of LLM inference parameters (temperature, etc)
-- combines multiple sources to build system prompts and queries
+- assembles multiple sources to build system prompts and queries
 - supports interactive chat on the command line
 
 ## FAQ
