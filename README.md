@@ -1,5 +1,6 @@
-
 # RAG/TAG Tiger
+
+**UNDER DEVELOPMENT - DO NOT USE**
 
 This is a LlamaIndex wrapper that provides a point-and-shoot command line interface for doing RAG queries on local documents/code.
 
@@ -23,21 +24,21 @@ It is mostly the same boilerplate/glue you were going to have to write anyway, s
 
 ## FAQ
 
-Q: What does the name mean?
+Q: What does the name mean?<br>
 A: The term "RAG" means Retrieval Augmented Generation. Instead of fine tuning language model weights to remember the details of your documents, the idea is to use a stock language model, but give it a way to search your data for details on the fly.
 
-Q: What about "TAG"?
+Q: What about "TAG"?<br>
 A: That's a blanket term for tiger-augmented methods.
 
-Q: Are those common?
+Q: Are those common?<br>
 A: Not in production.
 
-Q: But why is there a tiger here at all?
+Q: But why is there a tiger here at all?<br>
 A: I tend to anthropomorphize small programs (they like that), but honestly most species can handle RAG queries in a pinch, and the choice of tiger here was arbitrary. We can revisit this.
 
-Q: May I have a warranty of merchantability and fitness for my particular purpose?
+Q: May I have a warranty of merchantability and fitness for my particular purpose?<br>
 A: No.
 
-Q: Good enough, how can I buy you that coffee?
-A: The coffee was a metaphor and your donation will be used to buy drugs. Please contribute here:
+Q: Good enough, how can I buy you that coffee?<br>
+A: The coffee was a metaphor and your donation will be used to buy drugs. Please contribute here: (todo)
 
