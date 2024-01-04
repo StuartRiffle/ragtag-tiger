@@ -1,3 +1,4 @@
+# RAG/TAG Tiger
 # Copyright (c) 2024 Stuart Riffle
 
 import os, argparse, time, datetime, json, pathspec
@@ -8,7 +9,9 @@ from util.code_aware_directory_reader import CodeAwareDirectoryReader
 from util.find_files_using_gitignore import find_files_using_gitignore
 
 program_name = "RAG/TAG Tiger"
-program_version = "1.0.0"
+program_version = "0.1.0"
+program_license = "MIT"
+program_copyright = "Copyright (c) 2024 Stuart Riffle"
 start_time = time.time()
 
 parser = argparse.ArgumentParser(
@@ -28,6 +31,7 @@ arg("--source-spec",    help="Index files matching a pathspec, like \"**/*.(cpp|
 arg("--source-list",    help="Text file with a list of filenames/pathspecs to index", nargs="+", metavar="FILE")
 arg("--exclude-spec",   help="Exclude files matching a pathspec, like \"**/.vs/**/*\"", nargs="+", metavar="SPEC")
 arg("--use-gitignore",  help="Exclude files specified by .gitignore files", action="store_true")
+arg("--custom-loader",  help="Download/use loaders from LlamaIndex hub, like \"JPEGReader:jpg,jpeg\" etc" , nargs="+", metavar="SPEC")
 
 arg = parser.add_argument_group("Language model").add_argument
 arg("--llm-model-name", help="Path or HF model for local inference (overrides server and provider)", metavar="PATH")
@@ -36,7 +40,7 @@ arg("--llm-server",     help="LLM inference server URL", default="http://localho
 arg("--llm-api-key",    help="API key for inference server (if needed)", default="", metavar="KEY")
 arg("--llm-secret",     help="Secret for inference server (if needed)", default="", metavar="SECRET")
 arg("--llm-param",      help="Inference parameter, like \"temperature=0.9\" etc", nargs="+", metavar="PARAM_AND_VALUE")
-arg("--context",        help="Command line context", nargs="+", metavar="TEXT")
+arg("--context",        help="Command line context/system prompt", nargs="+", metavar="TEXT")
 arg("--context-file",   help="File containing a snippet of context", nargs="+", metavar="FILE")
 
 arg = parser.add_argument_group("Query processing").add_argument
@@ -57,15 +61,14 @@ arg("--chat-init-file", help="File containing a snippet of chat LLM instructions
 arg("--chat-log",       help="Append chat queries and responses to a text file", metavar="FILE")
 arg("--chat-mode",      help="Chat response mode", choices=["best", "context", "condense_question", "simple", "react", "openai"], default="best")
 
-print(f"{program_name} {program_version}\n")
-
-args = parser.parse_args()
-if args.version:
-    exit(0)
-
 def print_verbose(msg, **kwargs):
     if args.verbose:
         print(msg, **kwargs)
+
+print(f"{program_name} {program_version}\n")
+args = parser.parse_args()
+if args.version:
+    exit(0)
 
 # Find all the files to be indexed
 
@@ -104,7 +107,7 @@ for file in args.source_list or []:
             found_files.extend(spec_files)
         files_to_load.extend(found_files)
 
-print_verbose(f"\t{len(files_to_load)} total files found")
+print_verbose(f"\t{len(files_to_load)} total files found to index")
 
 # Filter out ones we don't actually want
 
@@ -134,16 +137,25 @@ if len(files_to_load) > 0:
 
 # Download custom loaders
 
-print("Downloading custom loaders...")
-try:
-    JSONReader = download_loader("JSONReader")
-    UnstructuredReader = download_loader('UnstructuredReader')
-    custom_loaders = {
-        ".json": JSONReader(),
-        ".html": UnstructuredReader(),
-    }
-except:
-    print(f"\tERROR: failure while downloading custom loaders")
+file_extractor_list = {}
+
+default_loaders = ["JSONReader:json"]
+loader_specs = default_loaders
+loader_specs.extend(args.custom_loaders or [])
+
+print("Downloading file loaders...")
+for loader_spec in loader_specs:
+    if not ':' in loader_spec:
+        print(f"\tWARNING: invalid loader spec \"{loader_spec}\"")
+        continue
+    loader_class, extensions = loader_spec.split(":", 1)
+    print_verbose(f"\t{loader_class} ({extensions.join(', ')})")
+    try:
+        loader = download_loader(loader_class)
+        for extension in extensions.split(","):
+            file_extractor_list["." + extension.strip(". ")] = loader()
+    except:
+        print(f"\t\tWARNING: failure downloading \"{loader_class}\"")
 
 # Load and chunk the files
 
@@ -151,7 +163,7 @@ if len(files_to_load) > 0:
     print(f"Loading and chunking {len(files_to_load)} files...")
     doc_reader = CodeAwareDirectoryReader(
         input_files=files_to_load, 
-        file_extractor=custom_loaders or None, 
+        file_extractor=file_extractor_list, 
         exclude_hidden=True,
         verbose=args.verbose)
     try:
@@ -159,7 +171,7 @@ if len(files_to_load) > 0:
         documents_to_index = doc_reader.load_data(show_progress=args.verbose)
         print_verbose(f"\tfinished in {time.time() - time_before_loading_docs:.3f} seconds")
     except:
-        print_verbose(f"\tERROR: failure while loading documents")
+        print(f"\tERROR: failure while loading documents")
 
 # Update the vector index with these documents
 
@@ -171,7 +183,7 @@ if args.index_load:
         vector_index = load_index_from_storage(storage_context, show_progress=args.verbose)    
         print_verbose(f"\tloaded in {time.time() - time_before_loading_index:.3f} seconds")
     except:
-        print_verbose(f"\tERROR: failure while loading index")
+        print(f"\tERROR: failure while loading index")
 
 if not vector_index:
     vector_index = VectorStoreIndex(show_progress=args.verbose)
@@ -187,10 +199,11 @@ if documents_to_index and len(documents_to_index) > 0:
             print_verbose(f" ({time.time() - time_before_indexing_doc:.3f} seconds)")
         except:
             print(f" [ERROR]")
+
     print_verbose(f"\tindexing complete in {time.time() - time_before_indexing:.3f} seconds")
 
 if args.index_store:
-    print(f"Storing updated vector index to \"{args.index_store}\"...")
+    print(f"Storing vector index in \"{args.index_store}\"...")
     try:
         time_before_storing_index = time.time()
         vector_index.storage_context.persist(persist_dir=args.index_store, show_progress=args.verbose)
@@ -219,7 +232,7 @@ for file in args.context_file or []:
     except:
         print(f"\tERROR: failure while loading context")
 
-# Load all the user queries
+# Collect all the user queries
 
 queries = args.query or []
 
@@ -274,11 +287,11 @@ if args.llm_model_name:
 if args.llm_provider and not query_engine:
     print(f"Query engine will use LLM inference provider \"{args.llm_provider}\"...")
     if args.llm_server:
-        print_verbose(f"\tWARNING: overriding inference API server {args.llm_server}")
+        print_verbose(f"\tWARNING: overriding inference API server \"{args.llm_server}\"")
 
     try:
         time_before_connecting = time.time()
-        query_engine = vector_index.as_query_engine(provider=args.llm_provider, **query_engine_params)
+        query_engine = vector_index.as_query_engine(provider=args.llm_provider, api_key=args.llm_api_key, **query_engine_params)
         print_verbose(f"\tconnected in {time.time() - time_before_connecting:.3f} seconds")
     except:
         print(f"\tERROR: failure while connecting to provider")
@@ -292,12 +305,15 @@ if args.llm_server and not query_engine:
     except:
         print(f"\tERROR: failure while connecting to server")
 
+if not query_engine:
+    print(f"ERROR: no query engine available")
+    exit(1)
+
 # Run all the queries
     
 if len(queries) > 0:
     print(f"Running {len(queries)} queries...")
     time_before_queries = time.time()
-
     text_log = ""
     json_log = {
         "model": query_engine.model_name,
