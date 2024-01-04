@@ -16,6 +16,7 @@ program_copyright = "Copyright (c) 2024 Stuart Riffle"
 parser = argparse.ArgumentParser(
     description="Update and query a vector document store using LlamaIndex", 
     fromfile_prefix_chars='@')
+
 arg = parser.add_argument
 arg("-v", "--verbose",  help="enable extended/debug output", action="store_true")
 arg("--version",        help="print the version number and exit", action="store_true")
@@ -38,7 +39,7 @@ arg("--llm-provider",   help="Commercial inference provider (overrides server)",
 arg("--llm-server",     help="LLM inference server URL", default="http://localhost:8080", metavar="URL")
 arg("--llm-api-key",    help="API key for inference server (if needed)", default="", metavar="KEY")
 arg("--llm-secret",     help="Secret for inference server (if needed)", default="", metavar="SECRET")
-arg("--llm-param",      help="Inference parameter, like \"temperature=0.9\" etc", nargs="+", metavar="PARAM_AND_VALUE")
+arg("--llm-param",      help="Inference parameter, like \"temperature=0.9\" etc", nargs="+", metavar="KVP")
 arg("--context",        help="Command line context/system prompt", nargs="+", metavar="TEXT")
 arg("--context-file",   help="File containing a snippet of context", nargs="+", metavar="FILE")
 
@@ -60,14 +61,16 @@ arg("--chat-init-file", help="File containing a snippet of chat LLM instructions
 arg("--chat-log",       help="Append chat queries and responses to a text file", metavar="FILE")
 arg("--chat-mode",      help="Chat response mode", choices=["best", "context", "condense_question", "simple", "react", "openai"], default="best")
 
-def print_verbose(msg, **kwargs):
-    if args.verbose:
-        print(msg, **kwargs)
-
 print(f"{program_name} {program_version}\n")
 args = parser.parse_args()
 if args.version:
     exit(0)
+
+def print_verbose(msg, **kwargs):
+    if args.verbose:
+        print(msg, **kwargs)
+
+# Let's go, tiger
 
 start_time = time.time()
 
@@ -122,7 +125,7 @@ if len(files_to_load) > 0:
             print_verbose(f"\t{previous_length - len(files_to_load)} excluded")
 
 if len(files_to_load) > 0:
-    print(f"Filtering duplicate entries...")
+    print(f"Filtering out duplicate entries...")
     previous_length = len(files_to_load)
     files_to_load = [os.path.normpath(os.path.realpath(f)) for f in files_to_load]
     files_to_load = sorted(set(files_to_load))
@@ -138,12 +141,11 @@ if len(files_to_load) > 0:
 
 # Download custom loaders from the hub
 
-file_extractor_list = {}
-
 default_loaders = ["JSONReader:json"]
 loader_specs = default_loaders
 loader_specs.extend(args.custom_loaders or [])
 
+file_extractor_list = {}
 print("Downloading file loaders...")
 for loader_spec in loader_specs:
     if not ':' in loader_spec:
@@ -187,9 +189,10 @@ if args.index_load:
         print(f"\tERROR: failure while loading index")
 
 if not vector_index:
+    print_verbose(f"Creating a new vector index in memory...")
     vector_index = VectorStoreIndex(show_progress=args.verbose)
 
-if documents_to_index and len(documents_to_index) > 0:
+if len(documents_to_index or []) > 0:
     print(f"Indexing {len(documents_to_index)} documents...")
     time_before_indexing = time.time()
     for doc in documents_to_index:
@@ -243,8 +246,8 @@ for file in args.query_list or []:
         with open(file, "r", encoding="utf-8") as f:
             short_queries = f.read().splitlines()
             short_queries = [q for q in short_queries if q.strip()]
-            print_verbose(f"\t{len(short_queries)} found")
             queries.extend(short_queries)
+            print_verbose(f"\t{len(short_queries)} found")
     except:
         print(f"\tERROR: failure while loading queries")
 
@@ -372,12 +375,6 @@ if len(queries) > 0:
 # Chat mode
 
 if args.chat:
-    print(f"Entering interactive chat...")
-    print(f" - The response mode is \"{args.chat_mode}\"")
-    print(f" - Hit CTRL-C to interrupt a response in progress")
-    print(f" - Say \"bye\" or something like that when you're done")
-    print()
-    
     chat_init = args.chat_init or []
     for file in args.chat_init_file or []:
         print_verbose(f"Loading chat context/instructions from \"{file}\"...")
@@ -389,6 +386,12 @@ if args.chat:
         except:
             print(f"\tERROR: failure while loading chat context")
 
+    print(f"Entering interactive chat...")
+    print(f" - The response mode is \"{args.chat_mode}\"")
+    print(f" - Hit CTRL-C to interrupt a response in progress")
+    print(f" - Say \"bye\" or something like that when you're done")
+    print()
+    
     chat_engine_params = {
         "chat_mode": args.chat_mode,
         "system_prompt": f"{context}\n{chat_init}",
@@ -405,7 +408,7 @@ if args.chat:
         exit(1)
 
     chat_lines = []
-    exit_commands = ["bye", "goodbye", "exit", "quit", "done", "stop", "end", "thanks", "peace"]
+    exit_commands = ["bye", "goodbye", "exit", "quit", "done", "stop", "end", "peace"]
 
     while True:
         try:
@@ -439,6 +442,6 @@ if args.chat:
         except:
             print(f"\tERROR: failure while writing chat log")
 
-# Tiger out, peace
+# Nice job, tiger
             
 print(f"Done in {time.time() - start_time:.3f} seconds")
