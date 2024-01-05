@@ -26,7 +26,7 @@ arg("--index-load",     help="Load the vector index from a given path", metavar=
 arg("--index-store",    help="Save the updated vector index to a given path", metavar="PATH")
 
 arg = parser.add_argument_group("Document indexing").add_argument
-arg("--source-folder",  help="Folder of files to be indexed recursively", nargs="+", metavar="FOLDER")
+arg("--source",         help="Folder of files to be indexed recursively", nargs="+", metavar="FOLDER")
 arg("--source-spec",    help="Index files matching a pathspec, like \"**/*.(cpp|hpp|h)\"", nargs="+", metavar="SPEC")
 arg("--source-list",    help="Text file with a list of filenames/pathspecs to index", nargs="+", metavar="FILE")
 arg("--exclude-spec",   help="Exclude files matching a pathspec, like \"**/.vs/**/*\"", nargs="+", metavar="SPEC")
@@ -78,7 +78,7 @@ start_time = time.time()
 
 files_to_load = []
 
-for folder in args.source_folder or []:
+for folder in args.source or []:
     print(f"Searching for files under \"{folder}\"...")
     folder_files = find_files_using_gitignore(folder, args.use_gitignore)
     files_to_load.extend(folder_files)
@@ -97,8 +97,8 @@ for file in args.source_list or []:
         with open(file, "r", encoding="utf-8") as f:
             source_list_files = f.read().splitlines()
             source_list_files = [name for name in source_list_files if name.strip()]
-    except:
-        print(f"\tERROR: failure while loading file list")
+    except Exception as e:
+        print(f"\tERROR: {e}")
 
     for file_spec in source_list_files or []:
         print_verbose(f"\t{file_spec}")
@@ -173,8 +173,8 @@ if len(files_to_load) > 0:
         time_before_loading_docs = time.time()
         documents_to_index = doc_reader.load_data(show_progress=args.verbose)
         print_verbose(f"\tfinished in {time.time() - time_before_loading_docs:.3f} seconds")
-    except:
-        print(f"\tERROR: failure while loading documents")
+    except Exception as e:
+        print(f"\tERROR: {e}")
 
 # Update the vector index
 
@@ -185,8 +185,8 @@ if args.index_load:
         time_before_loading_index = time.time()
         vector_index = load_index_from_storage(storage_context, show_progress=args.verbose)    
         print_verbose(f"\tloaded in {time.time() - time_before_loading_index:.3f} seconds")
-    except:
-        print(f"\tERROR: failure while loading index")
+    except Exception as e:
+        print(f"\tERROR: {e}")
 
 if not vector_index:
     print_verbose(f"Creating a new vector index in memory...")
@@ -196,13 +196,13 @@ if len(documents_to_index or []) > 0:
     print(f"Indexing {len(documents_to_index)} documents...")
     time_before_indexing = time.time()
     for doc in documents_to_index:
-        print_verbose(f"\t    {doc.file_path}", end="")
+        print_verbose(f"\t{doc.file_path}", end="")
         try:
             time_before_indexing_doc = time.time()
             vector_index.add_document(doc)
             print_verbose(f" ({time.time() - time_before_indexing_doc:.3f} seconds)")
-        except:
-            print(f" [ERROR]")
+        except Exception as e:
+            print(f"\n\t\tERROR: {e}")
 
     print_verbose(f"\tindexing complete in {time.time() - time_before_indexing:.3f} seconds")
 
@@ -212,8 +212,8 @@ if args.index_store:
         time_before_storing_index = time.time()
         vector_index.storage_context.persist(persist_dir=args.index_store, show_progress=args.verbose)
         print_verbose(f"\tstored in {time.time() - time_before_storing_index:.3f} seconds")
-    except:
-        print(f"\tERROR: failure while storing index")
+    except Exception as e:
+        print(f"\tERROR: {e}"))
 
 # Construct the LLM context/system prompt from text snippets
 
