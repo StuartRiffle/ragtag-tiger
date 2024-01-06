@@ -2,7 +2,6 @@
 # Copyright (c) 2024 Stuart Riffle
 
 import os, argparse, time, datetime, json, pathspec
-from transformers import AutoModelForCausalLM
 from llama_index import VectorStoreIndex, StorageContext
 from llama_index import load_index_from_storage, download_loader
 from util.code_aware_directory_reader import CodeAwareDirectoryReader
@@ -12,8 +11,16 @@ program_name = "RAG/TAG Tiger"
 program_version = "0.1.0"
 program_license = "MIT"
 program_copyright = "Copyright (c) 2024 Stuart Riffle"
+start_time = time.time()
 
-parser = argparse.ArgumentParser(
+class StrippedArgumentParser(argparse.ArgumentParser):
+    def convert_arg_line_to_args(self, arg_line):
+        line = arg_line.strip()
+        if len(line) > 0 and not line.startswith("#"):
+            return [line]
+        return []
+
+parser = StrippedArgumentParser(
     description="Update and query a vector document store using LlamaIndex", 
     fromfile_prefix_chars='@')
 
@@ -70,10 +77,12 @@ def print_verbose(msg, **kwargs):
     if args.verbose:
         print(msg, **kwargs)
 
-# Let's go, tiger
+def time_since(before):
+    return f"{time.time() - before:.3f} sec"
 
-start_time = time.time()
+print_verbose(f"{program_copyright}, {program_license} license")
 
+#------------------------------------------------------------------------------
 # Find all the files to be indexed
 
 files_to_load = []
@@ -101,7 +110,6 @@ for file in args.source_list or []:
         print(f"\tERROR: {e}")
 
     for file_spec in source_list_files or []:
-        print_verbose(f"\t{file_spec}")
         found_files = []
         if os.path.isfile(file_spec):
             found_files.append(file_spec)
@@ -110,56 +118,68 @@ for file in args.source_list or []:
             spec_files = os.glob(spec, recursive=True, include_files=True)
             found_files.extend(spec_files)
         files_to_load.extend(found_files)
+        print_verbose(f"\t{file_spec} ({len(found_files)} found)")
 
-print_verbose(f"\t{len(files_to_load)} total files found to index")
+print_verbose(f"\t{len(files_to_load)} total candidate files found to index")
 
+#------------------------------------------------------------------------------
 # Filter out ones we don't actually want
 
 if len(files_to_load) > 0:    
     for spec in args.exclude_spec or []:
         print(f"Excluding files matching \"{spec}\"...")
-        previous_length = len(files_to_load)
+
+        files_before = len(files_to_load)
         spec = pathspec.PathSpec.from_lines('gitwildmatch', [spec])
         files_to_load = [f for f in files_to_load if not spec.match_file(f)]
-        if len(files_to_load) < previous_length:
-            print_verbose(f"\t{previous_length - len(files_to_load)} excluded")
+        
+        if len(files_to_load) < files_before:
+            print_verbose(f"\t{files_before - len(files_to_load)} excluded")
 
 if len(files_to_load) > 0:
     print(f"Filtering out duplicate entries...")
-    previous_length = len(files_to_load)
+
+    files_before = len(files_to_load)
     files_to_load = [os.path.normpath(os.path.realpath(f)) for f in files_to_load]
     files_to_load = sorted(set(files_to_load))
-    if len(files_to_load) < previous_length:
-        print_verbose(f"\t{previous_length - len(files_to_load)} removed")
+
+    if len(files_to_load) < files_before:
+        print_verbose(f"\t{files_before - len(files_to_load)} removed")
 
 if len(files_to_load) > 0:
     print(f"Removing non-files...")
-    previous_length = len(files_to_load)
-    files_to_load = [f for f in files_to_load if os.path.isfile(f)]
-    if len(files_to_load) < previous_length:
-        print_verbose(f"\t{previous_length - len(files_to_load)} removed")
 
+    files_before = len(files_to_load)
+    files_to_load = [f for f in files_to_load if os.path.isfile(f)]
+
+    if len(files_to_load) < files_before:
+        print_verbose(f"\t{files_before - len(files_to_load)} removed")
+
+#------------------------------------------------------------------------------
 # Download custom loaders from the hub
 
 default_loaders = ["JSONReader:json"]
 loader_specs = default_loaders
 loader_specs.extend(args.custom_loaders or [])
-
 file_extractor_list = {}
-print("Downloading file loaders...")
+
+print("Downloading custom file loaders...")
 for loader_spec in loader_specs:
     if not ':' in loader_spec:
         print(f"\tWARNING: invalid loader spec \"{loader_spec}\"")
         continue
+
     loader_class, extensions = loader_spec.split(":", 1)
-    print_verbose(f"\t{loader_class} ({extensions.join(', ')})")
+    print(f"\t{loader_class} ({extensions.join(', ')})")
+
     try:
         loader = download_loader(loader_class)
         for extension in extensions.split(","):
             file_extractor_list["." + extension.strip(". ")] = loader()
-    except:
-        print(f"\tWARNING: failure downloading \"{loader_class}\"")
+    except Exception as e:
+        print(f"\t\tERROR: {e}")
 
+#------------------------------------------------------------------------------
 # Load and chunk the documents
 
 if len(files_to_load) > 0:
@@ -169,22 +189,24 @@ if len(files_to_load) > 0:
         file_extractor=file_extractor_list, 
         exclude_hidden=True,
         verbose=args.verbose)
+    
     try:
-        time_before_loading_docs = time.time()
+        before = time.time()
         documents_to_index = doc_reader.load_data(show_progress=args.verbose)
-        print_verbose(f"\tfinished in {time.time() - time_before_loading_docs:.3f} seconds")
+        print_verbose(f"\tfinished in {time_since(before)}")
     except Exception as e:
         print(f"\tERROR: {e}")
 
+#------------------------------------------------------------------------------
 # Update the vector index
 
 if args.index_load:
     print(f"Loading existing vector index from \"{args.index_load}\"...")
     storage_context = StorageContext.from_defaults(persist_dir=args.index_load)
     try:
-        time_before_loading_index = time.time()
+        before = time.time()
         vector_index = load_index_from_storage(storage_context, show_progress=args.verbose)    
-        print_verbose(f"\tloaded in {time.time() - time_before_loading_index:.3f} seconds")
+        print_verbose(f"\tloaded in {time_since(before)}")
     except Exception as e:
         print(f"\tERROR: {e}")
 
@@ -194,28 +216,28 @@ if not vector_index:
 
 if len(documents_to_index or []) > 0:
     print(f"Indexing {len(documents_to_index)} documents...")
-    time_before_indexing = time.time()
+    before_indexing = time.time()
     for doc in documents_to_index:
-        print_verbose(f"\t{doc.file_path}", end="")
         try:
-            time_before_indexing_doc = time.time()
+            before = time.time()
             vector_index.add_document(doc)
-            print_verbose(f" ({time.time() - time_before_indexing_doc:.3f} seconds)")
+            print_verbose(f"\t{doc.file_path} ({time_since(before)})")
         except Exception as e:
-            print(f"\n\t\tERROR: {e}")
-
-    print_verbose(f"\tindexing complete in {time.time() - time_before_indexing:.3f} seconds")
+            print(f"\tERROR indexing {doc.file_path}: {e}")
+            
+    print_verbose(f"\tindexing complete in {time_since(before_indexing)}")
 
 if args.index_store:
     print(f"Storing vector index in \"{args.index_store}\"...")
     try:
-        time_before_storing_index = time.time()
+        before = time.time()
         vector_index.storage_context.persist(persist_dir=args.index_store, show_progress=args.verbose)
-        print_verbose(f"\tstored in {time.time() - time_before_storing_index:.3f} seconds")
+        print_verbose(f"\tstored in {time_since(before)}")
     except Exception as e:
-        print(f"\tERROR: {e}"))
+        print(f"\tERROR: {e}")
 
-# Construct the LLM context/system prompt from text snippets
+#------------------------------------------------------------------------------
+# Construct the LLM context/system prompt
 
 context = ""
 snippets = args.context or []
@@ -233,9 +255,10 @@ for file in args.context_file or []:
             snippet = f.read()
             context += snippet.strip() + "\n"
             print_verbose(snippet)        
-    except:
-        print(f"\tERROR: failure while loading context")
+    except Exception as e:
+        print(f"\tERROR: {e}")
 
+#------------------------------------------------------------------------------
 # Collect all the user queries
 
 queries = args.query or []
@@ -248,8 +271,8 @@ for file in args.query_list or []:
             short_queries = [q for q in short_queries if q.strip()]
             queries.extend(short_queries)
             print_verbose(f"\t{len(short_queries)} found")
-    except:
-        print(f"\tERROR: failure while loading queries")
+    except Exception as e:
+        print(f"\tERROR: {e}")
 
 for file in args.query_file or []:
     print(f"Loading a long query from \"{file}\"...")
@@ -257,10 +280,11 @@ for file in args.query_file or []:
         with open(file, "r", encoding="utf-8") as f:
             query_text = f.read().strip()
             queries.append(query_text)
-    except:
-        print(f"\tERROR: failure while loading query")
+    except Exception as e:
+        print(f"\tERROR: {e}")
 
-# Initialize the LLM query engine
+#------------------------------------------------------------------------------
+# Initialize the query engine
 
 query_engine_params = {
     "response_mode": args.query_mode,
@@ -274,19 +298,21 @@ if args.llm_model_name:
     if args.llm_server:
         print_verbose(f"\tWARNING: overriding inference API server \"{args.llm_server}\"")
 
-    try:
-        time_before_loading_model = time.time()
-        local_model = AutoModelForCausalLM.from_pretrained(args.llm_model_name)
-        print_verbose(f"\tmodel loaded in {time.time() - time_before_loading_model:.3f} seconds")
-    except:
-        print(f"\tERROR: failure while loading model")
+    from transformers import AutoModelForCausalLM
 
     try:
-        time_before_query_engine = time.time()
-        query_engine = vector_index.as_query_engine(model=local_model, **query_engine_params)
-        print_verbose(f"\tquery engine initialized in {time.time() - time_before_query_engine:.3f} seconds")
-    except:
-        print(f"\tERROR: failure while initializing query engine")
+        before = time.time()
+        local_model = AutoModelForCausalLM.from_pretrained(args.llm_model_name)
+        print_verbose(f"\tmodel loaded in {time_since(before)}")
+
+        before = time.time()
+        query_engine = vector_index.as_query_engine(
+            model=local_model, 
+            **query_engine_params)
+        print_verbose(f"\tquery engine initialized in {time_since(before)}")
+
+    except Exception as e:
+        print(f"\tERROR: {e}")
 
 if args.llm_provider and not query_engine:
     print(f"Query engine will use LLM inference provider \"{args.llm_provider}\"...")
@@ -294,30 +320,38 @@ if args.llm_provider and not query_engine:
         print_verbose(f"\tWARNING: overriding inference API server \"{args.llm_server}\"")
 
     try:
-        time_before_connecting = time.time()
-        query_engine = vector_index.as_query_engine(provider=args.llm_provider, api_key=args.llm_api_key, **query_engine_params)
-        print_verbose(f"\tconnected in {time.time() - time_before_connecting:.3f} seconds")
-    except:
-        print(f"\tERROR: failure while connecting to provider")
+        before = time.time()
+        query_engine = vector_index.as_query_engine(
+            provider=args.llm_provider, 
+            api_key=args.llm_api_key, 
+            **query_engine_params)
+        print_verbose(f"\tconnected in {time_since(before)}")
+    except Exception as e:
+        print(f"\tERROR: {e}")
 
 if args.llm_server and not query_engine:
     print(f"Query engine will use inference API server \"{args.llm_server}\"...")
     try:
-        time_before_connecting = time.time()
-        query_engine = vector_index.as_query_engine(server_url=args.llm_server, api_key=args.llm_api_key, **query_engine_params)
-        print_verbose(f"\tconnected in {time.time() - time_before_connecting:.3f} seconds")
-    except:
-        print(f"\tERROR: failure while connecting to server")
+        before = time.time()
+        query_engine = vector_index.as_query_engine(
+            server_url=args.llm_server, 
+            api_key=args.llm_api_key, 
+            **query_engine_params)
+        print_verbose(f"\tconnected in {time_since(before)}")
+    except Exception as e:
+        print(f"\tERROR: {e}")
 
 if not query_engine:
     print(f"ERROR: no query engine available")
     exit(1)
 
+#------------------------------------------------------------------------------
 # Run all the queries
     
 if len(queries) > 0:
     print(f"Running {len(queries)} queries...")
-    time_before_queries = time.time()
+    before_queries = time.time()
+
     text_log = ""
     json_log = {
         "model": query_engine.model_name,
@@ -332,11 +366,11 @@ if len(queries) > 0:
             preface += text_log
 
         try:
-            query_start_time = time.time()
+            before = time.time()
             response = query_engine.query(f"{preface}\n{args.tag_queries}: {query}", verbose=args.verbose)
-            response_time = time.time() - query_start_time
-        except:
-            print(f"\tERROR: failure while running query")
+            response_time = time.time() - before
+        except Exception as e:
+            print(f"\tERROR: {e}")          
             continue
 
         interaction = f"{args.tag_queries}: {query}\n{args.tag_responses}: {response}\n"
@@ -356,8 +390,8 @@ if len(queries) > 0:
         try:
             with open(args.output_text, "w", encoding="utf-8") as f:
                 f.write(text_log)
-        except:
-            print(f"\tERROR: failure while writing log")
+        except Exception as e:
+            print(f"\tERROR: {e}")
 
     if args.output_json:
         print(f"Writing JSON log to \"{args.output_json}\"...")
@@ -365,13 +399,14 @@ if len(queries) > 0:
             with open(args.output_json, "w", encoding="utf-8") as f:
                 raw_text = json.dumps(json_log, indent=4)
                 f.write(raw_text)
-        except:
-            print(f"\tERROR: failure while writing JSON log")
+        except Exception as e:
+            print(f"\tERROR: {e}")
 
-    # Queries all done!
+    # All done!
 
-    print(f"All queries completed in {time.time() - time_before_queries:.3f} seconds\n")
+    print(f"Queries completed in {time_since(before_queries)}")
 
+#------------------------------------------------------------------------------
 # Chat mode
 
 if args.chat:
@@ -383,8 +418,8 @@ if args.chat:
                 chat_init_text = f.read().strip()
                 chat_init.append(chat_init_text)
                 print_verbose(chat_init_text)
-        except:
-            print(f"\tERROR: failure while loading chat context")
+        except Exception as e:
+            print(f"\tERROR: {e}")
 
     print(f"Entering interactive chat...")
     print(f" - The response mode is \"{args.chat_mode}\"")
@@ -400,15 +435,23 @@ if args.chat:
 
     try:
         if local_model:
-            chat_engine = vector_index.as_chat_engine(model=local_model, **chat_engine_params)
+            chat_engine = vector_index.as_chat_engine(
+                model=local_model, 
+                **chat_engine_params)
         else:
-            chat_engine = vector_index.as_chat_engine(server_url=args.llm_server, api_key=args.llm_api_key, **chat_engine_params)
-    except:
-        print(f"\tERROR: failure while initializing chat engine")
+            chat_engine = vector_index.as_chat_engine(
+                server_url=args.llm_server, 
+                api_key=args.llm_api_key, 
+                **chat_engine_params)
+    except Exception as e:
+        print(f"\tERROR: {e}")
+
+    if not chat_engine:
+        print(f"ERROR: no chat engine available")
         exit(1)
 
     chat_lines = []
-    exit_commands = ["bye", "goodbye", "exit", "quit", "done", "stop", "end", "peace"]
+    exit_commands = ["bye", "goodbye", "exit", "quit", "done", "stop", "end"]
 
     while True:
         try:
@@ -439,9 +482,9 @@ if args.chat:
             with open(args.chat_log, "a", encoding="utf-8") as f:
                 all_lines = "\n".join(chat_lines) 
                 f.write(all_lines + "\n")
-        except:
-            print(f"\tERROR: failure while writing chat log")
+        except Exception as e:
+            print(f"\tERROR: {e}")
 
-# Nice job, tiger
+# Tiger out, peace
             
-print(f"Done in {time.time() - start_time:.3f} seconds")
+print(f"Done in {time_since(start_time)}")
