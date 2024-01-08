@@ -4,8 +4,8 @@
 import os, argparse, time, datetime, json, pathspec
 from llama_index import VectorStoreIndex, StorageContext
 from llama_index import load_index_from_storage, download_loader
-from util.code_aware_directory_reader import CodeAwareDirectoryReader
-from util.find_files_using_gitignore import find_files_using_gitignore
+from llama_index import SimpleDirectoryReader, Document
+from llama_index.text_splitter import CodeSplitter
 
 program_name = "RAG/TAG Tiger"
 program_version = "0.1.0"
@@ -13,14 +13,14 @@ program_license = "MIT"
 program_copyright = "Copyright (c) 2024 Stuart Riffle"
 start_time = time.time()
 
-class StrippedArgumentParser(argparse.ArgumentParser):
+class ResponseFileArgumentParser(argparse.ArgumentParser):
     def convert_arg_line_to_args(self, arg_line):
         line = arg_line.strip()
         if len(line) > 0 and not line.startswith("#"):
             return [line]
         return []
 
-parser = StrippedArgumentParser(
+parser = ResponseFileArgumentParser(
     description="Update and query a vector document store using LlamaIndex", 
     fromfile_prefix_chars='@')
 
@@ -85,6 +85,32 @@ print_verbose(f"{program_copyright}, {program_license} license")
 #------------------------------------------------------------------------------
 # Find all the files to be indexed
 
+def find_files_using_gitignore(folder, use_gitignore=True, parent_gitignore=None):
+    """Recursively find all files in a folder (optionally) filtering them using .gitignore files."""
+
+    file_list = []
+    if use_gitignore:
+        gitignore = parent_gitignore
+        gitignore_path = os.path.join(folder, '.gitignore')
+        if os.path.isfile(gitignore_path):
+            with open(gitignore_path, 'r') as file:
+                gitignore = pathspec.PathSpec.from_lines('gitwildmatch', file)
+                if parent_gitignore:
+                    all_patterns = set(gitignore.patterns + parent_gitignore.patterns)
+                    gitignore = pathspec.PathSpec.from_lines('gitwildmatch', all_patterns)
+                        
+    for item in os.listdir(folder):
+        full_path = os.path.join(folder, item)
+        if os.path.isdir(full_path):
+            file_list += find_files_using_gitignore(full_path, use_gitignore, parent_gitignore=gitignore)
+        elif os.path.isfile(full_path):
+            rel_path = os.path.relpath(full_path, start=folder)
+            if gitignore and gitignore.match_file(rel_path):
+                continue
+            file_list.append(full_path)
+
+    return file_list
+
 files_to_load = []
 
 for folder in args.source or []:
@@ -132,7 +158,7 @@ if len(files_to_load) > 0:
         files_before = len(files_to_load)
         spec = pathspec.PathSpec.from_lines('gitwildmatch', [spec])
         files_to_load = [f for f in files_to_load if not spec.match_file(f)]
-        
+
         if len(files_to_load) < files_before:
             print_verbose(f"\t{files_before - len(files_to_load)} excluded")
 
@@ -181,6 +207,32 @@ for loader_spec in loader_specs:
 
 #------------------------------------------------------------------------------
 # Load and chunk the documents
+
+class CodeAwareDirectoryReader(SimpleDirectoryReader):
+    """Chunks source code files in a roughly language-aware way."""
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.custom_splitters = [
+            ([".cpp", ".c", ".hpp", ".h"],  CodeSplitter("cpp")),
+            ([".cs"],                       CodeSplitter("c-sharp")),
+            ([".py"],                       CodeSplitter("python")),
+            ([".lua"],                      CodeSplitter("lua")),
+            ([".cu"],                       CodeSplitter("cuda")),
+            ([".java"],                     CodeSplitter("java")),
+            ([".js"],                       CodeSplitter("javascript")),
+            ([".ts"],                       CodeSplitter("typescript")),
+        ]        
+
+    def readFile(self, file_path):
+        for extensions, code_splitter in self.custom_splitters:
+            if file_path.endswith(tuple(extensions)):
+                with open(file_path, 'r') as f:
+                    source_code = f.read()
+                    chunks = code_splitter.chunk(source_code)
+                    docs = [Document(file_path, chunk) for chunk in chunks]
+                    return docs
+                
+        return super().readFile(file_path)
 
 if len(files_to_load) > 0:
     print(f"Loading and chunking {len(files_to_load)} files...")

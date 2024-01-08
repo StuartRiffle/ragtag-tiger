@@ -2,21 +2,22 @@
 
 **UNDER DEVELOPMENT - STILL DEBUGGING - DO NOT USE THIS**
 
-**RAG/TAG Tiger** is a [LlamaIndex](https://github.com/run-llama/llama_index) wrapper that provides a point-and-shoot command line interface for doing RAG queries on local documents/code.
+**RAG/TAG Tiger** is a [LlamaIndex](https://github.com/run-llama/llama_index) wrapper that provides a point-and-shoot command line interface for doing RAG queries on local documents/code with an LLM.
 
-It is mostly the same boilerplate/glue you were going to have to write anyway, so I'm posting it hoping it can save somebody an afternoon googling LlamaIndex tutorials and arguing with ChatGPT. If this code improves 
-your life, feel free to buy me a coffee!
+I had modest RAG needs, but could not find an equally simple tool to use. I just wanted to RAG some files I had, not build a whole damned data ingestion pipeline. I wrote this script to connect the dots as crudely as possible. It has gained some convenience features since then, for which I apologize. I am trying to stop. 
+
+A lot of this code is the same boilerplate/glue you were going to have to write anyway. If it saves you an afternoon of sifting through machine-generated LlamaIndex tutorials and arguing with ChatGPT, feel free to buy me a coffee!
 
 ## Features
-- can run queries on a local LLM, an internal inference server, or a commercial endpoint like OpenAI
-- loads/updates/stores a vector index to avoid redundant processing
+- runs queries on a local LLM, an internal inference server, or a commercial endpoint like OpenAI
+- loads/updates/stores vector indices to avoid redundant processing
 - provides fine grained control over which files to index or be excluded, supports .gitignore
-- downloads loaders from the [LlamaIndex hub](https://llamahub.ai) to support custom file types
+- downloads loaders from the [LlamaIndex hub](https://llamahub.ai) to process custom file types
 - allows basic control of LLM inference parameters (temperature, etc)
-- assembles system prompts and queries from multiple sources
+- assembles system prompts and queries from multiple sources 
 - supports interactive "chat" mode on the command line
 
-LlamaIndex (and many other fine projects) are doing all the actual work here. **RAG/TAG Tiger** is just front-end scaffolding. 
+Let's be clear that LlamaIndex (and other amazing open source projects) are doing all the actual work here. **RAG/TAG Tiger** is a thin front end for that functionality. 
 
 ## Setup
 ```
@@ -24,18 +25,18 @@ git clone https://github.com/StuartRiffle/ragtag-tiger
 cd ragtag-tiger
 pip install -r requirements.txt
 ```
-## Basic use
+## Basic usage
 ```
 python ragtag.py --source my/docs --query "But, why?"
 ```
 
-## Scripted workflow
+## Workflow
 
-For simple one-off queries, the command line works fine, but editing anything there is painful.
+For simple queries, the command line is fine, but editing there is painful.
 
-A better way to iterate is to put your command into a little shell script or batch file, but split over multiple lines, so you can see all the arguments.
+A better way to iterate is to put your command into a little shell script or batch file, but split it over multiple lines, so you can see all the arguments at a glance. 
 
-> These examples have a `\` at the end of every line because in a Mac or Linux shell script that means to combine it with the next line, so they all chain up into one big long command. Windows batch files use `^` for the same purpose. You don't have to line everything up in pretty columns like I did.
+> These examples have a `\` at the end of every line because in a Mac or Linux shell script that means to combine it with the next line, so they all chain up into one big long command. Windows batch files use `^` for that.
 
 A script ingesting some documents into an existing vector index might look like this:
 ```
@@ -62,7 +63,7 @@ python ragtag.py                                        \
     --query           "how does all this work lol"
 ```
 
-Consulting a dangerously unqualified virtual physician, using a temporary (in-memory) vector index for privacy:
+Consulting a dangerously unqualified virtual doctor, using an in-process LLM and a temporary (memory-only) vector index for privacy:
 ```
 python ragtag.py                                        \
     --source          my/personal/medical_data          \
@@ -75,60 +76,73 @@ python ragtag.py                                        \
     --chat
 ```
 
-You could actually do all of that in one command, if you wanted to: update a vector index, run some queries against it, then drop into chat mode to follow up on them.
+It's possible to do all of those things in one command too: update a vector index, run some queries against it, then drop into chat mode to follow up.
 
-More settings are available. Check out the help page for a complete list:
+A few more options are available. Check the help page for a complete list:
 
 ```
 python ragtag.py --help
 ```
 
 ## Advanced workflow
+See, I was trying to avoid this kind of thing, but here we are.
 
-If things start to get complicated, the best way to manage configuration is to put groups of arguments into "response files" like this:
+The best way to manage complex configuration is to factor out groups of arguments into "response files" like so:
 ```
 # debug_server.args - example response file
 #
 # The rules here:
 #   - every argument must be on its own line   <------ THE MAIN THING TO KNOW!
-#   - the file extension does not matter
+#   - the file extension doesn't matter
 #   - blank lines, indentation, and trailing whitespace are ignored
-#   - internal whitespace is considered part of the argument, so no quotes needed
-#   - lines starting with the character # are treated as comments, and skipped
-#   - putting comments alongside arguments, on the same line, is NOT supported 
+#   - internal whitespace is considered part of an argument, no quotes needed
+#   - lines starting with the character # are treated as comments, and ignored
+#   - comments alongside arguments, on the same line, are NOT supported 
 
 --llm-server      
-	http://localhost:8080             
+    http://localhost:8080             
 --llm-param       
     temperature=0.9
-	seed=1337         
+    seed=1337         
     ...
 ```
 
-Then pull those files in using `@` on the command line, like building blocks: 
+Then pull those arguments in using `@` on the command line:
 ```
-python ragtag.py @debug_server.args @standard_queries.args  ...
+python ragtag.py @debug_server.args @integration_database.args  ...
+```
+Scripts are shorter and a lot easier to understand with the off-topic noise removed:
+```
+python ragtag.py                        \
+    @model_internal_7b.args             \
+    @ersatz_doctor.args                 \
+    --source my/personal/medical_data   \
+    --chat
 ```
 
-You now have the one true power - **indirection**. You can edit blocks of common settings in one place instead of needing (for example) to update all your scripts when you change inference providers.
+This is true power: indirection. You can edit blocks of arguments in one response file instead of updating all your scripts every time you change servers etc.
+
+For casual/occasional use this is probably overthinking things. Copying and pasting between batch files will get you a long way.
 
 ## FAQ
 
 **Q:** What does the name mean? <br>
-**A:** The term "RAG" means Retrieval Augmented Generation. Instead of fine tuning a model on your documents, the idea is to use a stock model, but give it ways to search your data as needed.
+**A:** The term "RAG" means Retrieval Augmented Generation. Instead of fine tuning a model on your documents, the idea is to use a stock model, but give it ways to search them for details as needed.
 
 **Q:** What about "TAG"? <br>
 **A:** That's a blanket term for tiger-augmented methods.
 
-**Q:** Are those widely used? <br>
+**Q:** Are those in wide use? <br>
 **A:** Not in production.
 
 **Q:** But why is there a tiger here at all? <br>
-**A:** I tend to anthropomorphize small programs (they like that), but honestly a lot of species can handle RAG queries in a pinch, and my choice of tiger here was arbitrary. We can revisit this.
+**A:** I anthropomorphize small programs, they like that. But to be fair a lot of animals can handle RAG queries in a pinch, and my choice of tiger here was arbitrary. We can revisit this.
 
 **Q:** May I have a warranty of merchantability and fitness for my particular purpose? <br>
 **A:** No.
 
 **Q:** Good enough, how can I buy you that coffee? <br>
-**A:** Just to be clear, the coffee was a metaphor and all donations will be used to buy drugs. Please contribute here: (todo)
+**A:** Just to be clear, the coffee is a metaphor and donations will be used to buy drugs.
+
+
 
