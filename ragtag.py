@@ -235,15 +235,13 @@ if not vector_index:
 
 if len(documents_to_index or []) > 0:
     print(f"Indexing {len(documents_to_index)} documents...")
-    before_indexing = time.time()
-    for doc in documents_to_index:
-        try:
-            with VerboseTimer(f"\t{doc.file_path}"):
-                vector_index.add_document(doc)
-        except Exception as e:
-            print(f"\tERROR indexing {doc.file_path}: {e}")
-            
-    print_verbose(f"\tindexing complete in {time_since(before_indexing)}")
+    with VerboseTimer("\tindexing complete"):
+        for doc in documents_to_index:
+            try:
+                with VerboseTimer(f"\t{doc.file_path}"):
+                    vector_index.add_document(doc)
+            except Exception as e:
+                print(f"\tERROR indexing {doc.file_path}: {e}")
 
 if args.index_store:
     print(f"Storing vector index to \"{args.index_store}\"...")
