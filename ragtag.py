@@ -2,9 +2,8 @@
 # Copyright (c) 2024 Stuart Riffle
 
 import os, argparse, time, datetime, json, pathspec
-from llama_index import VectorStoreIndex, StorageContext
+from llama_index import VectorStoreIndex, StorageContext, SimpleDirectoryReader, Document
 from llama_index import load_index_from_storage, download_loader
-from llama_index import SimpleDirectoryReader, Document
 from llama_index.text_splitter import CodeSplitter
 
 program_name = "RAG/TAG Tiger"
@@ -80,106 +79,73 @@ def print_verbose(msg, **kwargs):
 def time_since(before):
     return f"{time.time() - before:.3f} sec"
 
+class VerboseTimer:
+    def __init__(self, prefix, **kwargs):
+        self.prefix = prefix
+    def __enter__(self):
+        self.start_time = time.time()
+        return self
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        print_verbose(f"{self.prefix} ({time_since(self.start_time)})")
+
 print_verbose(f"{program_copyright}, {program_license} license")
 
 #------------------------------------------------------------------------------
-# Find all the files to be indexed
+# Find all the files specified for indexing
 
-def find_files_using_gitignore(folder, use_gitignore=True, parent_gitignore=None):
-    """Recursively find all files in a folder (optionally) filtering them using .gitignore files."""
-
-    file_list = []
-    if use_gitignore:
-        gitignore = parent_gitignore
-        gitignore_path = os.path.join(folder, '.gitignore')
-        if os.path.isfile(gitignore_path):
-            with open(gitignore_path, 'r') as file:
-                gitignore = pathspec.PathSpec.from_lines('gitwildmatch', file)
-                if parent_gitignore:
-                    all_patterns = set(gitignore.patterns + parent_gitignore.patterns)
-                    gitignore = pathspec.PathSpec.from_lines('gitwildmatch', all_patterns)
-                        
-    for item in os.listdir(folder):
-        full_path = os.path.join(folder, item)
-        if os.path.isdir(full_path):
-            file_list += find_files_using_gitignore(full_path, use_gitignore, parent_gitignore=gitignore)
-        elif os.path.isfile(full_path):
-            rel_path = os.path.relpath(full_path, start=folder)
-            if gitignore and gitignore.match_file(rel_path):
-                continue
-            file_list.append(full_path)
-
-    return file_list
-
-files_to_load = []
+search_specs = []
 
 for folder in args.source or []:
-    print(f"Searching for files under \"{folder}\"...")
-    folder_files = find_files_using_gitignore(folder, args.use_gitignore)
-    files_to_load.extend(folder_files)
-    print_verbose(f"\t{len(folder_files)} found")
+    print(f"Including files under folder \"{folder}\"...")
+    folder_wildcard = os.path.join(folder, "**/*")
+    search_specs.append(folder_wildcard)
 
 for spec in args.source_spec or []:
-    print(f"Finding files matching \"{spec}\"...")
-    spec = pathspec.PathSpec.from_lines('gitwildmatch', [spec])
-    spec_files = os.glob(spec, recursive=True, include_files=True)
-    files_to_load.extend(spec_files)
-    print_verbose(f"\t{len(spec_files)} found")
+    print(f"Including files matching spec \"{spec}\"...")
+    search_specs.append(spec)
 
 for file in args.source_list or []:
-    print(f"Loading file/spec list from from \"{file}\"...")
+    print(f"Including files from name/spec list \"{file}\"...")
     try:
         with open(file, "r", encoding="utf-8") as f:
-            source_list_files = f.read().splitlines()
-            source_list_files = [name for name in source_list_files if name.strip()]
+            specs = f.read().splitlines()
+            specs = [name for name in specs if name.strip()]
+            specs = [name for name in specs if not name.startswith("#")]
+            search_specs.extend(specs)
     except Exception as e:
         print(f"\tERROR: {e}")
 
-    for file_spec in source_list_files or []:
-        found_files = []
-        if os.path.isfile(file_spec):
-            found_files.append(file_spec)
-        else:
-            spec = pathspec.PathSpec.from_lines('gitwildmatch', [file_spec])
-            spec_files = os.glob(spec, recursive=True, include_files=True)
-            found_files.extend(spec_files)
-        files_to_load.extend(found_files)
-        print_verbose(f"\t{file_spec} ({len(found_files)} found)")
+print_verbose(f"Relative paths will be based on \"{os.getcwd()}\"")
+print(f"Finding files...")
 
-print_verbose(f"\t{len(files_to_load)} total candidate files found to index")
+files_to_index = []
 
-#------------------------------------------------------------------------------
-# Filter out ones we don't actually want
+for file_spec in search_specs:
+    if os.path.isfile(file_spec):
+        files_to_index.append(file_spec)
+    else:
+        matches = os.glob(file_spec, recursive=True)
+        matches = [f for f in matches if os.path.isfile(f)]
+        files_to_index.extend(matches)
+        print_verbose(f"\t{len(matches)} files match \"{file_spec}\"")
 
-if len(files_to_load) > 0:    
-    for spec in args.exclude_spec or []:
-        print(f"Excluding files matching \"{spec}\"...")
+for spec in args.exclude_spec or []:
+    print(f"Excluding files matching \"{spec}\"...")
+    spec = pathspec.PathSpec.from_lines('gitwildmatch', [spec])
+    files_to_index = [f for f in files_to_index if not spec.match_file(f)]
 
-        files_before = len(files_to_load)
-        spec = pathspec.PathSpec.from_lines('gitwildmatch', [spec])
-        files_to_load = [f for f in files_to_load if not spec.match_file(f)]
+files_to_index = [os.path.abspath(os.path.normpath(f)) for f in files_to_index]
+files_to_index = sorted(set(files_to_index))
+print(f"Found \t{len(files_to_index)} files total")
 
-        if len(files_to_load) < files_before:
-            print_verbose(f"\t{files_before - len(files_to_load)} excluded")
-
-if len(files_to_load) > 0:
-    print(f"Filtering out duplicate entries...")
-
-    files_before = len(files_to_load)
-    files_to_load = [os.path.normpath(os.path.realpath(f)) for f in files_to_load]
-    files_to_load = sorted(set(files_to_load))
-
-    if len(files_to_load) < files_before:
-        print_verbose(f"\t{files_before - len(files_to_load)} removed")
-
-if len(files_to_load) > 0:
-    print(f"Removing non-files...")
-
-    files_before = len(files_to_load)
-    files_to_load = [f for f in files_to_load if os.path.isfile(f)]
-
-    if len(files_to_load) < files_before:
-        print_verbose(f"\t{files_before - len(files_to_load)} removed")
+if args.verbose and len(files_to_index) > 0:
+    print_verbose(f"File types:")
+    files_with_ext = {}
+    for file_path in files_to_index:
+        _, extension = os.path.splitext(file_path)
+        files_with_ext[extension] = files_with_ext.get(extension, 0) + 1
+    for extension, count in sorted(files_with_ext.items()):
+        print_verbose(f"\t{extension:10} {count}")
 
 #------------------------------------------------------------------------------
 # Download custom loaders from the hub
@@ -209,7 +175,6 @@ for loader_spec in loader_specs:
 # Load and chunk the documents
 
 class CodeAwareDirectoryReader(SimpleDirectoryReader):
-    """Chunks source code files in a roughly language-aware way."""
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.custom_splitters = [
@@ -224,28 +189,31 @@ class CodeAwareDirectoryReader(SimpleDirectoryReader):
         ]        
 
     def readFile(self, file_path):
-        for extensions, code_splitter in self.custom_splitters:
-            if file_path.endswith(tuple(extensions)):
-                with open(file_path, 'r') as f:
-                    source_code = f.read()
-                    chunks = code_splitter.chunk(source_code)
-                    docs = [Document(file_path, chunk) for chunk in chunks]
-                    return docs
+        try:
+            for extensions, code_splitter in self.custom_splitters:
+                if file_path.endswith(tuple(extensions)):
+                    with open(file_path, 'r') as f:
+                        source_code = f.read()
+                        chunks = code_splitter.chunk(source_code)
+                        docs = [Document(file_path, chunk) for chunk in chunks]
+                        return docs
+        except Exception as e:
+            print(f"\tERROR chunking {file_path}: {e}")
                 
         return super().readFile(file_path)
 
-if len(files_to_load) > 0:
-    print(f"Loading and chunking {len(files_to_load)} files...")
+if len(files_to_index) > 0:
+    print(f"Loading and chunking {len(files_to_index)} files...")
+
     doc_reader = CodeAwareDirectoryReader(
-        input_files=files_to_load, 
+        input_files=files_to_index, 
         file_extractor=file_extractor_list, 
         exclude_hidden=True,
         verbose=args.verbose)
     
     try:
-        before = time.time()
-        documents_to_index = doc_reader.load_data(show_progress=args.verbose)
-        print_verbose(f"\tfinished in {time_since(before)}")
+        with VerboseTimer("\tloaded"):
+            documents_to_index = doc_reader.load_data(show_progress=args.verbose)
     except Exception as e:
         print(f"\tERROR: {e}")
 
@@ -256,9 +224,8 @@ if args.index_load:
     print(f"Loading existing vector index from \"{args.index_load}\"...")
     storage_context = StorageContext.from_defaults(persist_dir=args.index_load)
     try:
-        before = time.time()
-        vector_index = load_index_from_storage(storage_context, show_progress=args.verbose)    
-        print_verbose(f"\tloaded in {time_since(before)}")
+        with VerboseTimer("\tloaded"):
+            vector_index = load_index_from_storage(storage_context, show_progress=args.verbose)
     except Exception as e:
         print(f"\tERROR: {e}")
 
@@ -271,20 +238,18 @@ if len(documents_to_index or []) > 0:
     before_indexing = time.time()
     for doc in documents_to_index:
         try:
-            before = time.time()
-            vector_index.add_document(doc)
-            print_verbose(f"\t{doc.file_path} ({time_since(before)})")
+            with VerboseTimer(f"\t{doc.file_path}"):
+                vector_index.add_document(doc)
         except Exception as e:
             print(f"\tERROR indexing {doc.file_path}: {e}")
             
     print_verbose(f"\tindexing complete in {time_since(before_indexing)}")
 
 if args.index_store:
-    print(f"Storing vector index in \"{args.index_store}\"...")
+    print(f"Storing vector index to \"{args.index_store}\"...")
     try:
-        before = time.time()
-        vector_index.storage_context.persist(persist_dir=args.index_store, show_progress=args.verbose)
-        print_verbose(f"\tstored in {time_since(before)}")
+        with VerboseTimer("\tstored"):
+            vector_index.storage_context.persist(persist_dir=args.index_store, show_progress=args.verbose)
     except Exception as e:
         print(f"\tERROR: {e}")
 
@@ -353,16 +318,13 @@ if args.llm_model_name:
     from transformers import AutoModelForCausalLM
 
     try:
-        before = time.time()
-        local_model = AutoModelForCausalLM.from_pretrained(args.llm_model_name)
-        print_verbose(f"\tmodel loaded in {time_since(before)}")
+        with VerboseTimer("\tmodel loaded"):
+            local_model = AutoModelForCausalLM.from_pretrained(args.llm_model_name)
 
-        before = time.time()
-        query_engine = vector_index.as_query_engine(
-            model=local_model, 
-            **query_engine_params)
-        print_verbose(f"\tquery engine initialized in {time_since(before)}")
-
+        with VerboseTimer("\tquery engine initialized"):        
+            query_engine = vector_index.as_query_engine(
+                model=local_model, 
+                **query_engine_params)
     except Exception as e:
         print(f"\tERROR: {e}")
 
@@ -372,24 +334,22 @@ if args.llm_provider and not query_engine:
         print_verbose(f"\tWARNING: overriding inference API server \"{args.llm_server}\"")
 
     try:
-        before = time.time()
-        query_engine = vector_index.as_query_engine(
-            provider=args.llm_provider, 
-            api_key=args.llm_api_key, 
-            **query_engine_params)
-        print_verbose(f"\tconnected in {time_since(before)}")
+        with VerboseTimer("\tconnected"):
+            query_engine = vector_index.as_query_engine(
+                provider=args.llm_provider, 
+                api_key=args.llm_api_key, 
+                **query_engine_params)
     except Exception as e:
         print(f"\tERROR: {e}")
 
 if args.llm_server and not query_engine:
     print(f"Query engine will use inference API server \"{args.llm_server}\"...")
     try:
-        before = time.time()
-        query_engine = vector_index.as_query_engine(
-            server_url=args.llm_server, 
-            api_key=args.llm_api_key, 
-            **query_engine_params)
-        print_verbose(f"\tconnected in {time_since(before)}")
+        with VerboseTimer("\tconnected"):
+            query_engine = vector_index.as_query_engine(
+                server_url=args.llm_server, 
+                api_key=args.llm_api_key, 
+                **query_engine_params)
     except Exception as e:
         print(f"\tERROR: {e}")
 
@@ -453,8 +413,6 @@ if len(queries) > 0:
                 f.write(raw_text)
         except Exception as e:
             print(f"\tERROR: {e}")
-
-    # All done!
 
     print(f"Queries completed in {time_since(before_queries)}")
 
