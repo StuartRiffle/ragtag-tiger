@@ -13,7 +13,7 @@ program_copyright   = "Copyright (c) 2024 Stuart Riffle"
 program_description = "Update and query a LlamaIndex vector index"
 
 auto_download_loaders = ["JSONReader:json"]
-fallback_llm_model = "EleutherAI/gpt-neo-2.7B"
+default_llm_model = "EleutherAI/gpt-neo-2.7B"
 
 #------------------------------------------------------------------------------
 # Parse command line arguments and response files
@@ -150,7 +150,6 @@ for file in args.source_list or []:
             specs = [name.strip() for name in specs if name.strip()]
             specs = [name for name in specs if not name.startswith("#")]
             search_specs.extend(specs)
-
     except Exception as e: log_error(e)
 
 search_specs = [os.path.normpath(f) for f in search_specs]
@@ -280,7 +279,7 @@ if len(files_to_index) > 0:
     
     try:
         with TimerUntil("loaded"):
-            documents_to_index = doc_reader.load_data(show_progress=args.verbose)
+            docs_to_index = doc_reader.load_data(show_progress=args.verbose)
 
     except Exception as e: log_error(e)
 
@@ -290,70 +289,72 @@ if len(files_to_index) > 0:
 #------------------------------------------------------------------------------
 
 if args.index_load:
-    log(f"Loading existing index from \"{args.index_load}\"...")
-
+    log(f"Loading the vector index in \"{args.index_load}\"...")
     try:
         with TimerUntil("loaded"):
             storage_context = StorageContext.from_defaults(persist_dir=args.index_load)
-            vector_index = load_index_from_storage(storage_context, show_progress=args.verbose)
-            
+            vector_index = load_index_from_storage(storage_context, show_progress=args.verbose)            
     except Exception as e: log_error(e)
 
 if not vector_index:
     log_verbose(f"Creating a new vector index in memory...")
-
     try:
         with TimerUntil("created"):
             vector_index = VectorStoreIndex(show_progress=args.verbose)
-
     except Exception as e: log_error(e)
     
-if len(documents_to_index or []) > 0:
-    log(f"Indexing {len(documents_to_index)} documents...")
+if len(docs_to_index or []) > 0:
+    log(f"Indexing {len(docs_to_index)} documents...")
 
     with TimerUntil("all indexing complete"):
-        for doc in documents_to_index:
+        for doc in docs_to_index:
             try:
                 with TimerUntil(f"{doc.file_path} done"):
                     vector_index.add_document(doc)
-
             except Exception as e:
                 log_error(f"indexing {doc.file_path}: {e}")
 
 if args.index_store:
     log(f"Storing vector index in \"{args.index_store}\"...")
-
     try:
         with TimerUntil("stored"):
             vector_index.storage_context.persist(persist_dir=args.index_store, show_progress=args.verbose)
-
     except Exception as e: log_error(e)
 
 
 #------------------------------------------------------------------------------
-# Construct the LLM context/system prompt
+# Construct the system prompt
 #------------------------------------------------------------------------------
 
-context = ""
-snippets = args.context or []
+def strip_and_remove_comments(text):
+    lines = text.splitlines()
+    lines = [line.strip() for line in lines if line.strip()]
+    lines = [line for line in lines if not line.startswith("#")]
+    return "\n".join(lines)
 
-if len(snippets) > 0:
+system_prompt_lines = []
+
+if args.context:
     log(f"Adding system context from the command line...")
-
-    for snippet in snippets:
-        context += snippet.strip() + "\n"
-        log_verbose(snippet)
+    for snippet in args.context:
+        snippet = snippet.strip()
+        if snippet:
+            system_prompt_lines.append(snippet)
 
 for file in args.context_file or []:
     log(f"Adding system context from \"{file}\"...")
-
     try:
         with open(file, "r", encoding="utf-8") as f:
-            snippet = f.read()
-            context += snippet.strip() + "\n"
-            log_verbose(snippet)
-
+            snippet = strip_and_remove_comments(f.read())
+            system_prompt_lines.extend(snippet.splitlines())
     except Exception as e: log_error(e)
+
+if args.verbose:
+    indented_prompt = "\n".join([f"\t{line}" for line in system_prompt_lines])
+    log_verbose(f"System prompt:")
+    log_verbose(indented_prompt)
+
+system_prompt = "\n".join(system_prompt_lines)
 
 
 #------------------------------------------------------------------------------
@@ -366,26 +367,21 @@ for file in args.query_file or []:
     log(f"Loading query from \"{file}\"...")
     try:
         with open(file, "r", encoding="utf-8") as f:
-            query_text = f.read().strip()
+            query_text = strip_and_remove_comments(f.read())
             queries.append(query_text)
-
     except Exception as e: log_error(e)
 
 for file in args.query_list or []:
     log(f"Loading single-line queries from \"{file}\"...")
     try:
         with open(file, "r", encoding="utf-8") as f:
-            short_queries = f.read().splitlines()
-            short_queries = [q.strip() for q in short_queries if q.strip()]
-            short_queries = [q for q in short_queries if not q.startswith("#")]
-            log_verbose(f"\t{len(short_queries)} found")
+            short_queries = strip_and_remove_comments(f.read()).splitlines()
             queries.extend(short_queries)
-
     except Exception as e: log_error(e)
 
 
 #------------------------------------------------------------------------------
-# Initialize the query engine
+# Initialize a query engine
 #------------------------------------------------------------------------------
 
 query_engine_params = {
@@ -396,36 +392,41 @@ query_engine_params = {
 if args.llm_provider and args.llm_server:
     log_error(f"cannot specify both --llm-provider and --llm-server", exit_code=1)
 
-if args.llm_model_name:
-    log(f"Query engine will run a local instance of model \"{args.llm_model_name}\"...")
-    try:
-        with TimerUntil("libraries imported"):
-            from transformers import AutoModelForCausalLM
-
-        with TimerUntil("model loaded"):
-            local_model = AutoModelForCausalLM.from_pretrained(args.llm_model_name)
-
-        with TimerUntil("query engine initialized"):        
-            query_engine = vector_index.as_query_engine(model=local_model, **query_engine_params)
-            
-    except Exception as e: log_error(e) ########
-
-if args.llm_provider and not query_engine:
-    log(f"Query engine will use LLM inference provider \"{args.llm_provider}\"...")
+if args.llm_provider:
+    log(f"Query engine connecting to commercial provider \"{args.llm_provider}\"...")
     try:
         with TimerUntil("connected"):
-            query_engine = vector_index.as_query_engine(provider=args.llm_provider, api_key=args.llm_api_key, **query_engine_params)
-            
+            query_engine = vector_index.as_query_engine(
+                provider=args.llm_provider, 
+                api_key=args.llm_api_key, 
+                **query_engine_params)
+
     except Exception as e: log_error(e)
 
 if args.llm_server and not query_engine:
-    log(f"Query engine will use inference server \"{args.llm_server}\"...")
+    log(f"Query engine connecting to inference server \"{args.llm_server}\"...")
     try:
         with TimerUntil("connected"):
             query_engine = vector_index.as_query_engine(
                 server_url=args.llm_server, 
                 api_key=args.llm_api_key, 
                 **query_engine_params)
+
+    except Exception as e: log_error(e)
+
+if not query_engine:
+    model_name = args.llm_model_name or default_llm_model
+    log(f"Query engine running a local instance of model \"{model_name}\"...")
+
+    try:
+        with TimerUntil("libraries imported"):
+            from transformers import AutoModelForCausalLM
+
+        with TimerUntil("model loaded"):
+            local_model = AutoModelForCausalLM.from_pretrained(model_name)
+
+        with TimerUntil("query engine initialized"):        
+            query_engine = vector_index.as_query_engine(model=local_model, **query_engine_params)
             
     except Exception as e: log_error(e)
 
@@ -441,38 +442,38 @@ if len(queries) > 0:
     log(f"Running {len(queries)} queries...")
 
     before_queries = time.time()
-    text_log = ""
+    chat_log = ""
     json_log = {
-        "model": query_engine.model_name,
-        "timestamp": datetime.now().isoformat(),
-        "context": context,
-        "queries": []
+        "model":        query_engine.model_name,
+        "timestamp":    datetime.now().isoformat(),
+        "context":      system_prompt,
+        "queries":      []
     }
 
     for query in queries:
-
-        preface = context
-        if args.query_memory:
-            preface += text_log
-
         try:
-            before_query = time.time()
-            response = query_engine.query(f"{preface}\n{args.tag_queries}: {query}", verbose=args.verbose)
-            response_time = time.time() - before_query
+            visible_history = chat_log if args.query_memory else ""
+            user_prompt = f"{args.tag_queries}: {query}"
+            prompt = system_prompt + visible_history + user_prompt
+           
+            with TimerUntil("query complete"):
+                response = query_engine.query(prompt, verbose=args.verbose)
 
         except Exception as e:
             log_error(e)  
             continue
 
-        interaction = f"{args.tag_queries}: {query}\n{args.tag_responses}: {response}\n"
-        log_verbose(interaction)
-        
-        text_log += interaction
+        response_text = f"{args.tag_responses}: {response}"
+        interaction = f"{user_prompt}{response_text}"
+        chat_log += interaction
         json_log["queries"].append({
             "query": query, 
             "response": response, 
-            "latency": response_time,
         })
+
+        if args.verbose:
+            indented_interaction = "\n".join([f"\t{line}" for line in interaction.splitlines()])
+            log(indented_interaction)
 
     # Commit the logs
 
@@ -480,8 +481,7 @@ if len(queries) > 0:
         log(f"Writing log to \"{args.output_text}\"...")
         try:
             with open(args.output_text, "w", encoding="utf-8") as f:
-                f.write(text_log)
-               
+                f.write(chat_log)
         except Exception as e: log_error(e)
 
     if args.output_json:
@@ -490,7 +490,6 @@ if len(queries) > 0:
             with open(args.output_json, "w", encoding="utf-8") as f:
                 raw_text = json.dumps(json_log, indent=4)
                 f.write(raw_text)
-                
         except Exception as e: log_error(e)
 
     log(f"Queries completed in {time_since(before_queries)}")
@@ -522,7 +521,7 @@ if args.chat:
     
     chat_engine_params = {
         "chat_mode": args.chat_mode,
-        "system_prompt": f"{context}\n{chat_init}",
+        "system_prompt": f"{system_prompt}\n{chat_init}",
         "verbose": args.verbose, 
     }
 
