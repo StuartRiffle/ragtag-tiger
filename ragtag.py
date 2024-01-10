@@ -13,7 +13,7 @@ program_copyright   = "Copyright (c) 2024 Stuart Riffle"
 program_description = "Update and query a LlamaIndex vector index"
 
 auto_download_loaders = ["JSONReader:json"]
-default_llm_model = "EleutherAI/gpt-neo-2.7B"
+fallback_llm_model = "EleutherAI/gpt-neo-2.7B"
 
 #------------------------------------------------------------------------------
 # Parse command line arguments and response files
@@ -39,25 +39,25 @@ arg("--index-load",     help="Load the vector index from a given path", metavar=
 arg("--index-store",    help="Save the updated vector index to a given path", metavar="PATH")
 
 arg = parser.add_argument_group("Document indexing").add_argument
-arg("--source",         help="Folder of files to be indexed recursively", nargs="+", metavar="FOLDER")
-arg("--source-spec",    help="Index files matching a pathspec, like \"**/*.(cpp|hpp|h)\"", nargs="+", metavar="SPEC")
-arg("--source-list",    help="Text file with a list of filenames/pathspecs to index", nargs="+", metavar="FILE")
-arg("--custom-loader",  help="Use loaders from LlamaIndex hub, specify like \"JPEGReader:jpg,jpeg\"" , nargs="+", metavar="SPEC")
+arg("--source",         help="Folder of files to be indexed recursively", action="append", metavar="FOLDER")
+arg("--source-spec",    help="Index files matching a pathspec, like \"**/*.cpp\"", action="append", metavar="SPEC")
+arg("--source-list",    help="Text file with a list of filenames/pathspecs to index", action="append", metavar="FILE")
+arg("--custom-loader",  help="Use loaders from LlamaIndex hub, specify like \"JPEGReader:jpg,jpeg\"", action="append", metavar="SPEC")
 
 arg = parser.add_argument_group("Language model").add_argument
-arg("--llm-model-name", help="Path or HF model for local inference", metavar="PATH")
 arg("--llm-server",     help="LLM inference server URL", metavar="URL")
 arg("--llm-provider",   help="Commercial inference provider", choices=["openai", "claude", "bing", "gemini"])
+arg("--llm-model",      help="Path or HF model for local inference", default=fallback_llm_model, metavar="NAME")
 arg("--llm-api-key",    help="API key for inference server (if needed)", default="", metavar="KEY")
 arg("--llm-secret",     help="Secret for inference server (if needed)", default="", metavar="SECRET")
 arg("--llm-param",      help="Inference parameter, like \"temperature=0.9\" etc", nargs="+", metavar="KVP")
-arg("--context",        help="Command line context/system prompt", nargs="+", metavar="TEXT")
-arg("--context-file",   help="File containing a snippet of context", nargs="+", metavar="FILE")
+arg("--context",        help="Command line context/system prompt", action="append", metavar="TEXT")
+arg("--context-file",   help="File containing a snippet of context",action="append", metavar="FILE")
 
 arg = parser.add_argument_group("Query processing").add_argument
-arg("--query",          help="Command line query", nargs="+", metavar="TEXT")
-arg("--query-list",     help="File containing short queries, one per line", nargs="+", metavar="FILE")
-arg("--query-file",     help="File containing one long query", nargs="+", metavar="FILE")
+arg("--query",          help="Command line query", action="append", metavar="TEXT")
+arg("--query-list",     help="File containing short queries, one per line", action="append", metavar="FILE")
+arg("--query-file",     help="File containing one long query", action="append", metavar="FILE")
 arg("--query-log",      help="Log queries and responses to a text file", metavar="FILE")
 arg("--query-log-json", help="Log queries and responses (plus some metadata) to a JSON file", metavar="FILE")
 arg("--query-memory",   help="Maintain \"chat\" history between queries", action="store_true")
@@ -67,8 +67,8 @@ arg("--tag-responses",  help="The name/header in the transcript for engine respo
 
 arg = parser.add_argument_group("Interactive chat").add_argument
 arg("--chat",           help="Enter chat after any query processing", action="store_true")
-arg("--chat-init",      help="Extra instructions/personality for the chat LLM", nargs="+", metavar="TEXT")
-arg("--chat-init-file", help="File containing a snippet of chat LLM instructions", nargs="+", metavar="FILE")
+arg("--chat-init",      help="Extra instructions/personality for the chat LLM", action="append", metavar="TEXT")
+arg("--chat-init-file", help="File containing a snippet of chat LLM instructions", action="append", metavar="FILE")
 arg("--chat-log",       help="Append chat queries and responses to a text file", metavar="FILE")
 arg("--chat-mode",      help="Chat response mode", choices=["best", "context", "condense_question", "simple", "react", "openai"], default="best")
 
@@ -102,9 +102,8 @@ def log_error(msg, exit_code=0, prefix="\t", suffix="", **kwargs):
     if exit_code:
         exit(exit_code)
 
-log(f"{program_name} {program_version}\n")
-log(f"{program_copyright}, {program_license} license")
-
+log(f"{program_name} {program_version}")
+log(f"{program_copyright}, {program_license} license\n")
 
 #------------------------------------------------------------------------------
 # Timings for verbose mode
@@ -124,41 +123,54 @@ class TimerUntil:
         return self
     
     def __exit__(self, exc_type, exc_val, exc_tb):
-        log_verbose(f"{self.prefix}{self.msg} ({time_since(self.start_time)}{self.suffix})")
+        if not exc_type:
+            log_verbose(f"{self.prefix}{self.msg} ({time_since(self.start_time)}{self.suffix})")
 
 
 #------------------------------------------------------------------------------
 # Gather all the file specs to search for indexing
 #------------------------------------------------------------------------------
-
+        
 search_specs = []
 
+def strip_and_remove_comments(text):
+    lines = text.splitlines()
+    lines = [line.strip() for line in lines if line.strip()]
+    lines = [line for line in lines if not line.startswith('#')]
+    return "\n".join(lines)
+
 for folder in args.source or []:
-    log(f"Including all files under folder \"{folder}\"...")
-    folder_wildcard = os.path.join(folder, "**/*")
-    search_specs.append(folder_wildcard)
+    log(f"Including all files under folder \"{os.path.normpath(folder)}\"...")
+    spec = os.path.join(folder, "**/*")
+    search_specs.append(spec)
 
 for spec in args.source_spec or []:
     log(f"Including files matching spec \"{spec}\"...")
     search_specs.append(spec)
 
 for file in args.source_list or []:
-    log(f"Including files from name/spec list \"{file}\"...")
+    log(f"Including files from name/spec list in \"{os.path.normpath(file)}\"...")
     try:
         with open(file, "r", encoding="utf-8") as f:
-            specs = f.read().splitlines()
-            specs = [name.strip() for name in specs if name.strip()]
-            specs = [name for name in specs if not name.startswith("#")]
+            specs = strip_and_remove_comments(f.read())
             search_specs.extend(specs)
     except Exception as e: log_error(e)
 
-search_specs = [os.path.normpath(f) for f in search_specs]
 log_verbose(f"Relative paths will be based on \"{os.getcwd()}\"")
 
 
 #------------------------------------------------------------------------------
 # Find files matching the specs
 #------------------------------------------------------------------------------
+
+def split_root_from_spec(spec):
+    """Split off the root path from the wildcard part if possible"""
+    for pos in range(len(spec)):
+        if spec[pos] == "*" or spec[pos] == "?":
+            sep_pos = spec.rfind(os.path.sep, 0, pos)
+            if sep_pos >= 0:
+                return spec[:sep_pos + 1], spec[sep_pos + 1:]
+    return "", spec
 
 log(f"Finding files...")
 files_to_index = []
@@ -167,25 +179,17 @@ for file_spec in search_specs:
     if os.path.isfile(file_spec):
         files_to_index.append(file_spec)
     else:
-        # Split off the root path from the wildcard part if possible
-        file_spec_root = os.getcwd()
-        for pos in range(len(file_spec)):
-            if file_spec[pos] == "*" or file_spec[pos] == "?":
-                sep_pos = file_spec.rfind(os.path.sep, 0, pos)
-                if sep_pos >= 0:
-                    file_spec_root = file_spec[:sep_pos + 1]
-                    file_spec = file_spec[sep_pos + 1:]
-                break
         try:
+            file_spec_root, file_spec = split_root_from_spec(file_spec)
+            file_spec = file_spec.replace('\\', '/')
             relative_pathspec = pathspec.PathSpec.from_lines('gitwildmatch', [file_spec])
             matches = relative_pathspec.match_tree(file_spec_root)
+            matches = [os.path.join(file_spec_root, match) for match in matches]
             files_to_index.extend(matches)
 
         except Exception as e: log_error(e)
 
-        log_verbose(f"\t{len(matches)} files match spec \"{file_spec}\" under \"{file_spec_root}\"")
-
-files_to_index = [os.path.normpath(f) for f in files_to_index]
+files_to_index = [os.path.abspath(os.path.normpath(f)) for f in files_to_index]
 files_to_index = sorted(set(files_to_index))
 
 if args.verbose and len(files_to_index) > 0:
@@ -196,11 +200,9 @@ if args.verbose and len(files_to_index) > 0:
         _, extension = os.path.splitext(file_path)
         files_with_ext[extension] = files_with_ext.get(extension, 0) + 1
 
-    for extension, count in sorted(files_with_ext.items()):
-        log_verbose(f"\t{extension:10} {count}")
-
-log(f"{len(files_to_index)} files total")
-
+    sorted_items = sorted(files_with_ext.items(), key=lambda x: x[1], reverse=True)
+    for extension, count in sorted_items:
+        log_verbose(f"\t{count:10} {extension}")
 
 #------------------------------------------------------------------------------
 # Download any custom loaders from the hub
@@ -212,12 +214,10 @@ file_extractor_list = {}
 
 log("Downloading file loaders from the LlamaIndex hub...")
 for loader_spec in loader_specs:
-    if not ':' in loader_spec:
+    loader_class, _, extensions = loader_spec.partition(':')
+    if not extensions:
         log(f"\tWARNING: invalid loader spec \"{loader_spec}\"")
         continue
-
-    loader_class, extensions = loader_spec.split(":", 1)
-    log(f"\t{loader_class} ({extensions.replace(',', ', ')})")
 
     try:
         with TimerUntil(f"{loader_class} downloaded"):
@@ -226,31 +226,28 @@ for loader_spec in loader_specs:
                 extension = "." + extension.strip(". ")
                 file_extractor_list[extension] = loader()
 
-    except Exception as e:
-        log_error(e, prefix="\t\t")
+    except Exception as e: log_error(e)
 
 
 #------------------------------------------------------------------------------
 # Source code can be chunked semantically
 #------------------------------------------------------------------------------
 
-class CodeAwareDirectoryReader(SimpleDirectoryReader):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.custom_splitters = [
-            ([".cpp", ".c", ".hpp", ".h"],  CodeSplitter("cpp")),
-            ([".cs"],                       CodeSplitter("c-sharp")),
-            ([".py"],                       CodeSplitter("python")),
-            ([".lua"],                      CodeSplitter("lua")),
-            ([".cu"],                       CodeSplitter("cuda")),
-            ([".java"],                     CodeSplitter("java")),
-            ([".js"],                       CodeSplitter("javascript")),
-            ([".ts"],                       CodeSplitter("typescript")),
-        ]        
+source_code_splitters = [
+    ([".cpp", ".c", ".hpp", ".h"],  CodeSplitter(language="cpp")),
+    ([".cs"],                       CodeSplitter(language="c_sharp")),
+    ([".py"],                       CodeSplitter(language="python")),
+    ([".lua"],                      CodeSplitter(language="lua")),
+    ([".cu"],                       CodeSplitter(language="cuda")),
+    ([".java"],                     CodeSplitter(language="java")),
+    ([".js"],                       CodeSplitter(language="javascript")),
+    ([".ts"],                       CodeSplitter(language="typescript")),
+]        
 
+class CodeAwareDirectoryReader(SimpleDirectoryReader):
     def readFile(self, file_path):
         try:
-            for extensions, code_splitter in self.custom_splitters:
+            for extensions, code_splitter in source_code_splitters:
                 if file_path.endswith(tuple(extensions)):
                     with open(file_path, 'r') as f:
                         source_code = f.read()
@@ -271,14 +268,12 @@ class CodeAwareDirectoryReader(SimpleDirectoryReader):
 if len(files_to_index) > 0:
     log(f"Loading and chunking {len(files_to_index)} files...")
 
-    doc_reader = CodeAwareDirectoryReader(
-        input_files=files_to_index, 
-        file_extractor=file_extractor_list, 
-        exclude_hidden=True,
-        verbose=args.verbose)
-    
     try:
-        with TimerUntil("loaded"):
+        with TimerUntil("files loaded"):
+            doc_reader = CodeAwareDirectoryReader(
+                input_files=files_to_index, 
+                file_extractor=file_extractor_list, 
+                exclude_hidden=True)
             docs_to_index = doc_reader.load_data(show_progress=args.verbose)
 
     except Exception as e: log_error(e)
@@ -288,37 +283,45 @@ if len(files_to_index) > 0:
 # Update the vector database
 #------------------------------------------------------------------------------
 
+vector_index = None
+
 if args.index_load:
     log(f"Loading the vector index in \"{args.index_load}\"...")
     try:
         with TimerUntil("loaded"):
             storage_context = StorageContext.from_defaults(persist_dir=args.index_load)
             vector_index = load_index_from_storage(storage_context, show_progress=args.verbose)            
+
     except Exception as e: log_error(e)
 
 if not vector_index:
     log_verbose(f"Creating a new vector index in memory...")
     try:
         with TimerUntil("created"):
-            vector_index = VectorStoreIndex(show_progress=args.verbose)
+            vector_index = VectorStoreIndex(nodes=[], show_progress=args.verbose)
+
     except Exception as e: log_error(e)
     
 if len(docs_to_index or []) > 0:
     log(f"Indexing {len(docs_to_index)} documents...")
-
     with TimerUntil("all indexing complete"):
         for doc in docs_to_index:
             try:
-                with TimerUntil(f"{doc.file_path} done"):
+                with TimerUntil(f"{doc.file_path}"):
                     vector_index.add_document(doc)
+
             except Exception as e:
                 log_error(f"indexing {doc.file_path}: {e}")
 
 if args.index_store:
     log(f"Storing vector index in \"{args.index_store}\"...")
     try:
+        if not os.path.exists(args.index_store):
+            os.makedirs(args.index_store)
+
         with TimerUntil("stored"):
             vector_index.storage_context.persist(persist_dir=args.index_store, show_progress=args.verbose)
+            
     except Exception as e: log_error(e)
 
 
@@ -326,20 +329,12 @@ if args.index_store:
 # Construct the system prompt
 #------------------------------------------------------------------------------
 
-def strip_and_remove_comments(text):
-    lines = text.splitlines()
-    lines = [line.strip() for line in lines if line.strip()]
-    lines = [line for line in lines if not line.startswith("#")]
-    return "\n".join(lines)
-
 system_prompt_lines = []
 
 if args.context:
     log(f"Adding system context from the command line...")
     for snippet in args.context:
-        snippet = snippet.strip()
-        if snippet:
-            system_prompt_lines.append(snippet)
+        system_prompt_lines.append(snippet)
 
 for file in args.context_file or []:
     log(f"Adding system context from \"{file}\"...")
@@ -351,10 +346,9 @@ for file in args.context_file or []:
 
 if args.verbose:
     indented_prompt = "\n".join([f"\t{line}" for line in system_prompt_lines])
-    log_verbose(f"System prompt:")
-    log_verbose(indented_prompt)
+    log_verbose(f"System prompt:\n{indented_prompt}")
 
-system_prompt = "\n".join(system_prompt_lines)
+system_prompt = "\n".join(system_prompt_lines) + '\n'
 
 
 #------------------------------------------------------------------------------
@@ -379,6 +373,7 @@ for file in args.query_list or []:
             queries.extend(short_queries)
     except Exception as e: log_error(e)
 
+log_verbose(f"Total queries: {len(queries)}")
 
 #------------------------------------------------------------------------------
 # Initialize a query engine
@@ -387,48 +382,29 @@ for file in args.query_list or []:
 query_engine_params = {
     "response_mode": args.query_mode,
     "show_progress": args.verbose,
+    "model_name": args.llm_model or "",
+    "api_key": args.llm_api_key,
+    "secret": args.llm_secret,
 }
 
 if args.llm_provider and args.llm_server:
     log_error(f"cannot specify both --llm-provider and --llm-server", exit_code=1)
 
-if args.llm_provider:
-    log(f"Query engine connecting to commercial provider \"{args.llm_provider}\"...")
-    try:
-        with TimerUntil("connected"):
-            query_engine = vector_index.as_query_engine(
-                provider=args.llm_provider, 
-                api_key=args.llm_api_key, 
-                **query_engine_params)
-
-    except Exception as e: log_error(e)
-
-if args.llm_server and not query_engine:
-    log(f"Query engine connecting to inference server \"{args.llm_server}\"...")
-    try:
-        with TimerUntil("connected"):
-            query_engine = vector_index.as_query_engine(
-                server_url=args.llm_server, 
-                api_key=args.llm_api_key, 
-                **query_engine_params)
-
-    except Exception as e: log_error(e)
-
-if not query_engine:
-    model_name = args.llm_model_name or default_llm_model
-    log(f"Query engine running a local instance of model \"{model_name}\"...")
-
-    try:
-        with TimerUntil("libraries imported"):
-            from transformers import AutoModelForCausalLM
-
+try:
+    if args.llm_provider:
+        query_engine_params["provider"] = args.llm_provider
+    elif args.llm_server:
+        query_engine_params["server_url"] = args.llm_server
+    elif args.llm_model:
         with TimerUntil("model loaded"):
-            local_model = AutoModelForCausalLM.from_pretrained(model_name)
+            from transformers import AutoModelForCausalLM
+            local_model = AutoModelForCausalLM.from_pretrained(args.llm_model)
+            query_engine_params["model"] = local_model
 
-        with TimerUntil("query engine initialized"):        
-            query_engine = vector_index.as_query_engine(model=local_model, **query_engine_params)
-            
-    except Exception as e: log_error(e)
+    with TimerUntil("query engine initialized"):        
+        query_engine = vector_index.as_query_engine(**query_engine_params)
+
+except Exception as e: log_error(e)    
 
 if not query_engine:
     log_error(f"no query engine available", exit_code=1)
@@ -451,6 +427,7 @@ if len(queries) > 0:
     }
 
     for query in queries:
+        query_record = { "query": query }
         try:
             visible_history = chat_log if args.query_memory else ""
             user_prompt = f"{args.tag_queries}: {query}"
@@ -460,16 +437,16 @@ if len(queries) > 0:
                 response = query_engine.query(prompt, verbose=args.verbose)
 
         except Exception as e:
-            log_error(e)  
-            continue
+            query_record["error"] = str(e)
+            response = ""
+            log_error(e)
+
+        query_record["response"] = response
+        json_log["queries"].append(query_record)
 
         response_text = f"{args.tag_responses}: {response}"
-        interaction = f"{user_prompt}{response_text}"
+        interaction = f"{user_prompt}\n{response_text}\n"
         chat_log += interaction
-        json_log["queries"].append({
-            "query": query, 
-            "response": response, 
-        })
 
         if args.verbose:
             indented_interaction = "\n".join([f"\t{line}" for line in interaction.splitlines()])
