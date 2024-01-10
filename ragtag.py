@@ -104,6 +104,7 @@ def log_error(msg, exit_code=0, prefix="\t", suffix="", **kwargs):
 
 log(f"{program_name} {program_version}")
 log(f"{program_copyright}, {program_license} license\n")
+log()
 
 #------------------------------------------------------------------------------
 # Timings for verbose mode
@@ -160,7 +161,7 @@ log_verbose(f"Relative paths will be based on \"{os.getcwd()}\"")
 
 
 #------------------------------------------------------------------------------
-# Find files matching the specs
+# Find all files matching these specs
 #------------------------------------------------------------------------------
 
 def split_root_from_spec(spec):
@@ -230,7 +231,7 @@ for loader_spec in loader_specs:
 
 
 #------------------------------------------------------------------------------
-# Source code can be chunked semantically
+# Source code can be chunked in a syntax-aware way
 #------------------------------------------------------------------------------
 
 source_code_splitters = [
@@ -254,7 +255,6 @@ class CodeAwareDirectoryReader(SimpleDirectoryReader):
                         chunks = code_splitter.chunk(source_code)
                         docs = [Document(file_path, chunk) for chunk in chunks]
                         return docs
-                    
         except Exception as e:
             log_error(f"chunking {file_path}: {e}")
                 
@@ -266,8 +266,7 @@ class CodeAwareDirectoryReader(SimpleDirectoryReader):
 #------------------------------------------------------------------------------
 
 if len(files_to_index) > 0:
-    log(f"Loading and chunking {len(files_to_index)} files...")
-
+    log(f"Chunking {len(files_to_index)} files...")
     try:
         with TimerUntil("files loaded"):
             doc_reader = CodeAwareDirectoryReader(
@@ -286,20 +285,18 @@ if len(files_to_index) > 0:
 vector_index = None
 
 if args.index_load:
-    log(f"Loading the vector index in \"{args.index_load}\"...")
+    log(f"Loading the vector index in \"{os.path.normcase(args.index_load)}\"...")
     try:
         with TimerUntil("loaded"):
             storage_context = StorageContext.from_defaults(persist_dir=args.index_load)
             vector_index = load_index_from_storage(storage_context, show_progress=args.verbose)            
-
     except Exception as e: log_error(e)
 
 if not vector_index:
     log_verbose(f"Creating a new vector index in memory...")
     try:
-        with TimerUntil("created"):
+        with TimerUntil("ready"):
             vector_index = VectorStoreIndex(nodes=[], show_progress=args.verbose)
-
     except Exception as e: log_error(e)
     
 if len(docs_to_index or []) > 0:
@@ -307,21 +304,18 @@ if len(docs_to_index or []) > 0:
     with TimerUntil("all indexing complete"):
         for doc in docs_to_index:
             try:
-                with TimerUntil(f"{doc.file_path}"):
+                with TimerUntil(f"{doc.file_path} done"):
                     vector_index.add_document(doc)
-
             except Exception as e:
                 log_error(f"indexing {doc.file_path}: {e}")
 
 if args.index_store:
-    log(f"Storing vector index in \"{args.index_store}\"...")
+    log(f"Storing vector index in \"{os.path.normcase(args.index_store)}\"...")
     try:
         if not os.path.exists(args.index_store):
             os.makedirs(args.index_store)
-
         with TimerUntil("stored"):
             vector_index.storage_context.persist(persist_dir=args.index_store, show_progress=args.verbose)
-            
     except Exception as e: log_error(e)
 
 
@@ -376,20 +370,24 @@ for file in args.query_list or []:
 log_verbose(f"Total queries: {len(queries)}")
 
 #------------------------------------------------------------------------------
-# Initialize a query engine
+# Initialize the query engine
 #------------------------------------------------------------------------------
 
+local_model = None
+query_engine = None
 query_engine_params = {
     "response_mode": args.query_mode,
     "show_progress": args.verbose,
     "model_name": args.llm_model or "",
     "api_key": args.llm_api_key,
     "secret": args.llm_secret,
+    "params": dict([param.split("=") for param in args.llm_param or []]),
 }
 
 if args.llm_provider and args.llm_server:
     log_error(f"cannot specify both --llm-provider and --llm-server", exit_code=1)
 
+log(f"Initializing query engine...")
 try:
     if args.llm_provider:
         query_engine_params["provider"] = args.llm_provider
@@ -398,16 +396,14 @@ try:
     elif args.llm_model:
         with TimerUntil("model loaded"):
             from transformers import AutoModelForCausalLM
-            local_model = AutoModelForCausalLM.from_pretrained(args.llm_model)
+            local_model = AutoModelForCausalLM.from_pretrained(args.llm_model, verbose=args.verbose)
             query_engine_params["model"] = local_model
 
-    with TimerUntil("query engine initialized"):        
+    with TimerUntil("engine ready"):        
         query_engine = vector_index.as_query_engine(**query_engine_params)
 
-except Exception as e: log_error(e)    
-
-if not query_engine:
-    log_error(f"no query engine available", exit_code=1)
+except Exception as e:
+    log_error(e, exit_code=1)
 
 
 #------------------------------------------------------------------------------
@@ -415,42 +411,46 @@ if not query_engine:
 #------------------------------------------------------------------------------
     
 if len(queries) > 0:
-    log(f"Running {len(queries)} queries...")
+    with TimerUntil("all queries complete"):
+        log(f"Running {len(queries)} queries...")
 
-    before_queries = time.time()
-    chat_log = ""
-    json_log = {
-        "model":        query_engine.model_name,
-        "timestamp":    datetime.now().isoformat(),
-        "context":      system_prompt,
-        "queries":      []
-    }
+        before_queries = time.time()
+        chat_log = ""
+        json_log = {
+            "model":        query_engine.model_name,
+            "timestamp":    datetime.now().isoformat(),
+            "context":      system_prompt,
+            "queries":      []
+        }
 
-    for query in queries:
-        query_record = { "query": query }
-        try:
-            visible_history = chat_log if args.query_memory else ""
-            user_prompt = f"{args.tag_queries}: {query}"
-            prompt = system_prompt + visible_history + user_prompt
-           
-            with TimerUntil("query complete"):
-                response = query_engine.query(prompt, verbose=args.verbose)
-
-        except Exception as e:
-            query_record["error"] = str(e)
+        for query in queries:
+            query_record = { "query": query }
             response = ""
-            log_error(e)
 
-        query_record["response"] = response
-        json_log["queries"].append(query_record)
+            try:
+                query_start_time = time.time()
+                visible_history = chat_log if args.query_memory else ""
+                user_prompt = f"{args.tag_queries}: {query}"
+                prompt = system_prompt + visible_history + user_prompt
+            
+                with TimerUntil("query complete"):
+                    response = query_engine.query(prompt, verbose=args.verbose)
+                    query_record["response_time"] = time_since(query_start_time)
 
-        response_text = f"{args.tag_responses}: {response}"
-        interaction = f"{user_prompt}\n{response_text}\n"
-        chat_log += interaction
+            except Exception as e:
+                query_record["error"] = str(e)
+                log_error(e)
 
-        if args.verbose:
-            indented_interaction = "\n".join([f"\t{line}" for line in interaction.splitlines()])
-            log(indented_interaction)
+            query_record["response"] = response
+            json_log["queries"].append(query_record)
+
+            response_text = f"{args.tag_responses}: {response}"
+            interaction = f"{user_prompt}\n{response_text}\n"
+            chat_log += interaction
+
+            if args.verbose:
+                indented_interaction = "\n".join([f"\t{line}" for line in interaction.splitlines()])
+                log(indented_interaction)
 
     # Commit the logs
 
@@ -459,6 +459,7 @@ if len(queries) > 0:
         try:
             with open(args.output_text, "w", encoding="utf-8") as f:
                 f.write(chat_log)
+
         except Exception as e: log_error(e)
 
     if args.output_json:
@@ -467,96 +468,95 @@ if len(queries) > 0:
             with open(args.output_json, "w", encoding="utf-8") as f:
                 raw_text = json.dumps(json_log, indent=4)
                 f.write(raw_text)
+
         except Exception as e: log_error(e)
 
-    log(f"Queries completed in {time_since(before_queries)}")
-    query_engine.close()
+    with TimerUntil("query engine shut down"):
+        query_engine.close()
+
+#------------------------------------------------------------------------------
+# Load chat bot instructions
+#------------------------------------------------------------------------------
+
+chat_init = args.chat_init or []
+
+if args.chat:
+    for file in args.chat_init_file or []:
+        log(f"Loading chat context/instructions from \"{os.path.normcase(file)}\"...")
+        try:
+            with open(file, "r", encoding="utf-8") as f:
+                chat_init_text = strip_and_remove_comments(f.read())
+                chat_init.append(chat_init_text)
+        except Exception as e: log_error(e)
+
+    if args.verbose:
+        indented_init = "\n".join([f"\t{line}" for line in chat_init])
+        log_verbose(f"Chat bot instructions:\n{indented_init}")
 
 
 #------------------------------------------------------------------------------
-# Chat mode
+# Chat engine initialization
 #------------------------------------------------------------------------------
 
 if args.chat:
-    chat_init = args.chat_init or []
-    for file in args.chat_init_file or []:
-        log_verbose(f"Loading chat context/instructions from \"{file}\"...")
-        try:
-            with open(file, "r", encoding="utf-8") as f:
-                chat_init_text = f.read().strip()
-                chat_init.append(chat_init_text)
-                log_verbose(chat_init_text)
+    log("Initializing chat engine...")
+    try:
+        chat_engine_params = query_engine_params.copy()
+        chat_engine_params.clear("response_mode")
+        chat_engine_params["chat_mode"] = args.chat_mode
+        chat_engine_params["system_prompt"] = f"{system_prompt}\n{chat_init}"
 
-        except Exception as e:
-            log(f"\tERROR: {e}")
+        with TimerUntil("chat engine ready"):
+            chat_engine = vector_index.as_chat_engine(**chat_engine_params)
 
+    except Exception as e:
+        log_error(e, exit_code=1)
+
+
+#------------------------------------------------------------------------------
+# Interactive chat mode
+#------------------------------------------------------------------------------
+
+if args.chat:
     log(f"Entering interactive chat...")
     log(f" - The response mode is \"{args.chat_mode}\"")
     log(f" - Hit CTRL-C to interrupt a response in progress")
-    log(f" - Say \"bye\" or something like that when you're done")
+    log(f" - Say \"bye\" or something when you're done")
     log()
     
-    chat_engine_params = {
-        "chat_mode": args.chat_mode,
-        "system_prompt": f"{system_prompt}\n{chat_init}",
-        "verbose": args.verbose, 
-    }
-
-    try:
-        if local_model:
-            chat_engine = vector_index.as_chat_engine(
-                model=local_model, 
-                **chat_engine_params)
-        else:
-            chat_engine = vector_index.as_chat_engine(
-                server_url=args.llm_server, 
-                api_key=args.llm_api_key, 
-                **chat_engine_params)
-            
-    except Exception as e:
-        log(f"\tERROR: {e}")
-
-    if not chat_engine:
-        log(f"ERROR: no chat engine available")
-        exit(1)
-
+    exit_commands = ["bye", "something", "goodbye", "exit", "quit", "done", "stop", "end"]
     chat_lines = []
-    exit_commands = ["bye", "goodbye", "exit", "quit", "done", "stop", "end"]
 
     while True:
         try:
-            message = input("> ")
-            if message.strip().lower() in exit_commands:
+            message = input("> ").strip()
+            if message.lower() in exit_commands:
                 break
         except KeyboardInterrupt:
             continue
 
         chat_lines.append(f"{args.tag_queries}: {message}")
-        response_line = ""
 
         try:
+            response_line = ""
             streaming_response = chat_engine.chat(message, streaming=True)
             for token in streaming_response.response_gen:
                 response_line += token
                 log(token, end="")
-
+            log()
         except KeyboardInterrupt:
-            log("[response interrupted]")
+            log("[BREAK]")
 
         chat_lines.append(f"{args.tag_responses}: {response_line}")
-        log()
 
     if args.chat_log and len(chat_lines) > 0:
-        write_action = "Appending" if os.path.exists(args.chat_log) else "Writing"
-        log(f"{write_action} this chat log to \"{args.chat_log}\"...")
-
+        log(f"Appending chat log to \"{args.chat_log}\"...")
         try:
+            all_lines = "\n".join(chat_lines) + "\n"
             with open(args.chat_log, "a", encoding="utf-8") as f:
-                all_lines = "\n".join(chat_lines) 
-                f.write(all_lines + "\n")
-                
-        except Exception as e:
-            log(f"\tERROR: {e}")
+                f.write(all_lines)
+
+        except Exception as e: log_error(e)
 
 
 #------------------------------------------------------------------------------
@@ -568,5 +568,5 @@ if len(all_errors) > 0:
     for error in all_errors:
         print(f"\t{error}")
 
-log(f"Exiting after {time_since(start_time)}...")
-log_verbose("Tiger out, peace")
+log(f"Total run time {time_since(start_time)}.")
+log("Tiger out, peace.")
