@@ -12,8 +12,46 @@ program_license     = "MIT"
 program_copyright   = "Copyright (c) 2024 Stuart Riffle"
 program_description = "Update and query a LlamaIndex vector index"
 
-auto_download_loaders = ["JSONReader:json"]
-fallback_llm_model = "EleutherAI/gpt-neo-2.7B"
+#------------------------------------------------------------------------------
+# File type support and default values etc, update these as needed
+#------------------------------------------------------------------------------
+
+built_in_loaders = set([
+    '.csv', '.docx', '.epub', '.hwp', '.ipynb', '.jpeg', '.jpg', '.mbox', 
+    '.md', '.mp3', '.mp4', '.pdf', '.png', '.ppt', '.pptm', '.pptx',
+])
+
+available_hub_loaders = {
+    ".json":    "JSONReader",
+    ".xlsx":    "PandasExcelReader",
+    ".graphql": "SDLReader",
+    ".txt":     "UnstructuredReader",
+    ".rtf":     "UnstructuredReader",
+    ".eml":     "UnstructuredReader",
+    ".html":    "UnstructuredReader",
+}
+
+source_code_splitters = [
+    ([".cpp", ".hpp"],  CodeSplitter(language="cpp")),
+    ([".cxx", ".hxx"],  CodeSplitter(language="cpp")),
+    ([".inc", ".inl"],  CodeSplitter(language="cpp")),
+    ([".c", ".h"],      CodeSplitter(language="c")),
+    ([".cs"],           CodeSplitter(language="c_sharp")),
+    ([".py"],           CodeSplitter(language="python")),
+    ([".lua"],          CodeSplitter(language="lua")),
+    ([".cu"],           CodeSplitter(language="cuda")),
+    ([".java"],         CodeSplitter(language="java")),
+    ([".js"],           CodeSplitter(language="javascript")),
+    ([".ts"],           CodeSplitter(language="typescript")),
+]
+
+known_llm_models = {
+    "default":      "EleutherAI/gpt-neo-2.7B",
+    "airoboros":    "TheBloke/Airoboros-L2-70B-3.1.2-AWQ",
+    "llama2":       "TheBloke/LLAMA-L2-70B-3.1.2-AWQ",
+    "llama2-small": "TheBloke/LLAMA-L2-70B-3.1.2-AWQ",
+
+}
 
 #------------------------------------------------------------------------------
 # Parse command line arguments and response files
@@ -43,11 +81,12 @@ arg("--source",         help="Folder of files to be indexed recursively", action
 arg("--source-spec",    help="Index files matching a pathspec, like \"**/*.cpp\"", action="append", metavar="SPEC")
 arg("--source-list",    help="Text file with a list of filenames/pathspecs to index", action="append", metavar="FILE")
 arg("--custom-loader",  help="Use loaders from LlamaIndex hub, specify like \"JPEGReader:jpg,jpeg\"", action="append", metavar="SPEC")
+arg("--ignore-unknown", help="Ignore files with unrecognized extensions", action="store_true")
 
 arg = parser.add_argument_group("Language model").add_argument
 arg("--llm-server",     help="LLM inference server URL", metavar="URL")
 arg("--llm-provider",   help="Commercial inference provider", choices=["openai", "claude", "bing", "gemini"])
-arg("--llm-model",      help="Path or HF model for local inference", default=fallback_llm_model, metavar="NAME")
+arg("--llm-model",      help="Path or model name for local inference", default="default", metavar="NAME")
 arg("--llm-api-key",    help="API key for inference server (if needed)", default="", metavar="KEY")
 arg("--llm-secret",     help="Secret for inference server (if needed)", default="", metavar="SECRET")
 arg("--llm-param",      help="Inference parameter, like \"temperature=0.9\" etc", nargs="+", metavar="KVP")
@@ -76,7 +115,6 @@ args = parser.parse_args()
 if args.version:
     print(f"{program_version}\n")
     exit(0)
-
 
 #------------------------------------------------------------------------------
 # Misc loggery
@@ -107,7 +145,7 @@ log(f"{program_copyright}, {program_license} license\n")
 log()
 
 #------------------------------------------------------------------------------
-# Timings for verbose mode
+# A scope timer for verbose mode
 #------------------------------------------------------------------------------
 
 def time_since(before):
@@ -126,7 +164,6 @@ class TimerUntil:
     def __exit__(self, exc_type, exc_val, exc_tb):
         if not exc_type:
             log_verbose(f"{self.prefix}{self.msg} ({time_since(self.start_time)}{self.suffix})")
-
 
 #------------------------------------------------------------------------------
 # Gather all the file specs to search for indexing
@@ -157,8 +194,7 @@ for file in args.source_list or []:
             search_specs.extend(specs)
     except Exception as e: log_error(e)
 
-log_verbose(f"Relative paths will be based on \"{os.getcwd()}\"")
-
+log_verbose(f"Relative paths will be based on the current directory: \"{os.getcwd()}\"")
 
 #------------------------------------------------------------------------------
 # Find all files matching these specs
@@ -173,7 +209,7 @@ def split_root_from_spec(spec):
                 return spec[:sep_pos + 1], spec[sep_pos + 1:]
     return "", spec
 
-log(f"Finding files...")
+log(f"Finding the specified files...")
 files_to_index = []
 
 for file_spec in search_specs:
@@ -183,6 +219,7 @@ for file_spec in search_specs:
         try:
             file_spec_root, file_spec = split_root_from_spec(file_spec)
             file_spec = file_spec.replace('\\', '/')
+
             relative_pathspec = pathspec.PathSpec.from_lines('gitwildmatch', [file_spec])
             matches = relative_pathspec.match_tree(file_spec_root)
             matches = [os.path.join(file_spec_root, match) for match in matches]
@@ -193,57 +230,70 @@ for file_spec in search_specs:
 files_to_index = [os.path.abspath(os.path.normpath(f)) for f in files_to_index]
 files_to_index = sorted(set(files_to_index))
 
+files_with_ext = {}
+for file_path in files_to_index:
+    _, extension = os.path.splitext(file_path)
+    files_with_ext[extension] = files_with_ext.get(extension, 0) + 1
+
 if args.verbose and len(files_to_index) > 0:
     log_verbose(f"Document count by file type:")
-
-    files_with_ext = {}
-    for file_path in files_to_index:
-        _, extension = os.path.splitext(file_path)
-        files_with_ext[extension] = files_with_ext.get(extension, 0) + 1
-
     sorted_items = sorted(files_with_ext.items(), key=lambda x: x[1], reverse=True)
     for extension, count in sorted_items:
         log_verbose(f"\t{count:10} {extension}")
 
 #------------------------------------------------------------------------------
-# Download any custom loaders from the hub
+# Download custom loaders for recognized/requested types
 #------------------------------------------------------------------------------
 
-loader_specs = auto_download_loaders
-loader_specs.extend(args.custom_loader or [])
+all_supported_extensions = built_in_loaders.copy()
+all_supported_extensions.update(available_hub_loaders.keys())
+for extensions, _ in source_code_splitters:
+    all_supported_extensions.update(extensions)
+
+unsupported_extensions = set(files_with_ext.keys()) - all_supported_extensions
+if len(unsupported_extensions) > 0:
+    ext_action = "IGNORED" if args.ignore_unknown else "indexed as PLAIN TEXT"
+    type_list = ", ".join(sorted(unsupported_extensions))
+    log(f"These unsupported file types will be {ext_action}: {type_list}")
+
+if args.ignore_unknown:
+    for ext in unsupported_extensions:
+        del files_with_ext[ext]
+
+    files_before = len(files_to_index)
+    files_to_index = [f for f in files_to_index if os.path.splitext(f)[1] in all_supported_extensions]
+    if len(files_to_index) < files_before:
+        log_verbose(f"\t{files_before - len(files_to_index)} files dropped as unsupported")
+
+loader_specs = args.custom_loader or []
+
+for extension in files_with_ext.keys():
+    if extension in available_hub_loaders:
+        loader_name = available_hub_loaders[extension]
+        loader_specs.append(f"{loader_name}:{extension.strip('.')}")
+
 file_extractor_list = {}
 
-log("Downloading file loaders from the LlamaIndex hub...")
-for loader_spec in loader_specs:
-    loader_class, _, extensions = loader_spec.partition(':')
-    if not extensions:
-        log(f"\tWARNING: invalid loader spec \"{loader_spec}\"")
-        continue
+if len(loader_specs) > 0:
+    log(f"Downloading file loaders from the LlamaIndex hub...")
+    for loader_spec in loader_specs:
+        loader_class, _, extensions = loader_spec.partition(':')
+        if not extensions:
+            log(f"\tWARNING: invalid loader spec \"{loader_spec}\"")
+            continue
 
-    try:
-        with TimerUntil(f"{loader_class} downloaded"):
-            loader = download_loader(loader_class)
-            for extension in extensions.split(","):
-                extension = "." + extension.strip(". ")
-                file_extractor_list[extension] = loader()
+        try:
+            with TimerUntil(f"{loader_class} downloaded"):
+                loader = download_loader(loader_class)
+                for extension in extensions.split(","):
+                    extension = "." + extension.strip(". ")
+                    file_extractor_list[extension] = loader()
 
-    except Exception as e: log_error(e)
-
+        except Exception as e: log_error(e)
 
 #------------------------------------------------------------------------------
-# Source code can be chunked in a syntax-aware way
+# Chunk source code in a syntax-aware way
 #------------------------------------------------------------------------------
-
-source_code_splitters = [
-    ([".cpp", ".c", ".hpp", ".h"],  CodeSplitter(language="cpp")),
-    ([".cs"],                       CodeSplitter(language="c_sharp")),
-    ([".py"],                       CodeSplitter(language="python")),
-    ([".lua"],                      CodeSplitter(language="lua")),
-    ([".cu"],                       CodeSplitter(language="cuda")),
-    ([".java"],                     CodeSplitter(language="java")),
-    ([".js"],                       CodeSplitter(language="javascript")),
-    ([".ts"],                       CodeSplitter(language="typescript")),
-]        
 
 class CodeAwareDirectoryReader(SimpleDirectoryReader):
     def readFile(self, file_path):
@@ -256,10 +306,9 @@ class CodeAwareDirectoryReader(SimpleDirectoryReader):
                         docs = [Document(file_path, chunk) for chunk in chunks]
                         return docs
         except Exception as e:
-            log_error(f"chunking {file_path}: {e}")
+            log_error(f"chunking \"{os.path.normcase(file_path)}\": {e}")
                 
         return super().readFile(file_path)
-
 
 #------------------------------------------------------------------------------
 # Load and chunk all those documents
@@ -273,10 +322,10 @@ if len(files_to_index) > 0:
                 input_files=files_to_index, 
                 file_extractor=file_extractor_list, 
                 exclude_hidden=True)
+            
             docs_to_index = doc_reader.load_data(show_progress=args.verbose)
 
     except Exception as e: log_error(e)
-
 
 #------------------------------------------------------------------------------
 # Update the vector database
@@ -304,7 +353,7 @@ if len(docs_to_index or []) > 0:
     with TimerUntil("all indexing complete"):
         for doc in docs_to_index:
             try:
-                with TimerUntil(f"{doc.file_path} done"):
+                with TimerUntil(f"{doc.file_path}"):
                     vector_index.add_document(doc)
             except Exception as e:
                 log_error(f"indexing {doc.file_path}: {e}")
@@ -318,7 +367,6 @@ if args.index_store:
             vector_index.storage_context.persist(persist_dir=args.index_store, show_progress=args.verbose)
     except Exception as e: log_error(e)
 
-
 #------------------------------------------------------------------------------
 # Construct the system prompt
 #------------------------------------------------------------------------------
@@ -326,12 +374,12 @@ if args.index_store:
 system_prompt_lines = []
 
 if args.context:
-    log(f"Adding system context from the command line...")
+    log(f"Adding system prompt from the command line...")
     for snippet in args.context:
         system_prompt_lines.append(snippet)
 
 for file in args.context_file or []:
-    log(f"Adding system context from \"{file}\"...")
+    log(f"Adding system prompt from \"{file}\"...")
     try:
         with open(file, "r", encoding="utf-8") as f:
             snippet = strip_and_remove_comments(f.read())
@@ -342,8 +390,7 @@ if args.verbose:
     indented_prompt = "\n".join([f"\t{line}" for line in system_prompt_lines])
     log_verbose(f"System prompt:\n{indented_prompt}")
 
-system_prompt = "\n".join(system_prompt_lines) + '\n'
-
+system_prompt = "\n".join(system_prompt_lines) + "\n"
 
 #------------------------------------------------------------------------------
 # Collect the user queries
@@ -373,19 +420,23 @@ log_verbose(f"Total queries: {len(queries)}")
 # Initialize the query engine
 #------------------------------------------------------------------------------
 
+if args.llm_provider and args.llm_server:
+    log_error(f"cannot specify both --llm-provider and --llm-server", exit_code=1)
+
+model_name = args.llm_model or "default"
+if model_name in known_llm_models:
+    model_name = known_llm_models[model_name]
+
 local_model = None
 query_engine = None
 query_engine_params = {
-    "response_mode": args.query_mode,
-    "show_progress": args.verbose,
-    "model_name": args.llm_model or "",
-    "api_key": args.llm_api_key,
-    "secret": args.llm_secret,
-    "params": dict([param.split("=") for param in args.llm_param or []]),
+    "response_mode":    args.query_mode,
+    "show_progress":    args.verbose,
+    "model_name":       model_name,
+    "api_key":          args.llm_api_key,
+    "secret":           args.llm_secret,
+    "params":           dict([param.split("=") for param in args.llm_param or []]),
 }
-
-if args.llm_provider and args.llm_server:
-    log_error(f"cannot specify both --llm-provider and --llm-server", exit_code=1)
 
 log(f"Initializing query engine...")
 try:
@@ -393,10 +444,10 @@ try:
         query_engine_params["provider"] = args.llm_provider
     elif args.llm_server:
         query_engine_params["server_url"] = args.llm_server
-    elif args.llm_model:
+    else:
         with TimerUntil("model loaded"):
             from transformers import AutoModelForCausalLM
-            local_model = AutoModelForCausalLM.from_pretrained(args.llm_model, verbose=args.verbose)
+            local_model = AutoModelForCausalLM.from_pretrained(model_name, verbose=args.verbose)
             query_engine_params["model"] = local_model
 
     with TimerUntil("engine ready"):        
@@ -405,74 +456,69 @@ try:
 except Exception as e:
     log_error(e, exit_code=1)
 
-
 #------------------------------------------------------------------------------
-# Run all the queries
+# Process all the queries
 #------------------------------------------------------------------------------
     
-if len(queries) > 0:
-    with TimerUntil("all queries complete"):
-        log(f"Running {len(queries)} queries...")
+log(f"Running {len(queries)} queries...")
+with TimerUntil("all queries complete"):
+    chat_log = ""
+    json_log = {
+        "model":        query_engine.model_name,
+        "timestamp":    datetime.now().isoformat(),
+        "context":      system_prompt,
+        "queries":      []
+    }
 
-        before_queries = time.time()
-        chat_log = ""
-        json_log = {
-            "model":        query_engine.model_name,
-            "timestamp":    datetime.now().isoformat(),
-            "context":      system_prompt,
-            "queries":      []
-        }
+    for query in queries:
+        query_record = { "query": query }
+        response = ""
 
-        for query in queries:
-            query_record = { "query": query }
-            response = ""
-
-            try:
-                query_start_time = time.time()
-                visible_history = chat_log if args.query_memory else ""
-                user_prompt = f"{args.tag_queries}: {query}"
-                prompt = system_prompt + visible_history + user_prompt
-            
-                with TimerUntil("query complete"):
-                    response = query_engine.query(prompt, verbose=args.verbose)
-                    query_record["response_time"] = time_since(query_start_time)
-
-            except Exception as e:
-                query_record["error"] = str(e)
-                log_error(e)
-
-            query_record["response"] = response
-            json_log["queries"].append(query_record)
-
-            response_text = f"{args.tag_responses}: {response}"
-            interaction = f"{user_prompt}\n{response_text}\n"
-            chat_log += interaction
-
-            if args.verbose:
-                indented_interaction = "\n".join([f"\t{line}" for line in interaction.splitlines()])
-                log(indented_interaction)
-
-    # Commit the logs
-
-    if args.output_text:
-        log(f"Writing log to \"{args.output_text}\"...")
         try:
-            with open(args.output_text, "w", encoding="utf-8") as f:
-                f.write(chat_log)
+            query_start_time = time.time()
+            visible_history = chat_log if args.query_memory else ""
+            user_prompt = f"{args.tag_queries}: {query}"
+            prompt = system_prompt + visible_history + user_prompt
+        
+            with TimerUntil("query complete"):
+                response = query_engine.query(prompt, verbose=args.verbose)
+                query_record["response_time"] = time_since(query_start_time)
 
-        except Exception as e: log_error(e)
+        except Exception as e:
+            query_record["error"] = str(e)
+            log_error(e)
 
-    if args.output_json:
-        log(f"Writing JSON log to \"{args.output_json}\"...")
-        try:
-            with open(args.output_json, "w", encoding="utf-8") as f:
-                raw_text = json.dumps(json_log, indent=4)
-                f.write(raw_text)
+        query_record["response"] = response
+        json_log["queries"].append(query_record)
 
-        except Exception as e: log_error(e)
+        response_text = f"{args.tag_responses}: {response}"
+        interaction = f"{user_prompt}\n{response_text}\n"
+        chat_log += interaction
 
-    with TimerUntil("query engine shut down"):
+        if args.verbose:
+            indented_interaction = "\n".join([f"\t{line}" for line in interaction.splitlines()])
+            log(indented_interaction)
+
+if args.output_text:
+    log(f"Writing query log to \"{args.output_text}\"...")
+    try:
+        with open(args.output_text, "w", encoding="utf-8") as f:
+            f.write(chat_log)
+    except Exception as e: log_error(e)
+
+if args.output_json:
+    log(f"Writing JSON query log to \"{args.output_json}\"...")
+    try:
+        with open(args.output_json, "w", encoding="utf-8") as f:
+            raw_text = json.dumps(json_log, indent=4)
+            f.write(raw_text)
+    except Exception as e: log_error(e)
+
+log("Closing query engine...")
+try:
+    with TimerUntil("engine closed"):
         query_engine.close()
+except Exception as e: log_error(e)
 
 #------------------------------------------------------------------------------
 # Load chat bot instructions
@@ -493,7 +539,6 @@ if args.chat:
         indented_init = "\n".join([f"\t{line}" for line in chat_init])
         log_verbose(f"Chat bot instructions:\n{indented_init}")
 
-
 #------------------------------------------------------------------------------
 # Chat engine initialization
 #------------------------------------------------------------------------------
@@ -506,12 +551,10 @@ if args.chat:
         chat_engine_params["chat_mode"] = args.chat_mode
         chat_engine_params["system_prompt"] = f"{system_prompt}\n{chat_init}"
 
-        with TimerUntil("chat engine ready"):
+        with TimerUntil("engine ready"):
             chat_engine = vector_index.as_chat_engine(**chat_engine_params)
 
-    except Exception as e:
-        log_error(e, exit_code=1)
-
+    except Exception as e: log_error(e, exit_code=1)
 
 #------------------------------------------------------------------------------
 # Interactive chat mode
@@ -555,16 +598,14 @@ if args.chat:
             all_lines = "\n".join(chat_lines) + "\n"
             with open(args.chat_log, "a", encoding="utf-8") as f:
                 f.write(all_lines)
-
         except Exception as e: log_error(e)
-
 
 #------------------------------------------------------------------------------
 # Summary
 #------------------------------------------------------------------------------
 
 if len(all_errors) > 0:
-    print(f"Errors reported:")
+    print(f"All errors reported:")
     for error in all_errors:
         print(f"\t{error}")
 
