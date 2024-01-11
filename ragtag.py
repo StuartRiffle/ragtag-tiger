@@ -4,7 +4,8 @@
 import os, argparse, time, datetime, json, pathspec
 from pathlib import Path
 from typing import List
-from llama_index import VectorStoreIndex, StorageContext, ServiceContext, SimpleDirectoryReader, Document
+from llama_index import VectorStoreIndex, StorageContext, ServiceContext, SimpleDirectoryReader, Document, set_global_service_context
+from llama_index.node_parser import SimpleNodeParser
 from llama_index import load_index_from_storage, download_loader
 from llama_index.text_splitter import CodeSplitter
 
@@ -37,18 +38,17 @@ source_code_splitters = [
     ([".cpp", ".hpp"],  CodeSplitter(language="cpp")),
     ([".cxx", ".hxx"],  CodeSplitter(language="cpp")),
     ([".inc", ".inl"],  CodeSplitter(language="cpp")),
-    ([".c", ".h"],      CodeSplitter(language="c")),
+    ([".c", ".h"],      CodeSplitter(language="cpp")),
     ([".cs"],           CodeSplitter(language="c_sharp")),
     ([".py"],           CodeSplitter(language="python")),
     ([".lua"],          CodeSplitter(language="lua")),
-    ([".cu"],           CodeSplitter(language="cuda")),
     ([".java"],         CodeSplitter(language="java")),
     ([".js"],           CodeSplitter(language="javascript")),
     ([".ts"],           CodeSplitter(language="typescript")),
 ]
 
 model_nicknames = {
-    "default":      "EleutherAI/gpt-neo-2.7B",
+    "default":      "TheBloke/Mistral-7B-Instruct-v0.1-AWQ",
 }
 
 os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
@@ -112,9 +112,10 @@ arg("--chat-init-file", help="File containing a snippet of chat LLM instructions
 arg("--chat-log",       help="Append chat queries and responses to a text file", metavar="FILE")
 arg("--chat-mode",      help="Chat response mode", choices=["best", "context", "condense_question", "simple", "react", "openai"], default="best")
 
+print(f"{program_name} {program_version}")
+
 args = parser.parse_args()
 if args.version:
-    print(f"{program_version}\n")
     exit(0)
 
 #------------------------------------------------------------------------------
@@ -141,8 +142,7 @@ def log_error(msg, exit_code=0, prefix="\t", suffix="", **kwargs):
     if exit_code:
         exit(exit_code)
 
-log(f"{program_name} {program_version}")
-log(f"{program_copyright}, {program_license} license\n")
+log_verbose(f"{program_copyright}, {program_license} license\n")
 
 #------------------------------------------------------------------------------
 # A scope timer for verbose mode
@@ -183,7 +183,7 @@ for folder in args.source or []:
     search_specs.append(spec)
 
 for spec in args.source_spec or []:
-    log(f"Including files matching spec \"{spec}\"...")
+    log(f"Including files matching spec \"{os.path.normpath(spec)}\"...")
     search_specs.append(spec)
 
 for file in args.source_list or []:
@@ -211,50 +211,56 @@ def split_root_from_spec(spec):
 
 files_to_index = []
 
-log(f"Finding the specified files...")
-for file_spec in search_specs:
-    if os.path.isfile(file_spec):
-        files_to_index.append(file_spec)
+log(f"Searching for supported files...")
+for search_spec in search_specs:
+    if os.path.isfile(search_spec):
+        files_to_index.append(search_spec)
     else:
         try:
-            file_spec_root, file_spec = split_root_from_spec(file_spec)
-            file_spec = file_spec.replace('\\', '/') # required for pathspec
-            relative_pathspec = pathspec.PathSpec.from_lines('gitwildmatch', [file_spec])
+            file_spec_root, file_spec = split_root_from_spec(search_spec)
+            file_spec_pattern = file_spec.replace('\\', '/') # pathspec requires forward slashes
+            relative_pathspec = pathspec.PathSpec.from_lines('gitwildmatch', [file_spec_pattern])
+
             matches = relative_pathspec.match_tree(file_spec_root)
             matches = [os.path.join(file_spec_root, match) for match in matches]
             files_to_index.extend(matches)
+
+            log_verbose(f"\t{len(matches):5} files match {os.path.normpath(file_spec)} from {os.path.normpath(file_spec_root)}")
 
         except Exception as e: log_error(e)
 
 files_to_index = [os.path.abspath(os.path.normpath(f)) for f in files_to_index]
 files_to_index = sorted(set(files_to_index))
 
+#------------------------------------------------------------------------------
+# Download custom loaders for recognized/requested types
+#------------------------------------------------------------------------------
+
+code_extensions = set()
+for extensions, _ in source_code_splitters:
+    code_extensions.update(extensions)
+
+all_supported_extensions = built_in_loaders.copy()
+all_supported_extensions.update(available_hub_loaders.keys())
+all_supported_extensions.update(code_extensions)
+
 files_with_ext = {}
 for file_path in files_to_index:
     _, extension = os.path.splitext(file_path)
     files_with_ext[extension] = files_with_ext.get(extension, 0) + 1
 
-#------------------------------------------------------------------------------
-# Download custom loaders for recognized/requested types
-#------------------------------------------------------------------------------
-
-all_supported_extensions = built_in_loaders.copy()
-all_supported_extensions.update(available_hub_loaders.keys())
-for extensions, _ in source_code_splitters:
-    all_supported_extensions.update(extensions)
-
 if args.verbose and len(files_to_index) > 0:
     log_verbose(f"File types found:")
     sorted_items = sorted(files_with_ext.items(), key=lambda x: x[1], reverse=True)
     for extension, count in sorted_items:
-        warning = "(unknown)" if extension not in all_supported_extensions else ""
-        log_verbose(f"\t{count:10}  {extension:10} {warning}")
+        if extension in all_supported_extensions:
+            log_verbose(f"\t{count:10}  {extension}")
 
 unsupported_extensions = set(files_with_ext.keys()) - all_supported_extensions
 if len(unsupported_extensions) > 0:
     ext_action = "IGNORED" if args.ignore_unknown else "indexed as PLAIN TEXT"
-    type_list = ", ".join(sorted(unsupported_extensions))
-    log(f"These unsupported file types will be {ext_action}: {type_list}")
+    type_list = ", ".join(sorted(unsupported_extensions)).replace(".", "").lower()
+    log(f"These unsupported types will be {ext_action}: {type_list}")
 
 if args.ignore_unknown:
     for ext in unsupported_extensions:
@@ -262,7 +268,7 @@ if args.ignore_unknown:
     files_before = len(files_to_index)
     files_to_index = [f for f in files_to_index if os.path.splitext(f)[1] in all_supported_extensions]
     if len(files_to_index) < files_before:
-        log_verbose(f"\t{files_before - len(files_to_index)} files dropped")
+        log_verbose(f"\t{files_before - len(files_to_index)} files ignored")
 
 loader_specs = args.custom_loader or []
 for extension in files_with_ext.keys():
@@ -282,16 +288,13 @@ if len(loader_specs) > 0:
                 log_error(f"invalid loader spec \"{loader_spec}\"")
                 continue
 
-            if loader_class in custom_loaders:
-                loader = custom_loaders[loader_class]
-            else:
+            if not loader_class in custom_loaders:
                 with TimerUntil(f"{loader_class}"):
-                    loader = download_loader(loader_class, refresh_cache=args.no_cache)
-                custom_loaders[loader_class] = loader
+                    custom_loaders[loader_class] = download_loader(loader_class, refresh_cache=args.no_cache)
 
             for extension in extensions.split(","):
                 extension = "." + extension.strip(". ")
-                file_extractor_list[extension] = loader
+                file_extractor_list[extension] = custom_loaders[loader_class]
 
         except Exception as e: log_error(e)
 
@@ -308,27 +311,52 @@ class CodeAwareDirectoryReader(SimpleDirectoryReader):
                     with open(file_path, 'r') as f:
                         source_code = f.read()
                         chunks = code_splitter.split_text(source_code)
-                        docs = [Document(file_path, chunk) for chunk in chunks]
+                        metadata = { "file_path": str(file_path) }
+                        docs = [Document(text=chunk, metadata=metadata) for chunk in chunks if chunk.strip()]
                         return docs
         except Exception as e:
             log_error(f"chunking \"{os.path.normcase(file_path)}\": {e}")
                 
         return super()._load_file(file_path)
+    
+
+    
 
 #------------------------------------------------------------------------------
 # Load and chunk all those documents
 #------------------------------------------------------------------------------
 
+def load_document_nodes(splitter, file_list, show_progress=False):
+    doc_reader = SimpleDirectoryReader(
+        input_files=file_list, 
+        file_extractor=file_extractor_list, 
+        exclude_hidden=True)
+    
+    loaded_docs = doc_reader.load_data(show_progress=args.verbose)
+    parser = splitter or SimpleNodeParser.from_defaults()
+    doc_nodes = parser.get_nodes_from_documents(loaded_docs)
+    return doc_nodes
+
+document_nodes = []
+
 if len(files_to_index) > 0:
     log(f"Chunking {len(files_to_index)} files...")
     try:
-        with TimerUntil("files loaded"):
-            doc_reader = CodeAwareDirectoryReader(
-                input_files=files_to_index, 
-                file_extractor=file_extractor_list, 
-                exclude_hidden=True)
-            
-            docs_to_index = doc_reader.load_data(show_progress=args.verbose)
+        with TimerUntil("all documents loaded"):
+            non_code_files = [f for f in files_to_index if os.path.splitext(f)[1] not in code_extensions]
+            if len(non_code_files) > 0:
+                log_verbose(f"\t{len(non_code_files)} non-code files found...")
+                non_code_nodes = load_document_nodes(None, non_code_files, show_progress=args.verbose)
+                document_nodes.extend(non_code_nodes)
+
+        with TimerUntil("all code chunked"):
+            for extensions, code_splitter in source_code_splitters:
+                code_files = [f for f in files_to_index if os.path.splitext(f)[1] in extensions]
+                if len(code_files) > 0:
+                    extension_list = ", ".join(extensions).replace(".", "").lower()
+                    log_verbose(f"\t{len(code_files)} files (of type {extension_list}) chunked as language \"{code_splitter.language}\"")
+                    code_nodes = load_document_nodes(code_splitter, code_files, show_progress=args.verbose)
+                    document_nodes.extend(code_nodes)
 
     except Exception as e: log_error(e)
 
@@ -336,9 +364,9 @@ if len(files_to_index) > 0:
 # Update the vector database
 #------------------------------------------------------------------------------
 
-docs_to_index = docs_to_index or []
 vector_index = None
 service_context = ServiceContext.from_defaults(embed_model="local")
+set_global_service_context(service_context)
 
 if args.index_load:
     log(f"Loading the vector index in \"{os.path.normcase(args.index_load)}\"...")
@@ -352,37 +380,32 @@ if args.index_load:
 if not vector_index:
     log_verbose(f"Creating a new vector index in memory...")
     try:
-        with TimerUntil("ready"):
-            vector_index = VectorStoreIndex.from_documents(
-                docs_to_index,
+        with TimerUntil("vector index created"):
+            vector_index = VectorStoreIndex(document_nodes,
                 service_context=service_context,
                 show_progress=args.verbose)
-        docs_to_index = []
+        document_nodes = []
        
     except Exception as e: log_error(e)
     
-if len(docs_to_index) > 0:
-    log(f"Indexing {len(docs_to_index)} documents...")
-    with TimerUntil("all indexing complete"):
-        for doc in docs_to_index:
-            
-            doc_path = doc.metadata["file_path"]
-            doc_name = os.path.basename(doc_path)
+if not vector_index:
+    log_error(f"creating vector index: {e}", exit_code=1)
 
-            try:
-                with TimerUntil(f"{doc_name}"):
-                    vector_index.insert(doc)
+if len(document_nodes) > 0:
+    log(f"Indexing {len(document_nodes)} document nodes...")
+    try:
+        with TimerUntil("all indexing complete"):
+            vector_index.insert_nodes(document_nodes, show_progress=args.verbose)
 
-            except Exception as e:
-                log_error(f"indexing {doc_path}: {e}")
+    except Exception as e: log_error(e)
 
 if args.index_store:
     log(f"Storing vector index in \"{os.path.normcase(args.index_store)}\"...")
     try:
         if not os.path.exists(args.index_store):
             os.makedirs(args.index_store)
-        with TimerUntil("stored"):
-            vector_index.storage_context.persist(persist_dir=args.index_store, show_progress=args.verbose)
+        with TimerUntil("index created"):
+            vector_index.storage_context.persist(persist_dir=args.index_store)
 
     except Exception as e: log_error(e)
 
@@ -407,7 +430,8 @@ for file in args.context_file or []:
 
 if args.verbose:
     indented_prompt = "\n".join([f"\t{line}" for line in system_prompt_lines])
-    log_verbose(f"System prompt:\n{indented_prompt}")
+    if len(indented_prompt.strip()) > 0:
+        log_verbose(f"System prompt:\n{indented_prompt}")
 
 system_prompt = "\n".join(system_prompt_lines) + "\n"
 
@@ -458,7 +482,8 @@ try:
     if args.llm_provider:
         query_engine_params["provider"] = args.llm_provider
     elif args.llm_server:
-        query_engine_params["server_url"] = args.llm_server
+        #query_engine_params["server_url"] = args.llm_server
+        query_engine_params["address"] = args.llm_server
     else:
         name = args.llm_model or "default"
         if name in model_nicknames:
@@ -483,8 +508,6 @@ log(f"Running {len(queries)} queries...")
 with TimerUntil("all queries complete"):
     chat_log = ""
     json_log = {
-        "model":        query_engine.model_name,
-        "timestamp":    datetime.now().isoformat(),
         "context":      system_prompt,
         "queries":      []
     }
@@ -500,7 +523,7 @@ with TimerUntil("all queries complete"):
             prompt = system_prompt + visible_history + user_prompt
         
             with TimerUntil("query complete"):
-                response = query_engine.query(prompt, verbose=args.verbose)
+                response = query_engine.query(prompt)
                 query_record["response_time"] = time_since(query_start_time)
 
         except Exception as e:
@@ -518,26 +541,20 @@ with TimerUntil("all queries complete"):
             indented_interaction = "\n".join([f"\t{line}" for line in interaction.splitlines()])
             log(indented_interaction)
 
-if args.output_text:
-    log(f"Writing query log to \"{args.output_text}\"...")
+if args.query_log:
+    log(f"Writing query log to \"{args.query_log}\"...")
     try:
-        with open(args.output_text, "w", encoding="utf-8") as f:
+        with open(args.query_log, "w", encoding="utf-8") as f:
             f.write(chat_log)
     except Exception as e: log_error(e)
 
-if args.output_json:
-    log(f"Writing JSON query log to \"{args.output_json}\"...")
+if args.query_log_json:
+    log(f"Writing JSON query log to \"{args.query_log_json}\"...")
     try:
-        with open(args.output_json, "w", encoding="utf-8") as f:
+        with open(args.query_log_json, "w", encoding="utf-8") as f:
             raw_text = json.dumps(json_log, indent=4)
             f.write(raw_text)
     except Exception as e: log_error(e)
-
-log("Closing query engine...")
-try:
-    with TimerUntil("engine closed"):
-        query_engine.close()
-except Exception as e: log_error(e)
 
 #------------------------------------------------------------------------------
 # Load chat bot instructions
@@ -554,7 +571,7 @@ if args.chat:
                 chat_init.append(chat_init_text)
         except Exception as e: log_error(e)
 
-    if args.verbose:
+    if len(chat_init_text.strip()) > 0 and args.verbose:
         indented_init = "\n".join([f"\t{line}" for line in chat_init])
         log_verbose(f"Chat bot instructions:\n{indented_init}")
 
@@ -605,9 +622,9 @@ if args.chat:
             for token in streaming_response.response_gen:
                 response_line += token
                 log(token, end="")
-            log()
+            log("")
         except KeyboardInterrupt:
-            log("[BREAK]")
+            log(" [BREAK]")
 
         chat_lines.append(f"{args.tag_responses}: {response_line}")
 

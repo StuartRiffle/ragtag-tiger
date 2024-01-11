@@ -2,6 +2,6 @@ pathspec
 llama-index 
 scikit-learn 
 tree-sitter-languages
-transformers==4.36.*
-gradio==3.23 
-rich==10.0.0
+transformers
+torch
+
