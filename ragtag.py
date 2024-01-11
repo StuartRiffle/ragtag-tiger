@@ -8,6 +8,8 @@ from llama_index import VectorStoreIndex, StorageContext, ServiceContext, Simple
 from llama_index.node_parser import SimpleNodeParser
 from llama_index import load_index_from_storage, download_loader
 from llama_index.text_splitter import CodeSplitter
+from llama_index.llms import OpenAILike
+
 
 program_name        = "RAG/TAG Tiger"
 program_version     = "0.1.0"
@@ -35,20 +37,18 @@ available_hub_loaders = {
 }
 
 source_code_splitters = [
-    ([".cpp", ".hpp"],  CodeSplitter(language="cpp")),
-    ([".cxx", ".hxx"],  CodeSplitter(language="cpp")),
-    ([".inc", ".inl"],  CodeSplitter(language="cpp")),
-    ([".c", ".h"],      CodeSplitter(language="cpp")),
-    ([".cs"],           CodeSplitter(language="c_sharp")),
-    ([".py"],           CodeSplitter(language="python")),
-    ([".lua"],          CodeSplitter(language="lua")),
-    ([".java"],         CodeSplitter(language="java")),
-    ([".js"],           CodeSplitter(language="javascript")),
-    ([".ts"],           CodeSplitter(language="typescript")),
+    ([".cpp", ".hpp", ".cxx", ".hxx", ".inc", ".inl", ".c", ".h"],
+                CodeSplitter(language="cpp")),            
+    ([".cs"],   CodeSplitter(language="c_sharp")),
+    ([".py"],   CodeSplitter(language="python")),
+    ([".lua"],  CodeSplitter(language="lua")),
+    ([".java"], CodeSplitter(language="java")),
+    ([".js"],   CodeSplitter(language="javascript")),
+    ([".ts"],   CodeSplitter(language="typescript")),
 ]
 
 model_nicknames = {
-    "default":      "TheBloke/Mistral-7B-Instruct-v0.1-AWQ",
+    "default": "TheBloke/Mistral-7B-Instruct-v0.1-AWQ",
 }
 
 os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
@@ -225,7 +225,7 @@ for search_spec in search_specs:
             matches = [os.path.join(file_spec_root, match) for match in matches]
             files_to_index.extend(matches)
 
-            log_verbose(f"\t{len(matches):5} files match {os.path.normpath(file_spec)} from {os.path.normpath(file_spec_root)}")
+            log_verbose(f"\t{len(matches):5} files match \"{os.path.normpath(file_spec)}\" from root \"{os.path.normpath(file_spec_root)}\"")
 
         except Exception as e: log_error(e)
 
@@ -361,6 +361,13 @@ if len(files_to_index) > 0:
     except Exception as e: log_error(e)
 
 #------------------------------------------------------------------------------
+# Instantiate an LLM
+#------------------------------------------------------------------------------
+
+
+
+
+#------------------------------------------------------------------------------
 # Update the vector database
 #------------------------------------------------------------------------------
 
@@ -482,7 +489,7 @@ try:
     if args.llm_provider:
         query_engine_params["provider"] = args.llm_provider
     elif args.llm_server:
-        #query_engine_params["server_url"] = args.llm_server
+        query_engine_params["server_url"] = args.llm_server
         query_engine_params["address"] = args.llm_server
     else:
         name = args.llm_model or "default"
@@ -492,7 +499,7 @@ try:
         with TimerUntil("model loaded"):
             from transformers import AutoModelForCausalLM
             local_model = AutoModelForCausalLM.from_pretrained(name, verbose=args.verbose)
-            query_engine_params["model"] = local_model
+            query_engine_params["llm"] = local_model
 
     with TimerUntil("engine ready"):        
         query_engine = vector_index.as_query_engine(**query_engine_params)
