@@ -2,7 +2,9 @@
 # Copyright (c) 2024 Stuart Riffle
 
 import os, argparse, time, datetime, json, pathspec
-from llama_index import VectorStoreIndex, StorageContext, SimpleDirectoryReader, Document
+from pathlib import Path
+from typing import List
+from llama_index import VectorStoreIndex, StorageContext, ServiceContext, SimpleDirectoryReader, Document
 from llama_index import load_index_from_storage, download_loader
 from llama_index.text_splitter import CodeSplitter
 
@@ -45,13 +47,11 @@ source_code_splitters = [
     ([".ts"],           CodeSplitter(language="typescript")),
 ]
 
-known_llm_models = {
+model_nicknames = {
     "default":      "EleutherAI/gpt-neo-2.7B",
-    "airoboros":    "TheBloke/Airoboros-L2-70B-3.1.2-AWQ",
-    "llama2":       "TheBloke/LLAMA-L2-70B-3.1.2-AWQ",
-    "llama2-small": "TheBloke/LLAMA-L2-70B-3.1.2-AWQ",
-
 }
+
+os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
 
 #------------------------------------------------------------------------------
 # Parse command line arguments and response files
@@ -82,6 +82,7 @@ arg("--source-spec",    help="Index files matching a pathspec, like \"**/*.cpp\"
 arg("--source-list",    help="Text file with a list of filenames/pathspecs to index", action="append", metavar="FILE")
 arg("--custom-loader",  help="Use loaders from LlamaIndex hub, specify like \"JPEGReader:jpg,jpeg\"", action="append", metavar="SPEC")
 arg("--ignore-unknown", help="Ignore files with unrecognized extensions", action="store_true")
+arg("--no-cache",       help="Do not use the local cache for loaders", action="store_true")
 
 arg = parser.add_argument_group("Language model").add_argument
 arg("--llm-server",     help="LLM inference server URL", metavar="URL")
@@ -142,7 +143,6 @@ def log_error(msg, exit_code=0, prefix="\t", suffix="", **kwargs):
 
 log(f"{program_name} {program_version}")
 log(f"{program_copyright}, {program_license} license\n")
-log()
 
 #------------------------------------------------------------------------------
 # A scope timer for verbose mode
@@ -209,17 +209,16 @@ def split_root_from_spec(spec):
                 return spec[:sep_pos + 1], spec[sep_pos + 1:]
     return "", spec
 
-log(f"Finding the specified files...")
 files_to_index = []
 
+log(f"Finding the specified files...")
 for file_spec in search_specs:
     if os.path.isfile(file_spec):
         files_to_index.append(file_spec)
     else:
         try:
             file_spec_root, file_spec = split_root_from_spec(file_spec)
-            file_spec = file_spec.replace('\\', '/')
-
+            file_spec = file_spec.replace('\\', '/') # required for pathspec
             relative_pathspec = pathspec.PathSpec.from_lines('gitwildmatch', [file_spec])
             matches = relative_pathspec.match_tree(file_spec_root)
             matches = [os.path.join(file_spec_root, match) for match in matches]
@@ -235,12 +234,6 @@ for file_path in files_to_index:
     _, extension = os.path.splitext(file_path)
     files_with_ext[extension] = files_with_ext.get(extension, 0) + 1
 
-if args.verbose and len(files_to_index) > 0:
-    log_verbose(f"Document count by file type:")
-    sorted_items = sorted(files_with_ext.items(), key=lambda x: x[1], reverse=True)
-    for extension, count in sorted_items:
-        log_verbose(f"\t{count:10} {extension}")
-
 #------------------------------------------------------------------------------
 # Download custom loaders for recognized/requested types
 #------------------------------------------------------------------------------
@@ -249,6 +242,13 @@ all_supported_extensions = built_in_loaders.copy()
 all_supported_extensions.update(available_hub_loaders.keys())
 for extensions, _ in source_code_splitters:
     all_supported_extensions.update(extensions)
+
+if args.verbose and len(files_to_index) > 0:
+    log_verbose(f"File types found:")
+    sorted_items = sorted(files_with_ext.items(), key=lambda x: x[1], reverse=True)
+    for extension, count in sorted_items:
+        warning = "(unknown)" if extension not in all_supported_extensions else ""
+        log_verbose(f"\t{count:10}  {extension:10} {warning}")
 
 unsupported_extensions = set(files_with_ext.keys()) - all_supported_extensions
 if len(unsupported_extensions) > 0:
@@ -259,35 +259,39 @@ if len(unsupported_extensions) > 0:
 if args.ignore_unknown:
     for ext in unsupported_extensions:
         del files_with_ext[ext]
-
     files_before = len(files_to_index)
     files_to_index = [f for f in files_to_index if os.path.splitext(f)[1] in all_supported_extensions]
     if len(files_to_index) < files_before:
-        log_verbose(f"\t{files_before - len(files_to_index)} files dropped as unsupported")
+        log_verbose(f"\t{files_before - len(files_to_index)} files dropped")
 
 loader_specs = args.custom_loader or []
-
 for extension in files_with_ext.keys():
     if extension in available_hub_loaders:
         loader_name = available_hub_loaders[extension]
         loader_specs.append(f"{loader_name}:{extension.strip('.')}")
 
+custom_loaders = {}
 file_extractor_list = {}
 
 if len(loader_specs) > 0:
     log(f"Downloading file loaders from the LlamaIndex hub...")
     for loader_spec in loader_specs:
-        loader_class, _, extensions = loader_spec.partition(':')
-        if not extensions:
-            log(f"\tWARNING: invalid loader spec \"{loader_spec}\"")
-            continue
-
         try:
-            with TimerUntil(f"{loader_class} downloaded"):
-                loader = download_loader(loader_class)
-                for extension in extensions.split(","):
-                    extension = "." + extension.strip(". ")
-                    file_extractor_list[extension] = loader()
+            loader_class, _, extensions = loader_spec.partition(':')
+            if not extensions:
+                log_error(f"invalid loader spec \"{loader_spec}\"")
+                continue
+
+            if loader_class in custom_loaders:
+                loader = custom_loaders[loader_class]
+            else:
+                with TimerUntil(f"{loader_class}"):
+                    loader = download_loader(loader_class, refresh_cache=args.no_cache)
+                custom_loaders[loader_class] = loader
+
+            for extension in extensions.split(","):
+                extension = "." + extension.strip(". ")
+                file_extractor_list[extension] = loader
 
         except Exception as e: log_error(e)
 
@@ -296,19 +300,20 @@ if len(loader_specs) > 0:
 #------------------------------------------------------------------------------
 
 class CodeAwareDirectoryReader(SimpleDirectoryReader):
-    def readFile(self, file_path):
+    def _load_file(self, file_path: Path) -> List[Document]:
         try:
             for extensions, code_splitter in source_code_splitters:
-                if file_path.endswith(tuple(extensions)):
+                file_name = file_path.name
+                if file_name.endswith(tuple(extensions)):
                     with open(file_path, 'r') as f:
                         source_code = f.read()
-                        chunks = code_splitter.chunk(source_code)
+                        chunks = code_splitter.split_text(source_code)
                         docs = [Document(file_path, chunk) for chunk in chunks]
                         return docs
         except Exception as e:
             log_error(f"chunking \"{os.path.normcase(file_path)}\": {e}")
                 
-        return super().readFile(file_path)
+        return super()._load_file(file_path)
 
 #------------------------------------------------------------------------------
 # Load and chunk all those documents
@@ -331,7 +336,9 @@ if len(files_to_index) > 0:
 # Update the vector database
 #------------------------------------------------------------------------------
 
+docs_to_index = docs_to_index or []
 vector_index = None
+service_context = ServiceContext.from_defaults(embed_model="local")
 
 if args.index_load:
     log(f"Loading the vector index in \"{os.path.normcase(args.index_load)}\"...")
@@ -339,24 +346,35 @@ if args.index_load:
         with TimerUntil("loaded"):
             storage_context = StorageContext.from_defaults(persist_dir=args.index_load)
             vector_index = load_index_from_storage(storage_context, show_progress=args.verbose)            
+
     except Exception as e: log_error(e)
 
 if not vector_index:
     log_verbose(f"Creating a new vector index in memory...")
     try:
         with TimerUntil("ready"):
-            vector_index = VectorStoreIndex(nodes=[], show_progress=args.verbose)
+            vector_index = VectorStoreIndex.from_documents(
+                docs_to_index,
+                service_context=service_context,
+                show_progress=args.verbose)
+        docs_to_index = []
+       
     except Exception as e: log_error(e)
     
-if len(docs_to_index or []) > 0:
+if len(docs_to_index) > 0:
     log(f"Indexing {len(docs_to_index)} documents...")
     with TimerUntil("all indexing complete"):
         for doc in docs_to_index:
+            
+            doc_path = doc.metadata["file_path"]
+            doc_name = os.path.basename(doc_path)
+
             try:
-                with TimerUntil(f"{doc.file_path}"):
-                    vector_index.add_document(doc)
+                with TimerUntil(f"{doc_name}"):
+                    vector_index.insert(doc)
+
             except Exception as e:
-                log_error(f"indexing {doc.file_path}: {e}")
+                log_error(f"indexing {doc_path}: {e}")
 
 if args.index_store:
     log(f"Storing vector index in \"{os.path.normcase(args.index_store)}\"...")
@@ -365,6 +383,7 @@ if args.index_store:
             os.makedirs(args.index_store)
         with TimerUntil("stored"):
             vector_index.storage_context.persist(persist_dir=args.index_store, show_progress=args.verbose)
+
     except Exception as e: log_error(e)
 
 #------------------------------------------------------------------------------
@@ -423,16 +442,12 @@ log_verbose(f"Total queries: {len(queries)}")
 if args.llm_provider and args.llm_server:
     log_error(f"cannot specify both --llm-provider and --llm-server", exit_code=1)
 
-model_name = args.llm_model or "default"
-if model_name in known_llm_models:
-    model_name = known_llm_models[model_name]
-
 local_model = None
 query_engine = None
 query_engine_params = {
     "response_mode":    args.query_mode,
     "show_progress":    args.verbose,
-    "model_name":       model_name,
+    "model_name":       args.llm_model or None,
     "api_key":          args.llm_api_key,
     "secret":           args.llm_secret,
     "params":           dict([param.split("=") for param in args.llm_param or []]),
@@ -445,9 +460,13 @@ try:
     elif args.llm_server:
         query_engine_params["server_url"] = args.llm_server
     else:
+        name = args.llm_model or "default"
+        if name in model_nicknames:
+            name = model_nicknames[name]
+
         with TimerUntil("model loaded"):
             from transformers import AutoModelForCausalLM
-            local_model = AutoModelForCausalLM.from_pretrained(model_name, verbose=args.verbose)
+            local_model = AutoModelForCausalLM.from_pretrained(name, verbose=args.verbose)
             query_engine_params["model"] = local_model
 
     with TimerUntil("engine ready"):        
