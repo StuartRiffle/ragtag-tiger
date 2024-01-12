@@ -299,30 +299,6 @@ if len(loader_specs) > 0:
         except Exception as e: log_error(e)
 
 #------------------------------------------------------------------------------
-# Chunk source code in a syntax-aware way
-#------------------------------------------------------------------------------
-
-class CodeAwareDirectoryReader(SimpleDirectoryReader):
-    def _load_file(self, file_path: Path) -> List[Document]:
-        try:
-            for extensions, code_splitter in source_code_splitters:
-                file_name = file_path.name
-                if file_name.endswith(tuple(extensions)):
-                    with open(file_path, 'r') as f:
-                        source_code = f.read()
-                        chunks = code_splitter.split_text(source_code)
-                        metadata = { "file_path": str(file_path) }
-                        docs = [Document(text=chunk, metadata=metadata) for chunk in chunks if chunk.strip()]
-                        return docs
-        except Exception as e:
-            log_error(f"chunking \"{os.path.normcase(file_path)}\": {e}")
-                
-        return super()._load_file(file_path)
-    
-
-    
-
-#------------------------------------------------------------------------------
 # Load and chunk all those documents
 #------------------------------------------------------------------------------
 
@@ -331,7 +307,6 @@ def load_document_nodes(splitter, file_list, show_progress=False):
         input_files=file_list, 
         file_extractor=file_extractor_list, 
         exclude_hidden=True)
-    
     loaded_docs = doc_reader.load_data(show_progress=args.verbose)
     parser = splitter or SimpleNodeParser.from_defaults()
     doc_nodes = parser.get_nodes_from_documents(loaded_docs)
@@ -342,37 +317,82 @@ document_nodes = []
 if len(files_to_index) > 0:
     log(f"Chunking {len(files_to_index)} files...")
     try:
-        with TimerUntil("all documents loaded"):
-            non_code_files = [f for f in files_to_index if os.path.splitext(f)[1] not in code_extensions]
-            if len(non_code_files) > 0:
-                log_verbose(f"\t{len(non_code_files)} non-code files found...")
+        non_code_files = [f for f in files_to_index if os.path.splitext(f)[1] not in code_extensions]
+        if len(non_code_files) > 0:
+            with TimerUntil("all documents loaded"):
+                log_verbose(f"\t{len(non_code_files)} documents found...")
                 non_code_nodes = load_document_nodes(None, non_code_files, show_progress=args.verbose)
                 document_nodes.extend(non_code_nodes)
 
-        with TimerUntil("all code chunked"):
-            for extensions, code_splitter in source_code_splitters:
-                code_files = [f for f in files_to_index if os.path.splitext(f)[1] in extensions]
-                if len(code_files) > 0:
-                    extension_list = ", ".join(extensions).replace(".", "").lower()
-                    log_verbose(f"\t{len(code_files)} files (of type {extension_list}) chunked as language \"{code_splitter.language}\"")
-                    code_nodes = load_document_nodes(code_splitter, code_files, show_progress=args.verbose)
-                    document_nodes.extend(code_nodes)
+        if len(non_code_files) < len(files_to_index):
+            with TimerUntil("all source code chunked"):
+                for extensions, code_splitter in source_code_splitters:
+                    code_files = [f for f in files_to_index if os.path.splitext(f)[1] in extensions]
+                    if len(code_files) > 0:
+                        log_verbose(f"\t{len(code_files)} files chunked as language \"{code_splitter.language}\"")
+                        code_nodes = load_document_nodes(code_splitter, code_files, show_progress=args.verbose)
+                        document_nodes.extend(code_nodes)
 
+    except Exception as e: log_error(e)
+
+
+#------------------------------------------------------------------------------
+# Collect the user queries
+#------------------------------------------------------------------------------
+
+queries = args.query or []
+
+for file in args.query_file or []:
+    log(f"Loading query from \"{file}\"...")
+    try:
+        with open(file, "r", encoding="utf-8") as f:
+            query_text = strip_and_remove_comments(f.read())
+            queries.append(query_text)
+    except Exception as e: log_error(e)
+
+for file in args.query_list or []:
+    log(f"Loading single-line queries from \"{file}\"...")
+    try:
+        with open(file, "r", encoding="utf-8") as f:
+            short_queries = strip_and_remove_comments(f.read()).splitlines()
+            queries.extend(short_queries)
     except Exception as e: log_error(e)
 
 #------------------------------------------------------------------------------
 # Instantiate an LLM
 #------------------------------------------------------------------------------
 
+local_model = None
+llm = None
 
+if len(queries) > 0 or args.chat:
+    log(f"Initializing language model...")
+    try:
+        if args.llm_server:
+            with TimerUntil("connected"):
+                os.environ["OPENAI_API_BASE"] = args.llm_server
+                os.environ["OPENAI_API_KEY"] = args.llm_api_key or ""
+                llm = OpenAILike(api_base=args.llm_server, api_key=args.llm_api_key or "", verbose=args.verbose)
 
+        else:
+            name = args.llm_model or "default"
+            if name in model_nicknames:
+                name = model_nicknames[name]
+
+            with TimerUntil("model loaded"):
+                from transformers import AutoModelForCausalLM
+                local_model = AutoModelForCausalLM.from_pretrained(name, verbose=args.verbose)
+                llm = local_model
+
+    except Exception as e:
+        log_error(e, exit_code=1)
 
 #------------------------------------------------------------------------------
 # Update the vector database
 #------------------------------------------------------------------------------
 
 vector_index = None
-service_context = ServiceContext.from_defaults(embed_model="local")
+service_context = ServiceContext.from_defaults(embed_model="local", llm=llm)
 set_global_service_context(service_context)
 
 if args.index_load:
@@ -388,16 +408,13 @@ if not vector_index:
     log_verbose(f"Creating a new vector index in memory...")
     try:
         with TimerUntil("vector index created"):
-            vector_index = VectorStoreIndex(document_nodes,
+            vector_index = VectorStoreIndex([],#document_nodes,
                 service_context=service_context,
                 show_progress=args.verbose)
-        document_nodes = []
+        #document_nodes = []
        
-    except Exception as e: log_error(e)
+    except Exception as e: log_error(e, exit_code=1)
     
-if not vector_index:
-    log_error(f"creating vector index: {e}", exit_code=1)
-
 if len(document_nodes) > 0:
     log(f"Indexing {len(document_nodes)} document nodes...")
     try:
@@ -411,7 +428,7 @@ if args.index_store:
     try:
         if not os.path.exists(args.index_store):
             os.makedirs(args.index_store)
-        with TimerUntil("index created"):
+        with TimerUntil("index stored"):
             vector_index.storage_context.persist(persist_dir=args.index_store)
 
     except Exception as e: log_error(e)
@@ -443,125 +460,88 @@ if args.verbose:
 system_prompt = "\n".join(system_prompt_lines) + "\n"
 
 #------------------------------------------------------------------------------
-# Collect the user queries
-#------------------------------------------------------------------------------
-
-queries = args.query or []
-
-for file in args.query_file or []:
-    log(f"Loading query from \"{file}\"...")
-    try:
-        with open(file, "r", encoding="utf-8") as f:
-            query_text = strip_and_remove_comments(f.read())
-            queries.append(query_text)
-    except Exception as e: log_error(e)
-
-for file in args.query_list or []:
-    log(f"Loading single-line queries from \"{file}\"...")
-    try:
-        with open(file, "r", encoding="utf-8") as f:
-            short_queries = strip_and_remove_comments(f.read()).splitlines()
-            queries.extend(short_queries)
-    except Exception as e: log_error(e)
-
-log_verbose(f"Total queries: {len(queries)}")
-
-#------------------------------------------------------------------------------
 # Initialize the query engine
 #------------------------------------------------------------------------------
 
 if args.llm_provider and args.llm_server:
     log_error(f"cannot specify both --llm-provider and --llm-server", exit_code=1)
 
-local_model = None
 query_engine = None
 query_engine_params = {
     "response_mode":    args.query_mode,
-    "show_progress":    args.verbose,
-    "model_name":       args.llm_model or None,
-    "api_key":          args.llm_api_key,
-    "secret":           args.llm_secret,
-    "params":           dict([param.split("=") for param in args.llm_param or []]),
+#    "show_progress":    args.verbose,
+#    "model_name":       args.llm_model or None,
+#    "api_key":          args.llm_api_key,
+#    "secret":           args.llm_secret,
+#    "params":           dict([param.split("=") for param in args.llm_param or []]),
 }
 
-log(f"Initializing query engine...")
-try:
-    if args.llm_provider:
-        query_engine_params["provider"] = args.llm_provider
-    elif args.llm_server:
-        query_engine_params["server_url"] = args.llm_server
-        query_engine_params["address"] = args.llm_server
-    else:
-        name = args.llm_model or "default"
-        if name in model_nicknames:
-            name = model_nicknames[name]
+if len(queries) > 0:
+    log(f"Initializing query engine...")
+    try:
+        with TimerUntil("engine ready"):        
+            query_engine = vector_index.as_query_engine(llm=llm, **query_engine_params)
 
-        with TimerUntil("model loaded"):
-            from transformers import AutoModelForCausalLM
-            local_model = AutoModelForCausalLM.from_pretrained(name, verbose=args.verbose)
-            query_engine_params["llm"] = local_model
-
-    with TimerUntil("engine ready"):        
-        query_engine = vector_index.as_query_engine(**query_engine_params)
-
-except Exception as e:
-    log_error(e, exit_code=1)
+    except Exception as e:
+        log_error(e, exit_code=1)
 
 #------------------------------------------------------------------------------
 # Process all the queries
 #------------------------------------------------------------------------------
     
-log(f"Running {len(queries)} queries...")
-with TimerUntil("all queries complete"):
-    chat_log = ""
-    json_log = {
-        "context":      system_prompt,
-        "queries":      []
-    }
+if len(queries) > 0:
+    log(f"Running {len(queries)} queries...")
+    with TimerUntil(f"all queries complete"):
 
-    for query in queries:
-        query_record = { "query": query }
-        response = ""
+        chat_log = ""
+        json_log = {
+            "context":      system_prompt,
+            "queries":      []
+        }
 
+        for query in queries:
+            query_record = { "query": query }
+            response = ""
+
+            try:
+                with TimerUntil("query complete"):
+                    visible_history = chat_log if args.query_memory else ""
+                    user_prompt = f"{args.tag_queries}: {query}"
+                    prompt = system_prompt + visible_history + user_prompt
+                
+                    query_start_time = time.time()
+                    response = query_engine.query(prompt)
+                    query_record["response_time"] = time_since(query_start_time)
+
+            except Exception as e:
+                query_record["error"] = str(e)
+                log_error(e)
+
+            query_record["response"] = response
+            json_log["queries"].append(query_record)
+
+            response_text = f"{args.tag_responses}: {response}"
+            interaction = f"{user_prompt}\n{response_text}\n"
+            chat_log += interaction
+
+            if args.verbose:
+                indented_interaction = "\n".join([f"\t{line}" for line in interaction.splitlines()])
+                log(indented_interaction)
+
+    if args.query_log:
+        log(f"Writing query log to \"{args.query_log}\"...")
         try:
-            query_start_time = time.time()
-            visible_history = chat_log if args.query_memory else ""
-            user_prompt = f"{args.tag_queries}: {query}"
-            prompt = system_prompt + visible_history + user_prompt
-        
-            with TimerUntil("query complete"):
-                response = query_engine.query(prompt)
-                query_record["response_time"] = time_since(query_start_time)
+            with open(args.query_log, "w", encoding="utf-8") as f:
+                f.write(chat_log)
+        except Exception as e: log_error(e)
 
-        except Exception as e:
-            query_record["error"] = str(e)
-            log_error(e)
-
-        query_record["response"] = response
-        json_log["queries"].append(query_record)
-
-        response_text = f"{args.tag_responses}: {response}"
-        interaction = f"{user_prompt}\n{response_text}\n"
-        chat_log += interaction
-
-        if args.verbose:
-            indented_interaction = "\n".join([f"\t{line}" for line in interaction.splitlines()])
-            log(indented_interaction)
-
-if args.query_log:
-    log(f"Writing query log to \"{args.query_log}\"...")
-    try:
-        with open(args.query_log, "w", encoding="utf-8") as f:
-            f.write(chat_log)
-    except Exception as e: log_error(e)
-
-if args.query_log_json:
-    log(f"Writing JSON query log to \"{args.query_log_json}\"...")
-    try:
-        with open(args.query_log_json, "w", encoding="utf-8") as f:
-            raw_text = json.dumps(json_log, indent=4)
-            f.write(raw_text)
-    except Exception as e: log_error(e)
+    if args.query_log_json:
+        log(f"Writing JSON query log to \"{args.query_log_json}\"...")
+        try:
+            with open(args.query_log_json, "w", encoding="utf-8") as f:
+                raw_text = json.dumps(json_log, indent=4)
+                f.write(raw_text)
+        except Exception as e: log_error(e)
 
 #------------------------------------------------------------------------------
 # Load chat bot instructions
