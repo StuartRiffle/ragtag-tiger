@@ -1,6 +1,7 @@
 # RAG/TAG Tiger
 # Copyright (c) 2024 Stuart Riffle
 
+import hashlib
 import os, argparse, time, json, pathspec
 from llama_index import VectorStoreIndex, StorageContext, ServiceContext, SimpleDirectoryReader
 from llama_index import download_loader, set_global_service_context, load_index_from_storage
@@ -42,8 +43,6 @@ source_code_splitters = [
     ([".java"], CodeSplitter(language="java")),
     ([".js"],   CodeSplitter(language="javascript")),
     ([".ts"],   CodeSplitter(language="typescript")),
-    ([".glsl"], CodeSplitter(language="glsl")),
-    ([".hlsl"], CodeSplitter(language="hlsl")),
 ]
 
 model_nicknames = {
@@ -51,8 +50,6 @@ model_nicknames = {
     #"default": "TheBloke/Mistral-7B-Instruct-v0.2-GPTQ", # '<' not supported between instances of 'int' and 'str'
     #"default": "TheBloke/Mistral-7B-Instruct-v0.2-GGUF", # '<' not supported between instances of 'int' and 'str'
 }
-
-os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
 
 #------------------------------------------------------------------------------
 # Parse command line arguments and response files
@@ -102,7 +99,6 @@ arg("--query-list",     help="File containing short queries, one per line", acti
 arg("--query-file",     help="File containing one long query", action="append", metavar="FILE")
 arg("--query-log",      help="Log queries and responses to a text file", metavar="FILE")
 arg("--query-log-json", help="Log queries and responses (plus some metadata) to a JSON file", metavar="FILE")
-arg("--query-memory",   help="Maintain \"chat\" history between queries", action="store_true")
 arg("--query-mode",     help="Query response mode", choices=["accumulate", "compact", "compact_accumulate", "generation", "no_text", "refine", "simple_summarize", "tree_summarize"], default="tree_summarize")
 arg("--tag-queries",    help="The name/header in the transcript for user queries", metavar="NAME", default="Query")
 arg("--tag-responses",  help="The name/header in the transcript for engine responses", metavar="NAME", default="Response")
@@ -425,7 +421,7 @@ if len(queries) > 0 or args.chat:
                     verbose=args.verbose)
                 log_verbose(f"\tusing LlamaCPP for local inference")
             
-            else: # the default is "huggingface"
+            else: # default to "huggingface"
                 model_desc = ""
                 model_name = args.llm_model or "default"
                 if model_name in model_nicknames:
@@ -503,6 +499,7 @@ query_engine_params = {
     "response_mode":    args.query_mode,
     "system_prompt":    system_prompt,
     "service_context":  service_context,
+    "streaming":        True,
 }
 
 if len(queries) > 0:
@@ -528,30 +525,30 @@ if len(queries) > 0:
 
         for query in queries:
             query_record = { "query": query }
-            response = ""
+            response_tokens = []
 
             try:
                 with TimerUntil("query complete"):
-                    visible_history = chat_log if args.query_memory else ""
-                    user_prompt = f"{args.tag_queries}: {query}"
-                    prompt = system_prompt + visible_history + user_prompt
-                
                     query_start_time = time.time()
-                    response = query_engine.query(prompt)
+                    streaming_response = query_engine.query(query)
+
+                    log_verbose(f"\n{args.tag_queries}: {query}\nThinking... ", end="")
+                    for token in streaming_response.response_gen:
+                        response_tokens.append(token)
+                        log_verbose(token, end="")
+                    log_verbose("")
+
                     query_record["response_time"] = time_since(query_start_time)
 
             except Exception as e:
                 query_record["error"] = str(e)
-                response = "[ERROR]"
+                response_tokens.append("[ERROR]")
                 log_error(e)
 
+            response = "".join(response_tokens).strip()
             query_record["response"] = response
             json_log["queries"].append(query_record)
-
-            response_text = f"{args.tag_responses}: {response}"
-            interaction = f"{user_prompt}\n{response_text}\n"
-            chat_log += interaction
-            log_verbose(interaction)
+            chat_log += f"{args.tag_queries}: {query}\n{args.tag_responses}: {response}\n\n"
 
     if args.query_log:
         log(f"Writing query log to \"{args.query_log}\"...")
@@ -609,11 +606,12 @@ if args.chat:
 #------------------------------------------------------------------------------
 
 if args.chat:
+    log("")
     log(f"Entering interactive chat...")
     log(f" - The response mode is \"{args.chat_mode}\"")
     log(f" - Hit CTRL-C to interrupt a response in progress")
     log(f" - Say \"bye\" or something when you're done")
-    log()
+    log("")
     
     exit_commands = ["bye", "something", "goodbye", "exit", "quit", "done", "stop", "end"]
     chat_lines = []
@@ -629,12 +627,13 @@ if args.chat:
         chat_lines.append(f"{args.tag_queries}: {message}")
 
         try:
-            response_line = ""
-            streaming_response = chat_engine.chat(message, streaming=True)
+            response_tokens = []
+            streaming_response = chat_engine.chat(message)
             for token in streaming_response.response_gen:
-                response_line += token
+                response_tokens.append(token)
                 log(token, end="")
             log("")
+            response_line = "".join(response_tokens).strip()
         except KeyboardInterrupt:
             log(" [BREAK]")
 
