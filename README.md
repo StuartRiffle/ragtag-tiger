@@ -100,7 +100,7 @@ The best way to manage complex configuration is to factor out groups of argument
 #   - comments alongside arguments, on the same line, are NOT supported 
 
 --llm-server      
-    http://localhost:8080             
+    http://localhost:8081             
 --llm-param       
     temperature=0.9
     seed=1337         
@@ -120,9 +120,9 @@ python ragtag.py                        \
     --chat
 ```
 
-This is true power: indirection. You can edit blocks of arguments in one response file instead of updating all your scripts every time you change servers etc.
+Now you can edit blocks of arguments in one response file instead of updating all your scripts every time you change servers or something.
 
-For casual/occasional use this is probably overthinking things. Copying and pasting between batch files will get you a long way.
+For casual/occasional use this is probably overthinking things.
 
 ## FAQ
 
@@ -136,7 +136,7 @@ For casual/occasional use this is probably overthinking things. Copying and past
 **A:** Not in production.
 
 **Q:** But why is there a tiger here at all? <br>
-**A:** I anthropomorphize small programs, they like that. But to be fair a lot of animals can handle RAG queries in a pinch, and my choice of tiger here was arbitrary. We can revisit this.
+**A:** I anthropomorphize small programs because they like that. But to be fair a lot of species can do RAG queries in a pinch, and my choice of tiger here was arbitrary. We can revisit this.
 
 **Q:** May I have a warranty of merchantability and fitness for my particular purpose? <br>
 **A:** No.
