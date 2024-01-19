@@ -21,7 +21,7 @@ It's mostly the same boilerplate/glue you were going to have to write anyway. If
 
 ## Setup
 ```
-git clone https://github.com/StuartRiffle/ragtag-tiger
+git clone https://github.com/stuartriffle/ragtag-tiger
 cd ragtag-tiger
 pip install -r requirements.txt
 ```
@@ -138,7 +138,12 @@ For casual/occasional use this may be overthinking things.
 **A:** No.
 
 **Q:** Good enough, how can I buy you that coffee? <br>
-**A:** For clarity, the coffee is a metaphor and all contributions will be spent on drugs. Thank you for supporting open source software.
+**A:** For clarity, the coffee is a metaphor and any contributions will be spent on drugs. 
+
+
+<a href="https://www.buymeacoffee.com/stuartriffle"><img src="docs/coffee.png" width="200px"></a>
+
+Thank you for supporting open source software.
 
 
 
