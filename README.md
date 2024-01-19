@@ -1,7 +1,6 @@
 # RAG/TAG Tiger
 
 **UNDER DEVELOPMENT - STILL DEBUGGING - DO NOT USE THIS**
-<br><img width="50px" src="docs/under-construction.gif">
 
 <img align="right" width="200px" style="padding:10px" src="docs/tiger.jpg">
 
