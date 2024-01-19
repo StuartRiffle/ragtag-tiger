@@ -2,11 +2,9 @@
 
 **UNDER DEVELOPMENT - STILL DEBUGGING - DO NOT USE THIS**
 
+<img align="right" width="200px" style="padding:10px" src="docs/tiger.jpg">
+
 **RAG/TAG Tiger** is a [LlamaIndex](https://github.com/run-llama/llama_index) wrapper that provides a command line interface for doing primitive RAG queries on local documents/code.
-
-A lot of this is the same boilerplate/glue you were going to have to write anyway. If it saves you an afternoon of sifting through machine-generated LlamaIndex tutorials and arguing with ChatGPT, please feel free to buy me a coffee.
-
-## What it does
 - runs queries on an in-process LLM, an internal inference server, or a commercial endpoint
 - loads/updates/stores vector indices to avoid redundant processing
 - provides fine grained control over which files to index or be excluded
@@ -14,6 +12,12 @@ A lot of this is the same boilerplate/glue you were going to have to write anywa
 - allows basic control of LLM inference parameters (temperature, etc)
 - can tack together system prompts and queries from multiple sources
 - supports interactive "chat" mode on the command line
+
+
+It's mostly the same boilerplate/glue you were going to have to write anyway. If this code saves you an afternoon of sifting through machine-generated LlamaIndex tutorials and arguing with ChatGPT, please feel free to buy me a coffee.
+
+
+
 
 ## Setup
 ```
@@ -42,7 +46,7 @@ python ragtag.py --help
 
 ## Workflow
 
-A good way to build and iterate on a command is to put it in a little shell script or batch file, but split over multiple lines, so you can see all the arguments at a glance (in a Windows batch file use `^` to join lines instead of `\`).
+A good way to build and iterate on a command is to put it in a shell script or batch file, but split over multiple lines, so you can see all the arguments at a glance (in a Windows batch file use `^` to join lines instead of `\`).
 
 A script ingesting some presentations into an existing vector index might look like this:
 ```
@@ -109,7 +113,7 @@ Now you can edit blocks of arguments in response files, instead of updating all 
 ```
 python ragtag.py                        \
     @model_internal_7b.args             \
-    @virtual_doctor.args                \
+    @not_a_doctor.args                  \
     --source my/personal/medical_data   \
     --chat
 ```
@@ -119,7 +123,7 @@ For casual/occasional use this may be overthinking things.
 ## FAQ
 
 **Q:** What does the name mean? <br>
-**A:** The term "RAG" means Retrieval Augmented Generation. Instead of fine tuning a language model on your documents, the idea is to give it ways to search them for details as needed.
+**A:** The term "RAG" means Retrieval Augmented Generation. Instead of fine tuning a language model on your documents, the idea is you give it ways to search them for details as needed.
 
 **Q:** What about "TAG"? <br>
 **A:** That's a blanket term for tiger-augmented methods.
@@ -134,7 +138,7 @@ For casual/occasional use this may be overthinking things.
 **A:** No.
 
 **Q:** Good enough, how can I buy you that coffee? <br>
-**A:** Just to be clear, the coffee is a metaphor and contributions will be spent on drugs. Thank you for supporting open source software.
+**A:** For clarity, the coffee is a metaphor and all contributions will be spent on drugs. Thank you for supporting open source software.
 
 
 

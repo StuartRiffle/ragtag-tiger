@@ -160,7 +160,7 @@ class TimerUntil:
             log_verbose(f"{self.prefix}{self.msg} ({time_since(self.start_time)}{self.suffix})")
 
 #------------------------------------------------------------------------------
-# Gather all the file specs we have to search when indexing
+# Gather all the file specs we'll have to search when indexing
 #------------------------------------------------------------------------------
         
 search_specs = []
@@ -529,10 +529,10 @@ if len(queries) > 0:
 
             try:
                 with TimerUntil("query complete"):
-                    query_start_time = time.time()
-                    streaming_response = query_engine.query(query)
-
                     log_verbose(f"\n{args.tag_queries}: {query}\nThinking... ", end="")
+                    query_start_time = time.time()
+
+                    streaming_response = query_engine.query(query)
                     for token in streaming_response.response_gen:
                         response_tokens.append(token)
                         log_verbose(token, end="")
