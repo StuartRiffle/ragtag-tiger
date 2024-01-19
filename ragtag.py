@@ -1,13 +1,13 @@
 # RAG/TAG Tiger
 # Copyright (c) 2024 Stuart Riffle
 
-import hashlib
 import os, argparse, time, json, pathspec
 from llama_index import VectorStoreIndex, StorageContext, ServiceContext, SimpleDirectoryReader
 from llama_index import download_loader, set_global_service_context, load_index_from_storage
 from llama_index.node_parser import SimpleNodeParser
 from llama_index.text_splitter import CodeSplitter
 from llama_index.llms import OpenAI, OpenAILike, Anthropic, HuggingFaceLLM, LlamaCPP, LangChainLLM
+import torch
 
 program_name        = "RAG/TAG Tiger"
 program_version     = "0.1.0"
@@ -46,9 +46,7 @@ source_code_splitters = [
 ]
 
 model_nicknames = {
-    "default": "TheBloke/Mistral-7B-Instruct-v0.2-AWQ", 
-    #"default": "TheBloke/Mistral-7B-Instruct-v0.2-GPTQ", # '<' not supported between instances of 'int' and 'str'
-    #"default": "TheBloke/Mistral-7B-Instruct-v0.2-GGUF", # '<' not supported between instances of 'int' and 'str'
+    "default": "TheBloke/Mistral-7B-Instruct-v0.2-GGUF", 
 }
 
 #------------------------------------------------------------------------------
@@ -89,6 +87,7 @@ arg("--llm-server",     help="Inference server URL (if needed)", metavar="URL")
 arg("--llm-api-key",    help="API key for inference server (if needed)", default="", metavar="KEY")
 arg("--llm-secret",     help="Secret for inference server (if needed)", default="", metavar="SECRET")
 arg("--llm-param",      help="Inference parameter, like \"temperature=0.9\" etc", nargs="+", metavar="KVP")
+arg("--llm-verbose",    help="enable extended/debug output from the LLM", action="store_true")
 arg("--torch-device",   help="Device override, like \"cpu\" or \"cuda:1\" (for second GPU)", metavar="DEVICE")
 arg("--context",        help="Command line context/system prompt", action="append", metavar="TEXT")
 arg("--context-file",   help="File containing a snippet of context",action="append", metavar="FILE")
@@ -289,7 +288,7 @@ if len(loader_specs) > 0:
 
             for ext in extensions.split(","):
                 ext = "." + ext.strip(". ")
-                file_extractor_list[ext] = custom_loaders[loader_class]
+                file_extractor_list[ext] = custom_loaders[loader_class]()
 
         except Exception as e: log_error(e)
 
@@ -314,7 +313,7 @@ if len(files_to_index) > 0:
     files_processed = 0
     try:
         non_code_files = [f for f in files_to_index if os.path.splitext(f)[1] not in code_ext]
-        if len(non_code_files) > 0:
+        if False:#####len(non_code_files) > 0:
             log(f"Loading {len(non_code_files)} documents...")
             with TimerUntil("all documents loaded"):
                 non_code_nodes = load_document_nodes(None, non_code_files, show_progress=args.verbose)
@@ -333,7 +332,6 @@ if len(files_to_index) > 0:
                         files_processed += len(code_files)
 
     except Exception as e: log_error(e)
-    assert files_processed == len(files_to_index)
 
 #------------------------------------------------------------------------------
 # Collect the user queries
@@ -390,50 +388,54 @@ llm = None
 if len(queries) > 0 or args.chat:
     log(f"Initializing language model...")
     try:
-        with TimerUntil("LLM ready"):
-
+        with TimerUntil("ready"):
             if args.llm_provider == "openai":
                 if args.llm_api_key:
                     os.environ["OPENAI_API_KEY"] = args.llm_api_key
-
                 if args.llm_server:
                     llm = OpenAILike(
                         model=args.llm_model or "default",
                         api_base=args.llm_server,
-                        verbose=args.verbose)
-                    log_verbose(f"\tusing OpenAI API redirected to server \"{args.llm_server}\"")
+                        verbose=args.llm_verbose)
+                    log_verbose(f"\tusing model \"{llm.model}\" on OpenAI API server \"{args.llm_server}\"")
                 else:
                     llm = OpenAI(
                         model=args.llm_model,
-                        verbose=args.verbose)
-                    log_verbose(f"\tusing OpenAI API")
+                        verbose=args.llm_verbose)
+                    log_verbose(f"\tusing OpenAI model \"{llm.model}\"")
                 
             elif args.llm_provider == "anthropic":
                 llm = Anthropic(
                     model=args.llm_model,
                     base_url=args.llm_server,
-                    verbose=args.verbose)
-                log_verbose(f"\tusing Anthropic API")
+                    verbose=args.llm_verbose)
+                log_verbose(f"\tusing Anthropic model \"{llm.model}\"")
                 
             elif args.llm_provider == "llamacpp":
+                model_kwargs = args.llm_param or {}
+                constructor_params = {}
+                if torch.cuda.is_available():
+                    model_kwargs["n_gpu_layers"] = -1
+                    model_kwargs["device"] = "cuda"
+
                 llm = LlamaCPP(
                     model_path=args.llm_model,
-                    verbose=args.verbose)
-                log_verbose(f"\tusing LlamaCPP for local inference")
+                    model_kwargs=model_kwargs,
+                    verbose=args.llm_verbose,
+                    **constructor_params)
+                log_verbose(f"\tusing model \"{os.path.normpath(args.llm_model)}\" for llama.cpp local inference")
             
             else: # default to "huggingface"
                 model_desc = ""
                 model_name = args.llm_model or "default"
                 if model_name in model_nicknames:
-                    model_desc = f"\"{model_name}\" which is HuggingFace model "
+                    model_desc = f"\"{model_name}\" which is HF model "
                     model_name = model_nicknames[model_name]
-                log_verbose(f"\tloading model {model_desc}\"{model_name}\"")
-
                 llm = HuggingFaceLLM(
                     model_name, 
                     device_map=args.torch_device or "auto",
                     system_prompt=system_prompt)
-                log_verbose(f"\tusing HuggingFace for local inference")
+                log_verbose(f"\tusing model {model_desc}\"{model_name}\" for local inference with HuggingFace")
 
     except Exception as e: 
         log_error(f"failed initializing LLM: {e}", exit_code=1)
@@ -519,9 +521,14 @@ if len(queries) > 0:
     with TimerUntil(f"all queries complete"):
         chat_log = ""
         json_log = {
-            "context":      system_prompt,
-            "queries":      []
+            "context": system_prompt,
+            "queries": []
         }
+
+        tag_queries = (args.tag_queries or "").strip("\"' ")
+        tag_responses = (args.tag_responses or "").strip("\"' ")
+        query_prefix = f"{tag_queries}: " if tag_queries else ""
+        response_prefix = f"{tag_responses}: " if tag_responses else ""
 
         for query in queries:
             query_record = { "query": query }
@@ -529,11 +536,15 @@ if len(queries) > 0:
 
             try:
                 with TimerUntil("query complete"):
-                    log_verbose(f"\n{args.tag_queries}: {query}\nThinking... ", end="")
+                    log_verbose(f"\n{query_prefix}{query}\n\t...thinking ", end="")
                     query_start_time = time.time()
 
                     streaming_response = query_engine.query(query)
                     for token in streaming_response.response_gen:
+                        if len(response_tokens) == 0:
+                            if not token.strip():
+                                continue
+                            log_verbose(f"({time_since(query_start_time)})\n{response_prefix}", end="")
                         response_tokens.append(token)
                         log_verbose(token, end="")
                     log_verbose("")
@@ -548,7 +559,9 @@ if len(queries) > 0:
             response = "".join(response_tokens).strip()
             query_record["response"] = response
             json_log["queries"].append(query_record)
-            chat_log += f"{args.tag_queries}: {query}\n{args.tag_responses}: {response}\n\n"
+
+            chat_log += f"{query_prefix}{query}\n"
+            chat_log += f"{response_prefix}{response}\n\n"
 
     if args.query_log:
         log(f"Writing query log to \"{args.query_log}\"...")

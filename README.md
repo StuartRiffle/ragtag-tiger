@@ -1,10 +1,12 @@
 # RAG/TAG Tiger
 
 **UNDER DEVELOPMENT - STILL DEBUGGING - DO NOT USE THIS**
+<br><img width="50px" src="docs/under-construction.gif">
 
 <img align="right" width="200px" style="padding:10px" src="docs/tiger.jpg">
 
-**RAG/TAG Tiger** is a [LlamaIndex](https://github.com/run-llama/llama_index) wrapper that provides a command line interface for doing primitive RAG queries on local documents/code.
+**RAG/TAG Tiger** is a [LlamaIndex](https://github.com/run-llama/llama_index) wrapper that:
+- provides a command line interface for doing primitive RAG queries on local documents/code
 - runs queries on an in-process LLM, an internal inference server, or a commercial endpoint
 - loads/updates/stores vector indices to avoid redundant processing
 - provides fine grained control over which files to index or be excluded
@@ -13,9 +15,7 @@
 - can tack together system prompts and queries from multiple sources
 - supports interactive "chat" mode on the command line
 
-
 It's mostly the same boilerplate/glue you were going to have to write anyway. If this code saves you an afternoon of sifting through machine-generated LlamaIndex tutorials and arguing with ChatGPT, please feel free to buy me a coffee.
-
 
 ## Setup
 ```
@@ -24,13 +24,13 @@ cd ragtag-tiger
 pip install -r requirements.txt
 ```
 
-## Basic usage
+## Usage
 The simplest way to perform a RAG query would be a command like this:
 ```
 python ragtag.py --source my/docs --query "But, why?"
 ```
 
-**But don't do that.** It will index your documents from scratch on every query, which is slow. It's better to ingest all your files one time, and save the resulting index:
+**But don't do that.** It will index your documents from scratch on every query, which is slow. It's better to ingest all your files just once, and save the resulting index:
 ```
 python ragtag.py --source my/docs --index-store my/index
 ```
@@ -39,38 +39,74 @@ Then use that index to perform your queries:
 ```
 python ragtag.py --index-load my/index --query "Really though, why?"
 ```
+This is still slow, because the index takes a long time to load. But it's not as slow as re-indexing everything.
 
-Look at the help page for a full list of options:
+
+A full list of options is available on the help page:
 ```
 python ragtag.py --help
 ```
 
+It looks like this:
+```
+Options:
+  -h, --help             Show this help message and exit
+  --quiet                Suppress all output except errors
+  --verbose              Enable extended/debug output
+  --version              Print the version number and exit
+ 
+Vector database: 
+  --index-load PATH      Load the vector index from a given path
+  --index-store PATH     Save the updated vector index to a given path
+ 
+Document indexing: 
+  --source FOLDER        Folder of files to be indexed recursively
+  --source-spec SPEC     Index files matching a pathspec, like "**/*.cpp"
+  --source-list FILE     Text file with a list of filenames/pathspecs to index
+  --custom-loader SPEC   Download from LlamaIndex hub, format "JPEGReader:jpg,jpeg"
+  --no-cache             Do not use the local cache for loaders
+  --ignore-unknown       Ignore files with unrecognized extensions
+ 
+Language model: 
+  --llm-provider NAME    Inference provider/interface
+  --llm-model NAME       Model name/path/etc for provider
+  --llm-server URL       Inference server URL (if needed)
+  --llm-api-key KEY      API key for inference server (if needed)
+  --llm-secret SECRET    Secret for inference server (if needed)
+  --llm-param KVP [KVP ...] Inference parameter, "temperature=0.9" etc
+  --llm-verbose          Enable extended/debug output from the LLM
+
+Settings:
+  --context TEXT         Command line context/system prompt
+  --context-file FILE    File containing a snippet of system prompt
+  --tag-queries NAME     The name/header in the transcript for user queries
+  --tag-responses NAME   The name/header in the transcript for engine responses
+  --torch-device DEVICE  Device override, like "cpu" or "cuda:1"
+
+Query processing:
+  --query TEXT           Command line query
+  --query-list FILE      File containing short queries, one per line
+  --query-file FILE      File containing one long query
+  --query-log FILE       Log queries and responses to a text file
+  --query-log-json FILE  Log queries and responses (plus some metadata) to JSON
+  --query-mode           Query response mode, default: tree_summarize
+                         { accumulate, compact, compact_accumulate, generation,
+                           no_text, refine, simple_summarize, tree_summarize }
+Interactive chat:
+  --chat                 Enter chat after any query processing
+  --chat-init TEXT       Extra instructions/personality for the chat LLM
+  --chat-init-file FILE  File containing a snippet of chat LLM instructions
+  --chat-log FILE        Append chat queries and responses to a text file
+  --chat-mode            Chat response mode, default: best
+                         { best, context, condense_question, simple, react, openai }
+```
+
+
 ## Workflow
+ 
+It's easier to edit your command if you put it in a shell script (or batch file), but split the parameters over multiple lines by ending them with `\` (or `^` on Windows), to make things more readable.
 
-A good way to build and iterate on a command is to put it in a shell script or batch file, but split over multiple lines, so you can see all the arguments at a glance (in a batch file use `^` to join lines instead of `\`).
-
-A script ingesting some presentations into an existing vector index might look like this:
-```
-python ragtag.py                                        \
-    --index-load      my/database                       \
-    --source          my/docs                           \
-    --source-spec     my/presentations/**/*.pptx        \
-    --custom-loader   PptxReader:pptx                   \
-    --index-store     my/database
-```
-
-Running a set of prepared queries on them using a local inference server that exposes an OpenAI-compatible API:
-```
-python ragtag.py                                        \
-    --index-load      my/database                       \
-    --llm-provider    openai                            \
-    --llm-server      http://localhost:8081             \
-    --query-mode      tree_summarize                    \
-    --query-list      queries/simple_questions.txt      \
-    --query-log       responses.txt
-```
-
-Consulting a dangerously unqualified virtual doctor, using an in-process LLM and a temporary (memory-only) vector index for privacy:
+For example, a script to consult with a dangerously unqualified virtual doctor, using an in-process LLM and a temporary vector index for privacy, might look like this:
 ```
 python ragtag.py                                        \
     --source          my/personal/medical_data          \
@@ -83,18 +119,14 @@ python ragtag.py                                        \
     --chat
 ```
 
-## Advanced workflow
-A fancier way to manage complex configuration is to factor out groups of command line arguments into "response files" like this:
+A more flexible way to manage complex configuration is to factor out groups of command line arguments into "response files" (the file extension doesn't matter). The rules there are:
+- **every argument must be on its own line**
+- blank lines, indentation, and trailing whitespace are ignored
+- internal whitespace is part of an argument, no quotes needed
+- lines starting with # are treated as comments
+- comments alongside arguments (on the same line) are NOT supported
 ```
 # debug_server.args - example response file
-#
-# The rules here:
-#   - every argument must be on its own line  <------ IMPORTANT!
-#   - the file extension doesn't matter
-#   - blank lines, indentation, and trailing whitespace are ignored
-#   - internal whitespace is part of an argument, no quotes needed
-#   - lines starting with # are treated as comments
-#   - comments next to arguments (on the same line) are NOT supported 
 
 --llm-provider
     openai
@@ -103,21 +135,13 @@ A fancier way to manage complex configuration is to factor out groups of command
 --llm-param       
     temperature=0.9
     seed=1337         
-    (etc...)
 ```
 
-Then pull in the response files using `@` on the command line. This has the same effect as typing all the arguments by hand:
+To use the response file, pull it in with `@` on the command line. This has the same effect as typing all the arguments by hand:
 ```
 python ragtag.py @debug_server.args  ...
 ```
-Now you can edit blocks of configuration in one place, without needing to change all your scripts.
-```
-python ragtag.py                        \
-    @model_internal_7b.args             \
-    @not_a_doctor.args                  \
-    --source my/personal/medical_data   \
-    --chat
-```
+
 
 For casual/occasional use this may be overthinking things.
 
