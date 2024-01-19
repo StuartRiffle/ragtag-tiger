@@ -17,36 +17,37 @@
 It's mostly the same boilerplate/glue you were going to have to write anyway. If this code saves you an afternoon of sifting through machine-generated LlamaIndex tutorials and arguing with ChatGPT, please feel free to buy me a coffee.
 
 
-
-
 ## Setup
 ```
 git clone https://github.com/stuartriffle/ragtag-tiger
 cd ragtag-tiger
 pip install -r requirements.txt
 ```
+
 ## Basic usage
 The simplest way to perform a RAG query would be a command like this:
 ```
 python ragtag.py --source my/docs --query "But, why?"
 ```
+
 **But don't do that.** It will index your documents from scratch on every query, which is slow. It's better to ingest all your files one time, and save the resulting index:
 ```
 python ragtag.py --source my/docs --index-store my/index
 ```
+
 Then use that index to perform your queries:
 ```
 python ragtag.py --index-load my/index --query "Really though, why?"
 ```
-Check out the help page for a complete list of options:
 
+Look at the help page for a full list of options:
 ```
 python ragtag.py --help
 ```
 
 ## Workflow
 
-A good way to build and iterate on a command is to put it in a shell script or batch file, but split over multiple lines, so you can see all the arguments at a glance (in a Windows batch file use `^` to join lines instead of `\`).
+A good way to build and iterate on a command is to put it in a shell script or batch file, but split over multiple lines, so you can see all the arguments at a glance (in a batch file use `^` to join lines instead of `\`).
 
 A script ingesting some presentations into an existing vector index might look like this:
 ```
@@ -73,7 +74,7 @@ Consulting a dangerously unqualified virtual doctor, using an in-process LLM and
 ```
 python ragtag.py                                        \
     --source          my/personal/medical_data          \
-    --llm-model       mistralai/Mistral-7B-v0.1         \
+    --llm-model       mistralai/Mistral-7B-v0.2         \
     --llm-param       temperature=1.8                   \
     --context-file    instructions/jailbreak.txt        \
     --context-file    instructions/first_do_no_harm.txt \
@@ -105,11 +106,11 @@ A fancier way to manage complex configuration is to factor out groups of command
     (etc...)
 ```
 
-Then pull in the response files using `@` on the command line. This has the same effect as typing all those arguments by hand:
+Then pull in the response files using `@` on the command line. This has the same effect as typing all the arguments by hand:
 ```
 python ragtag.py @debug_server.args  ...
 ```
-Now you can edit blocks of arguments in response files, instead of updating all your scripts every time you change servers or something.
+Now you can edit blocks of configuration in one place, without needing to change all your scripts.
 ```
 python ragtag.py                        \
     @model_internal_7b.args             \
@@ -122,26 +123,25 @@ For casual/occasional use this may be overthinking things.
 
 ## FAQ
 
-**Q:** What does the name mean? <br>
-**A:** The term "RAG" means Retrieval Augmented Generation. Instead of fine tuning a language model on your documents, the idea is you give it ways to search them for details as needed.
+**Q:**&nbsp; What does the name mean? <br>
+**A:**&nbsp; The term "RAG" means Retrieval Augmented Generation. Instead of fine tuning a language model on your documents, the idea is you give it ways to search them for details as needed.
 
-**Q:** What about "TAG"? <br>
-**A:** That's a blanket term for tiger-augmented methods.
+**Q:**&nbsp; What about "TAG"? <br>
+**A:**&nbsp; That's a blanket term for tiger-augmented methods.
 
-**Q:** Are those widely used? <br>
-**A:** Not in production.
+**Q:**&nbsp; Are those widely used? <br>
+**A:**&nbsp; Not in production.
 
-**Q:** But why is there a tiger here at all? <br>
-**A:** I anthropomorphize small programs because they like that, but to be fair a lot of species can handle RAG in a pinch, and my choice of tiger here was arbitrary. We can revisit this.
+**Q:**&nbsp; But why is there a tiger here at all? <br>
+**A:**&nbsp; I anthropomorphize small programs because they like that, but to be fair a lot of species can handle RAG in a pinch, and my choice of tiger here was arbitrary. We can revisit this.
 
-**Q:** May I have a warranty of merchantability and fitness for my purpose? <br>
-**A:** No.
+**Q:**&nbsp; May I have a warranty of merchantability and fitness for my particular purpose? <br>
+**A:**&nbsp; No.
 
-**Q:** Good enough, how can I buy you that coffee? <br>
-**A:** For clarity, the coffee is a metaphor and any contributions will be spent on drugs. 
+**Q:**&nbsp; Good enough, how can I buy you that coffee? <br>
+**A:**&nbsp; For clarity, the coffee was a metaphor and contributions will be spent on drugs. 
 
-
-<a href="https://www.buymeacoffee.com/stuartriffle"><img src="docs/coffee.png" width="200px"></a>
+&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://www.buymeacoffee.com/stuartriffle"><img src="docs/coffee.png" width="200px"></a>
 
 Thank you for supporting open source software.
 
