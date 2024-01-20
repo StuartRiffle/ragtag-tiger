@@ -4,11 +4,12 @@
 
 <img align="right" width="200px" style="padding:10px" src="docs/tiger.jpg">
 
-**RAG/TAG Tiger** is a simple[LlamaIndex](https://github.com/run-llama/llama_index) wrapper that:
+**RAG/TAG Tiger** is a simple [LlamaIndex](https://github.com/run-llama/llama_index) wrapper that:
 - provides a command line interface for doing primitive RAG queries on local documents/code
 - runs queries on an in-process LLM, a local inference server, or a commercial endpoint
 - loads/updates/stores vector indices to avoid redundant processing
 - auto-downloads loaders from the [LlamaIndex hub](https://llamahub.ai) for custom file types
+- uses syntax-aware chunking for source code
 - supports pseudo-interactive "chat" on the command line
 
 It's mostly the same boilerplate/glue you were going to have to write anyway. If this code saves you an afternoon of sifting through machine-generated LlamaIndex tutorials and arguing with ChatGPT, please feel free to buy me a coffee.
@@ -37,9 +38,9 @@ Then use that index to perform your queries:
 ```
 python ragtag.py --index-load my/index --query "Really though, why?"
 ```
-This is **still** slow, because the index takes a long time to load. It's just not as slow as re-indexing everything. Use `--verbose` to see timings.
+This is **still** slow, because the index takes a long time to load. It's just not as slow as re-indexing everything. Use `--verbose` to see actual timings.
 
-To minimize overhead, submit all your queries in one run.
+To minimize overhead, try to either submit all your queries in one run, or leave the program idle in "chat mode" when not in use. 
 
 ## Options
 

@@ -9,3 +9,5 @@ tree-sitter-languages
 transformers
 autoawq
 llama-cpp-python
+tree-sitter
+tree-sitter-languages

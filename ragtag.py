@@ -20,30 +20,84 @@ program_description = "Update and query a LlamaIndex vector index"
 #------------------------------------------------------------------------------
 
 built_in_loaders = set([
-    '.csv', '.docx', '.epub', '.hwp', '.ipynb', '.jpeg', '.jpg', '.mbox', 
-    '.md', '.mp3', '.mp4', '.pdf', '.png', '.ppt', '.pptm', '.pptx',
+    # SimpleDirectoryReader supports these out-of-the-box
+    '.pdf', '.csv', '.md', '.mbox', '.ipynb', 
+    '.docx', '.epub', '.hwp', '.ppt', '.pptm', '.pptx',
+    '.jpeg', '.jpg', '.png', '.mp3', '.mp4', # ?
 ])
 
 available_hub_loaders = {
+    # Known custom loaders available on https://llamahub.ai
     ".json":    "JSONReader",
     ".xlsx":    "PandasExcelReader",
     ".graphql": "SDLReader",
-    ".txt":     "UnstructuredReader",
-    ".rtf":     "UnstructuredReader",
-    ".eml":     "UnstructuredReader",
-    ".html":    "UnstructuredReader",
+    ".gql":     "SDLReader",
 }
 
 source_code_splitters = [
-    ([".cpp", ".hpp", ".cxx", ".hxx", ".inc", ".inl", ".c", ".h"],
-                CodeSplitter(language="cpp")),            
-    ([".cs"],   CodeSplitter(language="c_sharp")),
-    ([".py"],   CodeSplitter(language="python")),
-    ([".lua"],  CodeSplitter(language="lua")),
-    ([".java"], CodeSplitter(language="java")),
-    ([".js"],   CodeSplitter(language="javascript")),
-    ([".ts"],   CodeSplitter(language="typescript")),
+    # Source code files get syntax-aware chunking
+    ([".c", ".h", ".cpp", ".hpp", ".cxx", ".hxx", ".inc", ".inl"],
+                        CodeSplitter(language="cpp")),            
+    ([".clj"],          CodeSplitter(language="clojure")),
+    ([".cs"],           CodeSplitter(language="c_sharp")),
+    ([".css"],          CodeSplitter(language="css")),
+    ([".dockerfile"],   CodeSplitter(language="dockerfile")),
+    ([".dot"],          CodeSplitter(language="dot")),
+    ([".el", ".emacs"], CodeSplitter(language="elisp")),
+    ([".elm"],          CodeSplitter(language="elm")),
+    ([".ex", ".exs"],   CodeSplitter(language="elixir")),
+    ([".f", ".F"],      CodeSplitter(language="fixed-form-fortran")),
+    ([".for"],          CodeSplitter(language="fixed-form-fortran")),
+    ([".f90", ".F90"],  CodeSplitter(language="fortran")),
+    ([".go"],           CodeSplitter(language="go")),
+    ([".hs"],           CodeSplitter(language="haskell")),
+    ([".html", ".htm"], CodeSplitter(language="html")),
+    ([".java"],         CodeSplitter(language="java")),
+    ([".jl"],           CodeSplitter(language="julia")),
+    ([".js"],           CodeSplitter(language="javascript")),
+    ([".kt", ".kts"],   CodeSplitter(language="kotlin")),
+    ([".lisp", ".cl"],  CodeSplitter(language="commonlisp")),
+    ([".lua"],          CodeSplitter(language="lua")),
+    ([".m"],            CodeSplitter(language="objc")),
+    ([".ml", ".mli"],   CodeSplitter(language="ocaml")),
+    ([".php"],          CodeSplitter(language="php")),
+    ([".pl"],           CodeSplitter(language="perl")),
+    ([".py"],           CodeSplitter(language="python")),
+    ([".r"],            CodeSplitter(language="r")),
+    ([".rb"],           CodeSplitter(language="ruby")),
+    ([".rs"],           CodeSplitter(language="rust")),
+    ([".scala"],        CodeSplitter(language="scala")),
+    ([".sh"],           CodeSplitter(language="bash")),
+    ([".sql"],          CodeSplitter(language="sql")),
+    ([".sqlite"],       CodeSplitter(language="sqlite")),
+    ([".ts"],           CodeSplitter(language="typescript")),
+    ([".yaml", ".yml"], CodeSplitter(language="yaml")),
 ]
+
+extract_mime_content = set([
+    # Pull out any embedded text/html and uuencoded content
+    ".eml", ".msg", 
+    ".doc", # Special case, might be [unsupported] old Word binaries
+])
+
+unpack_archives = set([
+    # Optionally unpack archive formats and index their contents
+    ".zip", ".7z", ".rar", 
+    ".tar", ".gz", ".tgz", ".bz2", 
+    ".lzma", ".lz", ".lz4", 
+    ".zst", ".zstd", 
+])
+
+chunk_as_text = set([
+    # Plain text files, no special handling 
+    ".txt", ".TXT", ".rtf", ".log", ".asc", 
+    ".ini", ".cfg", ".conf", ".config",
+
+    # FIXME - use a code splitter/loader when one becomes available
+    ".hlsl", ".hlsli", ".fxh", ".glsl", ".glsli",
+    ".shader", ".shadergraph",
+    ".xml", 
+])
 
 model_nicknames = {
     "default": "TheBloke/Mistral-7B-Instruct-v0.2-GGUF", 
@@ -237,11 +291,20 @@ for extensions, _ in source_code_splitters:
 supported_ext = built_in_loaders.copy()
 supported_ext.update(available_hub_loaders.keys())
 supported_ext.update(code_ext)
+supported_ext.update(chunk_as_text)
 
 files_with_ext = {}
 for file_path in files_to_index:
     _, ext = os.path.splitext(file_path)
     files_with_ext[ext] = files_with_ext.get(ext, 0) + 1
+
+if '.doc' in files_with_ext:
+    actually_text_files = set()
+    for file_path in files_with_ext['.doc']:
+        _, ext = os.path.splitext(file_path)
+    del files_with_ext['.doc']
+
+
 
 if args.verbose and len(files_to_index) > 0:
     log_verbose(f"Supported files found:")
@@ -250,11 +313,12 @@ if args.verbose and len(files_to_index) > 0:
         if ext in supported_ext:
             log_verbose(f"\t{count:<5} {ext}")
 
+
 unsupported_ext = set(files_with_ext.keys()) - supported_ext
 if len(unsupported_ext) > 0:
     ext_action = "IGNORED" if args.ignore_unknown else "indexed as PLAIN TEXT"
     type_list = ", ".join(sorted(unsupported_ext)).replace(".", "").lower()
-    log(f"These unsupported types will be {ext_action}: {type_list}")
+    log(f"Unsupported files will be {ext_action}: {type_list}")
 
 if args.ignore_unknown:
     for ext in unsupported_ext:
@@ -537,7 +601,7 @@ if len(queries) > 0:
 
             try:
                 with TimerUntil("query complete"):
-                    log_verbose(f"\n{query_prefix}{query}\n\t...thinking... ", end="")
+                    log_verbose(f"\n{query_prefix}{query}\n\t...thinking ", end="")
                     query_start_time = time.time()
 
                     streaming_response = query_engine.query(query)
@@ -627,9 +691,9 @@ if args.chat:
         log(f"\t- logging to \"{os.path.normpath(args.chat_log)}\"")
     log(f"\t- the LlamaIndex chat mode is \"{args.chat_mode}\"")
     log(f"\t- hit CTRL-C to interrupt a response in progress")
-    log(f"\t- say \"bye\" or something when you're done\n")
+    log(f"\t- type \"bye\" or something when you're done\n")
     
-    thinking_message = f"{response_prefix}...thinking..."
+    thinking_message = f"{response_prefix}...thinking... "
     exit_commands = ["bye", "something", "goodbye", "exit", "quit", "done", "stop", "end"]
 
     while True:
@@ -655,16 +719,17 @@ if args.chat:
                 if len(response_tokens) == 0:
                     if not token.strip():
                         continue
-                    log(f"\r{' ' * len(thinking_message)}", end="\r")
+                    log(f"\r{response_prefix:len(thinking_message)}", end="\r")
                     log(response_prefix, end="")
 
                 response_tokens.append(token)
                 log(token, end="")
             log("")
         except KeyboardInterrupt:
-            log(" [BREAK]")
+            log("-[BREAK]")
 
         response = "".join(response_tokens).strip()
+
         if args.chat_log:
             try:
                 with open(args.chat_log, "a", encoding="utf-8") as f:
@@ -675,5 +740,5 @@ if args.chat:
 # Summary
 #------------------------------------------------------------------------------
 
-log(f"Total run time {time_since(start_time)}.")
-log("Tiger out, peace.")
+total_time = f"({time_since(start_time)})")
+log(f"Peace, tiger out {total_time if args.verbose else ''}")
