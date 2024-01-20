@@ -314,6 +314,7 @@ if len(files_to_index) > 0:
     try:
         non_code_files = [f for f in files_to_index if os.path.splitext(f)[1] not in code_ext]
         if False:#####len(non_code_files) > 0:
+            # FIXME - this hangs
             log(f"Loading {len(non_code_files)} documents...")
             with TimerUntil("all documents loaded"):
                 non_code_nodes = load_document_nodes(None, non_code_files, show_progress=args.verbose)
@@ -412,12 +413,12 @@ if len(queries) > 0 or args.chat:
                 log_verbose(f"\tusing Anthropic model \"{llm.model}\"")
                 
             elif args.llm_provider == "llamacpp":
-                model_kwargs = args.llm_param or {}
                 constructor_params = {}
+                model_kwargs = args.llm_param or {}
                 if torch.cuda.is_available():
+                    # this does not work
                     model_kwargs["n_gpu_layers"] = -1
                     model_kwargs["device"] = "cuda"
-
                 llm = LlamaCPP(
                     model_path=args.llm_model,
                     model_kwargs=model_kwargs,

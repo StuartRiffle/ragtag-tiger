@@ -22,7 +22,7 @@ pip install -r requirements.txt
 Do this in a [virtual environment](https://www.google.com/search?hl=en&q=python%20virtual%20environments) if you can.
 
 ## Usage
-The simplest way to perform a RAG query would be a command like this:
+The simplest way to perform a RAG query would be a command like:
 ```
 python ragtag.py --source my/docs --query "But, why?"
 ```
@@ -38,7 +38,7 @@ python ragtag.py --index-load my/index --query "Really though, why?"
 ```
 This is still slow, because the index takes a long time to load. It's just not as slow as re-indexing everything.
 
-Still, to minimize overhead, prefer to submit all your queries in one run.
+To minimize overhead, try to submit all your queries in one run.
 
 ## Options
 A full list of options is available on the help page:
@@ -46,7 +46,7 @@ A full list of options is available on the help page:
 python ragtag.py --help
 ```
 
-It contains something like this:
+It looks something like this:
 ```
 Options:
   -h, --help             Show this help message and exit
@@ -116,12 +116,14 @@ python ragtag.py                                        \
     --chat
 ```
 
-A more flexible way to manage complex configuration is to factor out groups of command line arguments into "response files" (the file extension doesn't matter). The rules there are:
+A more flexible way to manage complex configuration is to factor out groups of command line arguments into "response files". The rules there are:
 - **every argument must be on its own line**
 - blank lines, indentation, and trailing whitespace are ignored
-- internal whitespace is part of an argument, no quotes needed
+- internal whitespace is part of an argument, so no quotes needed
 - lines starting with # are treated as comments
 - comments alongside arguments (on the same line) are NOT supported
+
+For example:
 ```
 # debug_server.args - example response file
 
@@ -134,7 +136,7 @@ A more flexible way to manage complex configuration is to factor out groups of c
     seed=1337         
 ```
 
-To use the response file, pull it in with `@` on the command line. This has the same effect as typing all the arguments by hand:
+To use the response file, pull it in with `@` on the command line (the file extension doesn't matter). This has the same effect as typing all the arguments by hand:
 ```
 python ragtag.py @debug_server.args  ...
 ```
@@ -144,7 +146,7 @@ For casual/occasional use this may be overthinking things.
 ## FAQ
 
 **Q:**&nbsp; What does the name mean? <br>
-**A:**&nbsp; The acronym "RAG" means Retrieval Augmented Generation. Instead of fine tuning a language model on your documents, you give it ways to search them for any details needed.
+**A:**&nbsp; The acronym "RAG" means Retrieval Augmented Generation. Instead of fine tuning a language model on your documents, you give it tools to search them for any details needed.
 
 **Q:**&nbsp; What about "TAG"? <br>
 **A:**&nbsp; That's a blanket term for tiger-augmented methods.
@@ -153,7 +155,7 @@ For casual/occasional use this may be overthinking things.
 **A:**&nbsp; Not in production.
 
 **Q:**&nbsp; But why is there a tiger here at all? <br>
-**A:**&nbsp; I anthropomorphize small programs (they get a kick out of that), but to be fair a lot of species could do RAG in a pinch, and my choice of tiger here was arbitrary. We can revisit this.
+**A:**&nbsp; I anthropomorphize small programs (they enjoy that), but to be fair a lot of species could do RAG in a pinch, and my choice of tiger here was arbitrary. We can revisit this.
 
 **Q:**&nbsp; May I have a warranty of merchantability and fitness for my particular purpose? <br>
 **A:**&nbsp; No.
