@@ -6,13 +6,10 @@
 
 **RAG/TAG Tiger** is a [LlamaIndex](https://github.com/run-llama/llama_index) wrapper that:
 - provides a command line interface for doing primitive RAG queries on local documents/code
-- runs queries on an in-process LLM, an internal inference server, or a commercial endpoint
+- runs queries on an in-process LLM, a local inference server, or a commercial endpoint
 - loads/updates/stores vector indices to avoid redundant processing
-- provides fine grained control over which files to index or be excluded
-- auto-downloads loaders from the [LlamaIndex hub](https://llamahub.ai) to process custom file types
-- allows basic control of LLM inference parameters (temperature, etc)
-- can tack together system prompts and queries from multiple sources
-- supports interactive "chat" mode on the command line
+- auto-downloads loaders from the [LlamaIndex hub](https://llamahub.ai) for custom file types
+- supports pseudo-interactive "chat" on the command line
 
 It's mostly the same boilerplate/glue you were going to have to write anyway. If this code saves you an afternoon of sifting through machine-generated LlamaIndex tutorials and arguing with ChatGPT, please feel free to buy me a coffee.
 
@@ -22,6 +19,7 @@ git clone https://github.com/stuartriffle/ragtag-tiger
 cd ragtag-tiger
 pip install -r requirements.txt
 ```
+Do this in a [virtual environment](https://www.google.com/search?hl=en&q=python%20virtual%20environments) if you can.
 
 ## Usage
 The simplest way to perform a RAG query would be a command like this:
@@ -38,9 +36,11 @@ Then use that index to perform your queries:
 ```
 python ragtag.py --index-load my/index --query "Really though, why?"
 ```
-This is still slow, because the index takes a long time to load. But it's not as slow as re-indexing everything.
+This is still slow, because the index takes a long time to load. It's just not as slow as re-indexing everything.
 
+Still, it will be faster if you can submit all your queries in one run.
 
+## Options
 A full list of options is available on the help page:
 ```
 python ragtag.py --help
@@ -67,7 +67,7 @@ Document indexing:
   --ignore-unknown       Ignore files with unrecognized extensions
  
 Language model: 
-  --llm-provider NAME    Inference provider/interface
+  --llm-provider NAME    { openai, anthropic, llamacpp, huggingface }
   --llm-model NAME       Model name/path/etc for provider
   --llm-server URL       Inference server URL (if needed)
   --llm-api-key KEY      API key for inference server (if needed)
@@ -102,8 +102,7 @@ Interactive chat:
 
 
 ## Workflow
- 
-It's easier to edit your command if you put it in a shell script (or batch file), but split the parameters over multiple lines by ending them with `\` (or `^` on Windows), to make things more readable.
+It's easier to edit your command if you put it in a shell script (or batch file), but split the parameters over multiple lines by ending them with `\` (or with `^` on Windows), to make things more readable.
 
 For example, a script to consult with a dangerously unqualified virtual doctor, using an in-process LLM and a temporary vector index for privacy, might look like this:
 ```
@@ -141,13 +140,12 @@ To use the response file, pull it in with `@` on the command line. This has the 
 python ragtag.py @debug_server.args  ...
 ```
 
-
 For casual/occasional use this may be overthinking things.
 
 ## FAQ
 
 **Q:**&nbsp; What does the name mean? <br>
-**A:**&nbsp; The term "RAG" means Retrieval Augmented Generation. Instead of fine tuning a language model on your documents, the idea is you give it ways to search them for details as needed.
+**A:**&nbsp; The acronym "RAG" means Retrieval Augmented Generation. Instead of fine tuning a language model on your documents, you give it ways to search them for any details needed.
 
 **Q:**&nbsp; What about "TAG"? <br>
 **A:**&nbsp; That's a blanket term for tiger-augmented methods.
@@ -156,15 +154,18 @@ For casual/occasional use this may be overthinking things.
 **A:**&nbsp; Not in production.
 
 **Q:**&nbsp; But why is there a tiger here at all? <br>
-**A:**&nbsp; I anthropomorphize small programs because they like that, but to be fair a lot of species can handle RAG in a pinch, and my choice of tiger here was arbitrary. We can revisit this.
+**A:**&nbsp; I anthropomorphize small programs (they get a kick out of that), but to be fair a lot of species could do RAG in a pinch, and my choice of tiger here was arbitrary. We can revisit this.
 
 **Q:**&nbsp; May I have a warranty of merchantability and fitness for my particular purpose? <br>
 **A:**&nbsp; No.
 
 **Q:**&nbsp; Good enough, how can I buy you that coffee? <br>
-**A:**&nbsp; For clarity, the coffee was a metaphor and contributions will be spent on drugs. 
+**A:**&nbsp; For clarity, the coffee was a metaphor and all contributions will be spent on drugs. 
 
-&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://www.buymeacoffee.com/stuartriffle"><img src="docs/coffee.png" width="200px"></a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+<a href="https://www.buymeacoffee.com/stuartriffle">
+  <img src="docs/coffee.png" width="200px">
+</a>
 
 Thank you for supporting open source software.
 
