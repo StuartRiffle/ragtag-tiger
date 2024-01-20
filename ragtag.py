@@ -314,7 +314,7 @@ if len(files_to_index) > 0:
     try:
         non_code_files = [f for f in files_to_index if os.path.splitext(f)[1] not in code_ext]
         if False:#####len(non_code_files) > 0:
-            # FIXME - this hangs
+            # FIXME - this hangs on some files
             log(f"Loading {len(non_code_files)} documents...")
             with TimerUntil("all documents loaded"):
                 non_code_nodes = load_document_nodes(None, non_code_files, show_progress=args.verbose)
@@ -516,7 +516,13 @@ if len(queries) > 0:
 #------------------------------------------------------------------------------
 # Process all the queries
 #------------------------------------------------------------------------------
-    
+
+tag_queries = (args.tag_queries or "").strip("\"' ")
+tag_responses = (args.tag_responses or "").strip("\"' ")
+
+query_prefix = f"{tag_queries}: " if tag_queries else ""
+response_prefix = f"{tag_responses}: " if tag_responses else ""
+
 if len(queries) > 0:
     log(f"Running {len(queries)} queries...")
     with TimerUntil(f"all queries complete"):
@@ -525,19 +531,13 @@ if len(queries) > 0:
             "context": system_prompt,
             "queries": []
         }
-
-        tag_queries = (args.tag_queries or "").strip("\"' ")
-        tag_responses = (args.tag_responses or "").strip("\"' ")
-        query_prefix = f"{tag_queries}: " if tag_queries else ""
-        response_prefix = f"{tag_responses}: " if tag_responses else ""
-
         for query in queries:
             query_record = { "query": query }
             response_tokens = []
 
             try:
                 with TimerUntil("query complete"):
-                    log_verbose(f"\n{query_prefix}{query}\n\t...thinking ", end="")
+                    log_verbose(f"\n{query_prefix}{query}\n\t...thinking... ", end="")
                     query_start_time = time.time()
 
                     streaming_response = query_engine.query(query)
@@ -545,7 +545,9 @@ if len(queries) > 0:
                         if len(response_tokens) == 0:
                             if not token.strip():
                                 continue
-                            log_verbose(f"({time_since(query_start_time)})\n{response_prefix}", end="")
+                            log_verbose(f"({time_since(query_start_time)})")
+                            log_verbose(response_prefix, end="")
+
                         response_tokens.append(token)
                         log_verbose(token, end="")
                     log_verbose("")
@@ -572,7 +574,7 @@ if len(queries) > 0:
         except Exception as e: log_error(e)
 
     if args.query_log_json:
-        log(f"Writing JSON query log to \"{args.query_log_json}\"...")
+        log(f"Writing JSON log to \"{args.query_log_json}\"...")
         try:
             with open(args.query_log_json, "w", encoding="utf-8") as f:
                 raw_text = json.dumps(json_log, indent=4)
@@ -608,9 +610,9 @@ if args.chat:
         chat_engine_params = query_engine_params.copy()
         del chat_engine_params["response_mode"]
         chat_engine_params["chat_mode"] = args.chat_mode
-        chat_engine_params["system_prompt"] = f"{system_prompt}\n{chat_init}\n"
+        chat_engine_params["system_prompt"] = f"{system_prompt}\n{chat_init}"
 
-        with TimerUntil("engine ready"):
+        with TimerUntil("ready"):
             chat_engine = vector_index.as_chat_engine(**chat_engine_params)
 
     except Exception as e: log_error(e, exit_code=1)
@@ -620,46 +622,54 @@ if args.chat:
 #------------------------------------------------------------------------------
 
 if args.chat:
-    log("")
-    log(f"Entering interactive chat...")
-    log(f" - The response mode is \"{args.chat_mode}\"")
-    log(f" - Hit CTRL-C to interrupt a response in progress")
-    log(f" - Say \"bye\" or something when you're done")
-    log("")
+    log(f"Entering RAG chat...")
+    if args.chat_log:
+        log(f"\t- logging to \"{os.path.normpath(args.chat_log)}\"")
+    log(f"\t- the LlamaIndex chat mode is \"{args.chat_mode}\"")
+    log(f"\t- hit CTRL-C to interrupt a response in progress")
+    log(f"\t- say \"bye\" or something when you're done\n")
     
+    thinking_message = f"{response_prefix}...thinking..."
     exit_commands = ["bye", "something", "goodbye", "exit", "quit", "done", "stop", "end"]
-    chat_lines = []
 
     while True:
         try:
-            message = input("> ").strip()
+            message = input(query_prefix).strip()
             if message.lower() in exit_commands:
                 break
         except KeyboardInterrupt:
             continue
 
-        chat_lines.append(f"{args.tag_queries}: {message}")
+        if args.chat_log:
+            try:
+                with open(args.chat_log, "a", encoding="utf-8") as f:
+                    f.write(f"{query_prefix}{message}\n")
+            except Exception as e: log_error(e)
+
+        log(thinking_message, end="")
+        response_tokens = []
 
         try:
-            response_tokens = []
-            streaming_response = chat_engine.chat(message)
+            streaming_response = chat_engine.stream_chat(message)
             for token in streaming_response.response_gen:
+                if len(response_tokens) == 0:
+                    if not token.strip():
+                        continue
+                    log(f"\r{' ' * len(thinking_message)}", end="\r")
+                    log(response_prefix, end="")
+
                 response_tokens.append(token)
                 log(token, end="")
             log("")
-            response_line = "".join(response_tokens).strip()
         except KeyboardInterrupt:
             log(" [BREAK]")
 
-        chat_lines.append(f"{args.tag_responses}: {response_line}")
-
-    if args.chat_log and len(chat_lines) > 0:
-        log(f"Appending chat log to \"{args.chat_log}\"...")
-        try:
-            all_lines = "\n".join(chat_lines) + "\n"
-            with open(args.chat_log, "a", encoding="utf-8") as f:
-                f.write(all_lines)
-        except Exception as e: log_error(e)
+        response = "".join(response_tokens).strip()
+        if args.chat_log:
+            try:
+                with open(args.chat_log, "a", encoding="utf-8") as f:
+                    f.write(f"{response_prefix}{response}\n")
+            except Exception as e: log_error(e)
 
 #------------------------------------------------------------------------------
 # Summary

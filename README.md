@@ -4,7 +4,7 @@
 
 <img align="right" width="200px" style="padding:10px" src="docs/tiger.jpg">
 
-**RAG/TAG Tiger** is a [LlamaIndex](https://github.com/run-llama/llama_index) wrapper that:
+**RAG/TAG Tiger** is a simple[LlamaIndex](https://github.com/run-llama/llama_index) wrapper that:
 - provides a command line interface for doing primitive RAG queries on local documents/code
 - runs queries on an in-process LLM, a local inference server, or a commercial endpoint
 - loads/updates/stores vector indices to avoid redundant processing
@@ -19,15 +19,16 @@ git clone https://github.com/stuartriffle/ragtag-tiger
 cd ragtag-tiger
 pip install -r requirements.txt
 ```
-Do this in a [virtual environment](https://www.google.com/search?hl=en&q=python%20virtual%20environments) if you can.
+Do this in a [virtual environment](https://www.google.com/search?q=python%20virtual%20environments) if you can.
 
 ## Usage
+
 The simplest way to perform a RAG query would be a command like:
 ```
 python ragtag.py --source my/docs --query "But, why?"
 ```
 
-**But don't do that.** It will index your documents from scratch, which is slow. It's better to ingest all your files one time, and save the resulting index:
+**But don't do that.** It will index your documents from scratch every time, which is slow. It's better to ingest all your files once, and save the resulting index:
 ```
 python ragtag.py --source my/docs --index-store my/index
 ```
@@ -36,12 +37,13 @@ Then use that index to perform your queries:
 ```
 python ragtag.py --index-load my/index --query "Really though, why?"
 ```
-This is still slow, because the index takes a long time to load. It's just not as slow as re-indexing everything.
+This is **still** slow, because the index takes a long time to load. It's just not as slow as re-indexing everything. Use `--verbose` to see timings.
 
-To minimize overhead, try to submit all your queries in one run.
+To minimize overhead, submit all your queries in one run.
 
 ## Options
-A full list of options is available on the help page:
+
+A full list is available on the help page:
 ```
 python ragtag.py --help
 ```
@@ -101,7 +103,8 @@ Interactive chat:
 ```
 
 ## Workflow
-It's easier to edit your command if you put it in a shell script (or batch file), but split the parameters over multiple lines by ending them with `\` (or with `^` on Windows), to make things more readable.
+
+It's easier to edit your command if you put it in a shell script (or batch file), but split the parameters over multiple lines by ending them with `\` (or with `^` on Windows).
 
 For example, a script to consult with a dangerously unqualified virtual doctor, using an in-process LLM and a temporary vector index for privacy, might look like this:
 ```
@@ -116,14 +119,14 @@ python ragtag.py                                        \
     --chat
 ```
 
-A more flexible way to manage complex configuration is to factor out groups of command line arguments into "response files". The rules there are:
+A more flexible way to manage complex configuration is to factor out groups of arguments into "response files". The rules there are:
 - **every argument must be on its own line**
 - blank lines, indentation, and trailing whitespace are ignored
 - internal whitespace is part of an argument, so no quotes needed
 - lines starting with # are treated as comments
 - comments alongside arguments (on the same line) are NOT supported
 
-For example:
+Like this:
 ```
 # debug_server.args - example response file
 
