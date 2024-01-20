@@ -27,7 +27,7 @@ The simplest way to perform a RAG query would be a command like this:
 python ragtag.py --source my/docs --query "But, why?"
 ```
 
-**But don't do that.** It will index your documents from scratch on every query, which is slow. It's better to ingest all your files just once, and save the resulting index:
+**But don't do that.** It will index your documents from scratch, which is slow. It's better to ingest all your files one time, and save the resulting index:
 ```
 python ragtag.py --source my/docs --index-store my/index
 ```
@@ -38,7 +38,7 @@ python ragtag.py --index-load my/index --query "Really though, why?"
 ```
 This is still slow, because the index takes a long time to load. It's just not as slow as re-indexing everything.
 
-Still, it will be faster if you can submit all your queries in one run.
+Still, to minimize overhead, prefer to submit all your queries in one run.
 
 ## Options
 A full list of options is available on the help page:
@@ -46,7 +46,7 @@ A full list of options is available on the help page:
 python ragtag.py --help
 ```
 
-It looks like this:
+It contains something like this:
 ```
 Options:
   -h, --help             Show this help message and exit
@@ -99,7 +99,6 @@ Interactive chat:
   --chat-mode            Chat response mode, default: best
                          { best, context, condense_question, simple, react, openai }
 ```
-
 
 ## Workflow
 It's easier to edit your command if you put it in a shell script (or batch file), but split the parameters over multiple lines by ending them with `\` (or with `^` on Windows), to make things more readable.
