@@ -1,13 +1,13 @@
 # RAG/TAG Tiger
 # Copyright (c) 2024 Stuart Riffle
 
-import os, argparse, time, json, pathspec, tempfile, shutil
+import os, argparse, time, json, pathspec, tempfile, shutil, torch, hashlib, py7zr
+import email, email.policy, email.parser, email.message
 from llama_index import VectorStoreIndex, StorageContext, ServiceContext, SimpleDirectoryReader
 from llama_index import download_loader, set_global_service_context, load_index_from_storage
 from llama_index.node_parser import SimpleNodeParser
 from llama_index.text_splitter import CodeSplitter
 from llama_index.llms import OpenAI, OpenAILike, Anthropic, HuggingFaceLLM, LlamaCPP, LangChainLLM
-import torch
 
 program_name        = "RAG/TAG Tiger"
 program_version     = "0.1.0"
@@ -83,12 +83,12 @@ mime_file_types = set([
     ".doc", 
 ])
 
+shutil.register_unpack_format('7zip', ['.7z'], py7zr.unpack_7zarchive)        
 archive_file_types = set([
     # Unpack these archive formats and index their contents too
-    ".zip", ".7z", ".rar", 
-    ".tar", ".gz", ".tgz", ".bz2", 
-    ".lzma", ".lz", ".lz4", ".xz",
-    ".zst", ".zstd", 
+    ".zip", ".7z", ".tar", ".gz", ".tgz", ".bz2", ".tbz2", ".xz", ".txz", 
+    # FIXME - unsupported
+    # ".rar", ".lzma", ".lz", ".lz4", ".zst", ".zstd"
 ])
 
 chunk_as_text = set([
@@ -245,16 +245,6 @@ for file in args.source_list or []:
 
 
 
-# use python standard library to create a temporary directory
-temp_folder = tempfile.mkdtemp()
-
-
-
-
-# delete temp_folder when done
-if temp_folder:
-    shutil.rmtree(temp_folder)
-
 
 
 #------------------------------------------------------------------------------
@@ -290,27 +280,103 @@ def match_files_to_index(search_spec):
     except Exception as e: log_error(e)
     return all_matches
 
-def separate_container_files(file_list):
-    """Separate out files that are actually archives"""
-    container_file_types = archive_file_types | mime_file_types
-    container_files = [f for f in file_list if os.path.splitext(f)[1] in container_file_types]
-    non_container_files = [f for f in file_list if not f in container_files]
-    return container_files, non_container_files
+def separate_files_by_extension(file_list, extensions):
+    """Separate out files with certain extensions"""
+    matching_files = set([f for f in file_list if os.path.splitext(f)[1] in extensions])
+    non_matching_files = set([f for f in file_list if not f in matching_files])
+    return matching_files, non_matching_files
+
+def unpack_temp_container(container_file, temp_folder):
+    """Unpack a container file into a temporary folder"""
+    true_name = os.path.normcase(os.path.normpath(os.path.abspath(container_file)))
+    name_hash = hashlib.md5(true_name.encode()).hexdigest()
+    output_folder = os.path.join(temp_folder, os.path.basename(container_file) + f"-{name_hash}.temp")
+    unpacked_files = []
+
+    try:
+        os.makedirs(output_folder)
+        container_type = os.path.splitext(container_file)[1]
+        if container_type in archive_file_types:
+            shutil.unpack_archive(container_file, output_folder)
+
+        elif container_type in mime_file_types:
+            file_bytes = open(container_file, "rb").read()
+            looks_like_binary = any(b < 32 or b > 127 for b in file_bytes)
+            tricksy_binary_doc_file = looks_like_binary and container_type == ".doc"
+            if not tricksy_binary_doc_file:
+                msg = email.message_from_bytes(file_bytes, policy=email.policy.default)
+
+                part_counter = 0
+                for part in msg.walk():
+                    part_type = part.get_content_type()
+                    part_content = part.get_content()
+                    part_name = part.get_filename()
+                    part_maintype = part.get_content_maintype()
+                    part_counter += 1
+
+                    filename_prefix = f"part-{part_counter:03d}"
+                    if part_type == "text/html":
+                        output_filename = filename_prefix + ".html"
+                    elif part_type == "text/plain":
+                        output_filename = filename_prefix + ".txt"
+                    elif part_type == "application/octet-stream" or part_maintype == "image":
+                        output_filename = f"{filename_prefix}-{part_name}"
+                    else:
+                        log_verbose(f"\tignoring unrecognized MIME part of type \"{part_type}\" in \"{os.path.normpath(container_file)}\"")
+                        continue
+
+                    file_path = os.path.join(output_folder, output_filename)
+                    with open(file_path, "wb") as f:
+                        f.write(part_content)
+
+        unpacked_files = [os.path.join(output_folder, f) for f in os.listdir(output_folder)]
+
+    except Exception as e: 
+        log_error(f"failure unpacking \"{os.path.normpath(container_file)}\" into \"{os.path.normpath(output_folder)}\": {e}")
+        try:
+            log_verbose(f"\tremoving \"{os.path.normpath(output_folder)}\"...")
+            shutil.rmtree(output_folder)
+        except: pass
+
+    return unpacked_files
 
 files_to_index = []
 
-
 if len(search_specs) > 0:
-    log_verbose(f"Relative paths will be based on the current directory: \"{os.getcwd()}\"")
+    log_verbose(f"Relative paths will be based on current directory \"{os.path.normpath(os.getcwd())}\"")
     log(f"Searching for files...")
-
-    with TimerUntil("search complete"):
+    with TimerUntil("complete"):
+        files_to_check = []
         for search_spec in search_specs:
             matches = match_files_to_index(search_spec)
-            files_to_index.extend(matches)
+            files_to_check.extend(matches)
 
-    container_files, non_container_files = separate_container_files(files_to_index)
-    if len(container_files) > 0:
+        while files_to_check:
+            container_file_types = archive_file_types | mime_file_types
+            containers, non_containers = separate_files_by_extension(files_to_check, container_file_types)
+            files_to_index.extend(non_containers)
+
+            if args.ignore_archives:
+                archives, _ = separate_files_by_extension(containers, archive_file_types)
+                containers.remove(archives)
+            if not containers:
+                break
+
+            all_unpacked_files = []
+            for container in containers:
+                if not temp_folder:
+                    try:
+                        temp_folder = os.path.normpath(tempfile.mkdtemp())
+                        log_verbose(f"Temporary files will be stored in \"{temp_folder}\"")
+                        log(f"Unpacking {len(containers)} containers...")
+                    except Exception as e:
+                        log_error(f"failed creating temporary folder \"{temp_folder}\": {e}", exit_code=1)
+
+                unpacked_files = unpack_temp_container(container, temp_folder)
+                all_unpacked_files.extend(unpacked_files)
+
+            # Unpack nested containers
+            files_to_check = all_unpacked_files
 
 
 
@@ -727,10 +793,11 @@ if args.chat:
     
     thinking_message = f"{response_prefix}...thinking... "
     exit_commands = ["bye", "something", "goodbye", "exit", "quit", "done", "stop", "end"]
+    user_prompt = query_prefix or "> "
 
     while True:
         try:
-            message = input(query_prefix).strip()
+            message = input(user_prompt).strip()
             if message.lower() in exit_commands:
                 break
         except KeyboardInterrupt:
@@ -772,5 +839,12 @@ if args.chat:
 # Summary
 #------------------------------------------------------------------------------
 
-total_time = f"({time_since(start_time)})")
-log(f"Peace, tiger out {total_time if args.verbose else ''}")
+if temp_folder:
+    log_verbose(f"Removing temporary folder \"{os.path.normpath(temp_folder)}\"...")
+    try:
+        with TimerUntil("done"):
+            shutil.rmtree(temp_folder)
+    except Exception as e: log_error(e)
+
+total_time = f" ({time_since(start_time)})")
+log(f"Peace, tiger out{total_time if args.verbose else ''}.")

@@ -11,3 +11,6 @@ autoawq
 llama-cpp-python
 tree-sitter
 tree-sitter-languages
+py7zr
+zstd
+rarfile
