@@ -1,7 +1,7 @@
 # RAG/TAG Tiger
 # Copyright (c) 2024 Stuart Riffle
 
-import os, argparse, time, json, pathspec
+import os, argparse, time, json, pathspec, tempfile, shutil
 from llama_index import VectorStoreIndex, StorageContext, ServiceContext, SimpleDirectoryReader
 from llama_index import download_loader, set_global_service_context, load_index_from_storage
 from llama_index.node_parser import SimpleNodeParser
@@ -36,9 +36,11 @@ available_hub_loaders = {
 
 source_code_splitters = [
     # Source code files get syntax-aware chunking
-    ([".c", ".h", ".cpp", ".hpp", ".cxx", ".hxx", ".inc", ".inl"],
-                        CodeSplitter(language="cpp")),            
+    ([".c", ".h"],      CodeSplitter(language="cpp")),            
+    ([".cl"],           CodeSplitter(language="commonlisp")),
     ([".clj"],          CodeSplitter(language="clojure")),
+    ([".cpp", ".hpp"],  CodeSplitter(language="cpp")),
+    ([".cxx", ".hxx"],  CodeSplitter(language="cpp")),
     ([".cs"],           CodeSplitter(language="c_sharp")),
     ([".css"],          CodeSplitter(language="css")),
     ([".dockerfile"],   CodeSplitter(language="dockerfile")),
@@ -46,17 +48,17 @@ source_code_splitters = [
     ([".el", ".emacs"], CodeSplitter(language="elisp")),
     ([".elm"],          CodeSplitter(language="elm")),
     ([".ex", ".exs"],   CodeSplitter(language="elixir")),
-    ([".f", ".F"],      CodeSplitter(language="fixed-form-fortran")),
-    ([".for"],          CodeSplitter(language="fixed-form-fortran")),
-    ([".f90", ".F90"],  CodeSplitter(language="fortran")),
+    ([".f", ".for"],    CodeSplitter(language="fixed-form-fortran")),
+    ([".f90"],          CodeSplitter(language="fortran")),
     ([".go"],           CodeSplitter(language="go")),
     ([".hs"],           CodeSplitter(language="haskell")),
     ([".html", ".htm"], CodeSplitter(language="html")),
+    ([".inc", ".inl"],  CodeSplitter(language="cpp")),
     ([".java"],         CodeSplitter(language="java")),
     ([".jl"],           CodeSplitter(language="julia")),
     ([".js"],           CodeSplitter(language="javascript")),
     ([".kt", ".kts"],   CodeSplitter(language="kotlin")),
-    ([".lisp", ".cl"],  CodeSplitter(language="commonlisp")),
+    ([".lisp", ".lsp"], CodeSplitter(language="commonlisp")),
     ([".lua"],          CodeSplitter(language="lua")),
     ([".m"],            CodeSplitter(language="objc")),
     ([".ml", ".mli"],   CodeSplitter(language="ocaml")),
@@ -74,29 +76,28 @@ source_code_splitters = [
     ([".yaml", ".yml"], CodeSplitter(language="yaml")),
 ]
 
-extract_mime_content = set([
-    # Pull out any embedded text/html and uuencoded content
-    ".eml", ".msg", 
-    ".doc", # Special case, might be [unsupported] old Word binaries
+mime_file_types = set([
+    # Pull out embedded text/html and uuencoded files
+    ".eml", ".msg",
+    # Special case: sometimes actually MIME, not an old Word binary
+    ".doc", 
 ])
 
-unpack_archives = set([
-    # Optionally unpack archive formats and index their contents
+archive_file_types = set([
+    # Unpack these archive formats and index their contents too
     ".zip", ".7z", ".rar", 
     ".tar", ".gz", ".tgz", ".bz2", 
-    ".lzma", ".lz", ".lz4", 
+    ".lzma", ".lz", ".lz4", ".xz",
     ".zst", ".zstd", 
 ])
 
 chunk_as_text = set([
     # Plain text files, no special handling 
     ".txt", ".TXT", ".rtf", ".log", ".asc", 
-    ".ini", ".cfg", ".conf", ".config",
-
+    ".ini", ".cfg", 
     # FIXME - use a code splitter/loader when one becomes available
-    ".hlsl", ".hlsli", ".fxh", ".glsl", ".glsli",
-    ".shader", ".shadergraph",
-    ".xml", 
+    ".hlsl", ".hlsli", ".fxh", ".glsl", ".glsli", ".shader",
+    ".xml",
 ])
 
 model_nicknames = {
@@ -132,6 +133,7 @@ arg("--source-spec",    help="Index files matching a pathspec, like \"**/*.cpp\"
 arg("--source-list",    help="Text file with a list of filenames/pathspecs to index", action="append", metavar="FILE")
 arg("--custom-loader",  help="Use loaders from LlamaIndex hub, specify like \"JPEGReader:jpg,jpeg\"", action="append", metavar="SPEC")
 arg("--ignore-unknown", help="Ignore files with unrecognized extensions", action="store_true")
+arg("--index-archives", help="Index files inside .zip and other archives", action="store_true")
 arg("--no-cache",       help="Do not use the local cache for loaders", action="store_true")
 
 arg = parser.add_argument_group("Language model").add_argument
@@ -241,6 +243,20 @@ for file in args.source_list or []:
             search_specs.extend(specs)
     except Exception as e: log_error(e)
 
+
+
+# use python standard library to create a temporary directory
+temp_folder = tempfile.mkdtemp()
+
+
+
+
+# delete temp_folder when done
+if temp_folder:
+    shutil.rmtree(temp_folder)
+
+
+
 #------------------------------------------------------------------------------
 # Find files matching these specs
 #------------------------------------------------------------------------------
@@ -254,28 +270,52 @@ def split_root_from_spec(spec):
                 return spec[:sep_pos + 1], spec[sep_pos + 1:]
     return "", spec
 
+def match_files_to_index(search_spec):
+    """Find files matching a wildcard spec"""
+    all_matches = []
+    try:
+        if os.path.isfile(search_spec):
+            all_matches.append(search_spec)
+        else:
+            file_spec_root, file_spec = split_root_from_spec(search_spec)
+            file_spec_pattern = file_spec.replace(os.path.sep, '/') # required by pathspec
+            relative_pathspec = pathspec.PathSpec.from_lines('gitwildmatch', [file_spec_pattern])
+
+            matches = relative_pathspec.match_tree(file_spec_root)
+            matches = [os.path.join(file_spec_root, match) for match in matches]
+
+            log_verbose(f"\t{len(matches)} files match \"{os.path.normpath(file_spec)}\" from \"{os.path.normpath(file_spec_root)}\"")
+            all_matches.extend(matches)
+
+    except Exception as e: log_error(e)
+    return all_matches
+
+def separate_container_files(file_list):
+    """Separate out files that are actually archives"""
+    container_file_types = archive_file_types | mime_file_types
+    container_files = [f for f in file_list if os.path.splitext(f)[1] in container_file_types]
+    non_container_files = [f for f in file_list if not f in container_files]
+    return container_files, non_container_files
+
 files_to_index = []
 
+
 if len(search_specs) > 0:
-    log_verbose(f"Relative paths will be based on the current directory (\"{os.getcwd()}\")")
+    log_verbose(f"Relative paths will be based on the current directory: \"{os.getcwd()}\"")
     log(f"Searching for files...")
+
     with TimerUntil("search complete"):
         for search_spec in search_specs:
-            try:
-                if os.path.isfile(search_spec):
-                    files_to_index.append(search_spec)
-                else:
-                    file_spec_root, file_spec = split_root_from_spec(search_spec)
-                    file_spec_pattern = file_spec.replace(os.path.sep, '/') # required by pathspec
-                    relative_pathspec = pathspec.PathSpec.from_lines('gitwildmatch', [file_spec_pattern])
+            matches = match_files_to_index(search_spec)
+            files_to_index.extend(matches)
 
-                    matches = relative_pathspec.match_tree(file_spec_root)
-                    matches = [os.path.join(file_spec_root, match) for match in matches]
+    container_files, non_container_files = separate_container_files(files_to_index)
+    if len(container_files) > 0:
 
-                    log_verbose(f"\t{len(matches)} files match \"{os.path.normpath(file_spec)}\" from \"{os.path.normpath(file_spec_root)}\"")
-                    files_to_index.extend(matches)
 
-            except Exception as e: log_error(e)
+
+
+
 
 files_to_index = [os.path.abspath(os.path.normpath(f)) for f in files_to_index]
 files_to_index = sorted(set(files_to_index))
@@ -297,14 +337,6 @@ files_with_ext = {}
 for file_path in files_to_index:
     _, ext = os.path.splitext(file_path)
     files_with_ext[ext] = files_with_ext.get(ext, 0) + 1
-
-if '.doc' in files_with_ext:
-    actually_text_files = set()
-    for file_path in files_with_ext['.doc']:
-        _, ext = os.path.splitext(file_path)
-    del files_with_ext['.doc']
-
-
 
 if args.verbose and len(files_to_index) > 0:
     log_verbose(f"Supported files found:")

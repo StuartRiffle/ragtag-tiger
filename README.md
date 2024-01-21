@@ -6,9 +6,10 @@
 
 **RAG/TAG Tiger** is a simple [LlamaIndex](https://github.com/run-llama/llama_index) wrapper that:
 - provides a command line interface for doing primitive RAG queries on local documents/code
-- runs queries on an in-process LLM, a local inference server, or a commercial endpoint
+- runs queries using an in-process LLM, a local inference server, or a commercial endpoint
 - loads/updates/stores vector indices to avoid redundant processing
 - auto-downloads loaders from the [LlamaIndex hub](https://llamahub.ai) for custom file types
+- indexes documents inside .zip files (and other archives)
 - uses syntax-aware chunking for source code
 - supports pseudo-interactive "chat" on the command line
 
@@ -49,7 +50,7 @@ A full list is available on the help page:
 python ragtag.py --help
 ```
 
-It looks something like this:
+It looks like this:
 ```
 Options:
   -h, --help             Show this help message and exit
@@ -68,6 +69,7 @@ Document indexing:
   --custom-loader SPEC   Download from LlamaIndex hub, format "JPEGReader:jpg,jpeg"
   --no-cache             Do not use the local cache for loaders
   --ignore-unknown       Ignore files with unrecognized extensions
+  --index-archives       Index files inside .zip and other archives
  
 Language model: 
   --llm-provider NAME    { openai, anthropic, llamacpp, huggingface }
