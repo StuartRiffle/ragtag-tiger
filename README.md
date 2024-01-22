@@ -66,7 +66,7 @@ To use the built-in `llama.cpp` [libraries](https://pypi.org/project/llama-cpp-p
 
 To connect to an actual [OpenAI](https://platform.openai.com/) endpoint:
 - authenticate by setting `OPENAI_API_KEY` etc in your environment (or override it with `--llm-api-key`)
-- specify [one of their models](https://platform.openai.com/docs/models) using `--llm-model` (the default otherwise is `gpt-3.5-turbo-instruct`)
+- select [one of their models](https://platform.openai.com/docs/models) using `--llm-model` (the default otherwise is `gpt-3.5-turbo-instruct`)
 - do not set a custom `--llm-server`
 - remind yourself that RAG queries will exfiltrate chunks of your indexed documents
 ```
@@ -80,7 +80,7 @@ An up-to-date list of options is available on the help page:
 python ragtag.py --help
 ```
 
-It looks roughly like this:
+It looks like this:
 ```
 Options:
   -h, --help             Show this help message and exit
@@ -151,6 +151,8 @@ python ragtag.py                                        \
     --chat-log        it_still_hurts.txt                \
     --chat
 ```
+
+You can also set standard arguments in an environment variable called `RAGTAG_FLAGS`. They will be added to the end of every command.
 
 A more flexible way to manage complex configuration is to factor out groups of arguments into "response files". The rules there are:
 - **every argument must be on its own line**

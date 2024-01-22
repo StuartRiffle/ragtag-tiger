@@ -2,6 +2,7 @@
 # Copyright (c) 2024 Stuart Riffle
 
 import os, argparse, time, json, pathspec, tempfile, shutil, torch, hashlib, py7zr
+import shlex
 import email, email.policy, email.parser, email.message
 from llama_index import VectorStoreIndex, StorageContext, ServiceContext, SimpleDirectoryReader
 from llama_index import download_loader, set_global_service_context, load_index_from_storage
@@ -168,9 +169,10 @@ arg("--chat-init-file", help="File containing a snippet of chat LLM instructions
 arg("--chat-log",       help="Append chat queries and responses to a text file", metavar="FILE")
 arg("--chat-mode",      help="Chat response mode", choices=["best", "context", "condense_question", "simple", "react", "openai"], default="best")
 
-print(f"{program_name} {program_version}")
-
+os.sys.argv += shlex.split(os.environ.get("RAGTAG_FLAGS", ""))
 args = parser.parse_args()
+
+print(f"{program_name} {program_version}")
 if args.version:
     exit(0)
 
