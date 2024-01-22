@@ -38,7 +38,6 @@ source_code_splitters = [
     # Source code files get syntax-aware chunking
     ([".c", ".h"],      CodeSplitter(language="cpp")),            
     ([".cl"],           CodeSplitter(language="commonlisp")),
-    ([".clj"],          CodeSplitter(language="clojure")),
     ([".cpp", ".hpp"],  CodeSplitter(language="cpp")),
     ([".cxx", ".hxx"],  CodeSplitter(language="cpp")),
     ([".cs"],           CodeSplitter(language="c_sharp")),
@@ -48,8 +47,7 @@ source_code_splitters = [
     ([".el", ".emacs"], CodeSplitter(language="elisp")),
     ([".elm"],          CodeSplitter(language="elm")),
     ([".ex", ".exs"],   CodeSplitter(language="elixir")),
-    ([".f", ".for"],    CodeSplitter(language="fixed-form-fortran")),
-    ([".f90"],          CodeSplitter(language="fortran")),
+    ([".f", ".f90"],    CodeSplitter(language="fortran")),
     ([".go"],           CodeSplitter(language="go")),
     ([".hs"],           CodeSplitter(language="haskell")),
     ([".html", ".htm"], CodeSplitter(language="html")),
@@ -79,13 +77,13 @@ source_code_splitters = [
 mime_file_types = set([
     # Pull out embedded text/html and uuencoded files
     ".eml", ".msg",
-    # Special case: sometimes actually MIME, not an old Word binary
+    # Special case: sometimes actually MIME, not old binary Word docs
     ".doc", 
 ])
 
 shutil.register_unpack_format('7zip', ['.7z'], py7zr.unpack_7zarchive)        
 archive_file_types = set([
-    # Unpack these archive formats and index their contents too
+    # Unpack these archive formats so we can index their contents too
     ".zip", ".7z", ".tar", ".gz", ".tgz", ".bz2", ".tbz2", ".xz", ".txz", 
     # FIXME - unsupported
     # ".rar", ".lzma", ".lz", ".lz4", ".zst", ".zstd"
@@ -95,8 +93,9 @@ chunk_as_text = set([
     # Plain text files, no special handling 
     ".txt", ".TXT", ".rtf", ".log", ".asc", 
     ".ini", ".cfg", 
-    # FIXME - use a code splitter/loader when one becomes available
+    # FIXME - use a proper splitter/loader when one becomes available
     ".hlsl", ".hlsli", ".fxh", ".glsl", ".glsli", ".shader",
+    ".asm", ".s",
     ".xml",
 ])
 
@@ -133,7 +132,7 @@ arg("--source-spec",    help="Index files matching a pathspec, like \"**/*.cpp\"
 arg("--source-list",    help="Text file with a list of filenames/pathspecs to index", action="append", metavar="FILE")
 arg("--custom-loader",  help="Use loaders from LlamaIndex hub, specify like \"JPEGReader:jpg,jpeg\"", action="append", metavar="SPEC")
 arg("--ignore-unknown", help="Ignore files with unrecognized extensions", action="store_true")
-arg("--index-archives", help="Index files inside .zip and other archives", action="store_true")
+arg("--ignore-archives",help="Do not index files inside zip/tar/etc archives", action="store_true")
 arg("--no-cache",       help="Do not use the local cache for loaders", action="store_true")
 
 arg = parser.add_argument_group("Language model").add_argument
@@ -155,8 +154,8 @@ arg("--query-file",     help="File containing one long query", action="append", 
 arg("--query-log",      help="Log queries and responses to a text file", metavar="FILE")
 arg("--query-log-json", help="Log queries and responses (plus some metadata) to a JSON file", metavar="FILE")
 arg("--query-mode",     help="Query response mode", choices=["accumulate", "compact", "compact_accumulate", "generation", "no_text", "refine", "simple_summarize", "tree_summarize"], default="tree_summarize")
-arg("--tag-queries",    help="The name/header in the transcript for user queries", metavar="NAME", default="Query")
-arg("--tag-responses",  help="The name/header in the transcript for engine responses", metavar="NAME", default="Response")
+arg("--tag-queries",    help="The name/header in the transcript for user queries", metavar="NAME", default="User")
+arg("--tag-responses",  help="The name/header in the transcript for engine responses", metavar="NAME", default="Tiger")
 
 arg = parser.add_argument_group("Interactive chat").add_argument
 arg("--chat",           help="Enter chat after any query processing", action="store_true")
@@ -243,48 +242,9 @@ for file in args.source_list or []:
             search_specs.extend(specs)
     except Exception as e: log_error(e)
 
-
-
-
-
 #------------------------------------------------------------------------------
-# Find files matching these specs
+# Support for searching inside container types like file archives and MIME
 #------------------------------------------------------------------------------
-
-def split_root_from_spec(spec):
-    """Split off the root path from the wildcard part if possible"""
-    for pos in range(len(spec)):
-        if spec[pos] == "*" or spec[pos] == "?":
-            sep_pos = spec.rfind(os.path.sep, 0, pos)
-            if sep_pos >= 0:
-                return spec[:sep_pos + 1], spec[sep_pos + 1:]
-    return "", spec
-
-def match_files_to_index(search_spec):
-    """Find files matching a wildcard spec"""
-    all_matches = []
-    try:
-        if os.path.isfile(search_spec):
-            all_matches.append(search_spec)
-        else:
-            file_spec_root, file_spec = split_root_from_spec(search_spec)
-            file_spec_pattern = file_spec.replace(os.path.sep, '/') # required by pathspec
-            relative_pathspec = pathspec.PathSpec.from_lines('gitwildmatch', [file_spec_pattern])
-
-            matches = relative_pathspec.match_tree(file_spec_root)
-            matches = [os.path.join(file_spec_root, match) for match in matches]
-
-            log_verbose(f"\t{len(matches)} files match \"{os.path.normpath(file_spec)}\" from \"{os.path.normpath(file_spec_root)}\"")
-            all_matches.extend(matches)
-
-    except Exception as e: log_error(e)
-    return all_matches
-
-def separate_files_by_extension(file_list, extensions):
-    """Separate out files with certain extensions"""
-    matching_files = set([f for f in file_list if os.path.splitext(f)[1] in extensions])
-    non_matching_files = set([f for f in file_list if not f in matching_files])
-    return matching_files, non_matching_files
 
 def unpack_temp_container(container_file, temp_folder):
     """Unpack a container file into a temporary folder"""
@@ -340,7 +300,47 @@ def unpack_temp_container(container_file, temp_folder):
 
     return unpacked_files
 
+#------------------------------------------------------------------------------
+# Find files matching the search specs
+#------------------------------------------------------------------------------
+
+def split_root_from_spec(spec):
+    """Split off the root path from the wildcard part if possible"""
+    for pos in range(len(spec)):
+        if spec[pos] == "*" or spec[pos] == "?":
+            sep_pos = spec.rfind(os.path.sep, 0, pos)
+            if sep_pos >= 0:
+                return spec[:sep_pos + 1], spec[sep_pos + 1:]
+    return "", spec
+
+def match_files_to_index(search_spec):
+    """Find files matching a wildcard spec"""
+    all_matches = []
+    try:
+        if os.path.isfile(search_spec):
+            all_matches.append(search_spec)
+        else:
+            file_spec_root, file_spec = split_root_from_spec(search_spec)
+            file_spec_pattern = file_spec.replace(os.path.sep, '/') # required by pathspec
+            relative_pathspec = pathspec.PathSpec.from_lines('gitwildmatch', [file_spec_pattern])
+
+            matches = relative_pathspec.match_tree(file_spec_root)
+            matches = [os.path.join(file_spec_root, match) for match in matches]
+
+            log_verbose(f"\t{len(matches)} files match \"{os.path.normpath(file_spec)}\" from \"{os.path.normpath(file_spec_root)}\"")
+            all_matches.extend(matches)
+
+    except Exception as e: log_error(e)
+    return all_matches
+
+def separate_files_by_extension(file_list, extensions):
+    """Separate out files with certain extensions"""
+    matching_files = set([f for f in file_list if os.path.splitext(f)[1].lower() in extensions])
+    non_matching_files = set([f for f in file_list if not f in matching_files])
+    return matching_files, non_matching_files
+
 files_to_index = []
+temp_folder = None
 
 if len(search_specs) > 0:
     log_verbose(f"Relative paths will be based on current directory \"{os.path.normpath(os.getcwd())}\"")
@@ -378,11 +378,6 @@ if len(search_specs) > 0:
             # Unpack nested containers
             files_to_check = all_unpacked_files
 
-
-
-
-
-
 files_to_index = [os.path.abspath(os.path.normpath(f)) for f in files_to_index]
 files_to_index = sorted(set(files_to_index))
 
@@ -402,6 +397,7 @@ supported_ext.update(chunk_as_text)
 files_with_ext = {}
 for file_path in files_to_index:
     _, ext = os.path.splitext(file_path)
+    ext = ext.lower()
     files_with_ext[ext] = files_with_ext.get(ext, 0) + 1
 
 if args.verbose and len(files_to_index) > 0:
@@ -410,7 +406,6 @@ if args.verbose and len(files_to_index) > 0:
     for ext, count in sorted_items:
         if ext in supported_ext:
             log_verbose(f"\t{count:<5} {ext}")
-
 
 unsupported_ext = set(files_with_ext.keys()) - supported_ext
 if len(unsupported_ext) > 0:
@@ -424,7 +419,7 @@ if args.ignore_unknown:
     files_before = len(files_to_index)
     files_to_index = [f for f in files_to_index if os.path.splitext(f)[1] in supported_ext]
     if len(files_to_index) < files_before:
-        log_verbose(f"\t{files_before - len(files_to_index)} files ignored")
+        log_verbose(f"\t...{files_before - len(files_to_index)} files ignored")
 
 loader_specs = args.custom_loader or []
 for ext in files_with_ext.keys():
@@ -475,8 +470,7 @@ if len(files_to_index) > 0:
     files_processed = 0
     try:
         non_code_files = [f for f in files_to_index if os.path.splitext(f)[1] not in code_ext]
-        if False:#####len(non_code_files) > 0:
-            # FIXME - this hangs on some files
+        if len(non_code_files) > 0:
             log(f"Loading {len(non_code_files)} documents...")
             with TimerUntil("all documents loaded"):
                 non_code_nodes = load_document_nodes(None, non_code_files, show_progress=args.verbose)
@@ -495,6 +489,13 @@ if len(files_to_index) > 0:
                         files_processed += len(code_files)
 
     except Exception as e: log_error(e)
+
+if temp_folder:
+    log(f"Removing temporary folder \"{os.path.normpath(temp_folder)}\"...")
+    try:
+        with TimerUntil("done"):
+            shutil.rmtree(temp_folder)
+    except Exception as e: log_error(e)    
 
 #------------------------------------------------------------------------------
 # Collect the user queries
@@ -586,7 +587,7 @@ if len(queries) > 0 or args.chat:
                     model_kwargs=model_kwargs,
                     verbose=args.llm_verbose,
                     **constructor_params)
-                log_verbose(f"\tusing model \"{os.path.normpath(args.llm_model)}\" for llama.cpp local inference")
+                log_verbose(f"\tusing local llama.cpp with \"{os.path.normpath(args.llm_model)}\"")
             
             else: # default to "huggingface"
                 model_desc = ""
@@ -687,6 +688,8 @@ response_prefix = f"{tag_responses}: " if tag_responses else ""
 
 if len(queries) > 0:
     log(f"Running {len(queries)} queries...")
+    log_verbose("")
+
     with TimerUntil(f"all queries complete"):
         chat_log = ""
         json_log = {
@@ -699,7 +702,7 @@ if len(queries) > 0:
 
             try:
                 with TimerUntil("query complete"):
-                    log_verbose(f"\n{query_prefix}{query}\n\t...thinking ", end="")
+                    log_verbose(f"{query_prefix}{query}\n\t...thinking ", end="")
                     query_start_time = time.time()
 
                     streaming_response = query_engine.query(query)
@@ -727,6 +730,8 @@ if len(queries) > 0:
 
             chat_log += f"{query_prefix}{query}\n"
             chat_log += f"{response_prefix}{response}\n\n"
+
+    log_verbose("")
 
     if args.query_log:
         log(f"Writing query log to \"{args.query_log}\"...")
@@ -818,7 +823,7 @@ if args.chat:
                 if len(response_tokens) == 0:
                     if not token.strip():
                         continue
-                    log(f"\r{response_prefix:len(thinking_message)}", end="\r")
+                    log(f"\r{' ' * len(thinking_message)}", end="\r")
                     log(response_prefix, end="")
 
                 response_tokens.append(token)
@@ -839,12 +844,5 @@ if args.chat:
 # Summary
 #------------------------------------------------------------------------------
 
-if temp_folder:
-    log_verbose(f"Removing temporary folder \"{os.path.normpath(temp_folder)}\"...")
-    try:
-        with TimerUntil("done"):
-            shutil.rmtree(temp_folder)
-    except Exception as e: log_error(e)
-
-total_time = f" ({time_since(start_time)})")
-log(f"Peace, tiger out{total_time if args.verbose else ''}.")
+total_time = f"({time_since(start_time)})" if args.verbose else ""
+log(f"\nTiger out, peace. {total_time}")
