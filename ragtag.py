@@ -273,17 +273,22 @@ def unpack_temp_container(container_file, temp_folder):
                 for part in msg.walk():
                     part_type = part.get_content_type()
                     part_content = part.get_content()
-                    part_name = part.get_filename()
                     part_maintype = part.get_content_maintype()
-                    part_counter += 1
 
                     filename_prefix = f"part-{part_counter:03d}"
-                    if part_type == "text/html":
-                        output_filename = filename_prefix + ".html"
-                    elif part_type == "text/plain":
-                        output_filename = filename_prefix + ".txt"
+                    part_counter += 1
+
+                    if part_maintype == "text":
+                        part_encoding = part.get_content_charset() or "utf-8"
+                        part_text = part_content.decode(part_encoding, errors="ignore")
+                        part_content = part_text.encode("utf-8", errors="ignore")
+                        if part_type == "text/html":
+                            output_filename = filename_prefix + ".html"
+                        else:
+                            output_filename = filename_prefix + ".txt"
+                        
                     elif part_type == "application/octet-stream" or part_maintype == "image":
-                        output_filename = f"{filename_prefix}-{part_name}"
+                        output_filename = f"{filename_prefix}-{part.get_filename()}"
                     else:
                         log_verbose(f"\tignoring unrecognized MIME part of type \"{part_type}\" in \"{os.path.normpath(container_file)}\"")
                         continue
@@ -413,7 +418,7 @@ if args.verbose and len(files_to_index) > 0:
 unsupported_ext = set(files_with_ext.keys()) - supported_ext
 if len(unsupported_ext) > 0:
     ext_action = "IGNORED" if args.ignore_unknown else "indexed as PLAIN TEXT"
-    type_list = ", ".join(sorted(unsupported_ext)).replace(".", "").lower()
+    type_list = ", ".join(sorted(unsupported_ext)).replace(".", "").strip(", ").lower()
     log_verbose(f"Unsupported file types {ext_action}: {type_list}")
 
 if args.ignore_unknown:
@@ -494,13 +499,29 @@ if len(files_to_index) > 0:
 
     except Exception as e: log_error(e)
 
-if temp_folder:
-    info = f" \"{os.path.normpath(temp_folder)}\"" if args.verbose else ""
-    log(f"Removing temporary folder{info}...")
-    try:
+#------------------------------------------------------------------------------
+# Clean up temporary files (or try to, anyway)
+#------------------------------------------------------------------------------
+
+def clean_up_temporary_files():
+    if temp_folder and os.file.exists(temp_folder):
+        info = f" \"{os.path.normpath(temp_folder)}\"" if args.verbose else ""
+        log(f"Removing temporary folder{info}...")
         with TimerUntil("done"):
-            shutil.rmtree(temp_folder)
-    except Exception as e: log_error(e)    
+            for attempt_after_delay in [0, 1, 3]:
+                time.sleep(attempt_after_delay)
+                try:
+                    shutil.rmtree(temp_folder)
+                    temp_folder = None
+                    break
+                except Exception as e: 
+                    # Errors are expected when the OS has files open, all we can do is try again later
+                    log_verbose(f"\tfailed: {e}")
+
+if temp_folder:
+    clean_up_temporary_files()
+if temp_folder:
+    log_error(f"couldn't clean up the temporary files, will try again at shutdown")
 
 #------------------------------------------------------------------------------
 # Collect the user queries
@@ -571,7 +592,7 @@ if len(queries) > 0 or args.chat:
                         verbose=args.llm_verbose)
                     log_verbose(f"\tusing OpenAI model \"{llm.model}\"")
                 else:
-                    # API compatibility layer
+                    # API compatible server
                     llm = OpenAILike(
                         model=args.llm_model or "default",
                         model_kwargs=model_kwargs,
@@ -589,18 +610,16 @@ if len(queries) > 0 or args.chat:
                     verbose=args.llm_verbose)
                 log_verbose(f"\tusing Anthropic model \"{llm.model}\"")
                 
-            ### llama.cpp
+            ### Llama.cpp
             elif args.llm_provider == "llamacpp":
-                constructor_params = {}
                 if torch.cuda.is_available():
-                    # this does not work
+                    # FIXME - this does nothing
                     model_kwargs["n_gpu_layers"] = -1
                     model_kwargs["device"] = "cuda"
                 llm = LlamaCPP(
                     model_path=args.llm_model,
                     model_kwargs=model_kwargs,
-                    verbose=args.llm_verbose,
-                    **constructor_params)
+                    verbose=args.llm_verbose)
                 log_verbose(f"\tusing local llama.cpp with \"{os.path.normpath(args.llm_model)}\"")
             
             ### HuggingFace
@@ -674,7 +693,6 @@ if args.index_store:
                 os.makedirs(args.index_store)
             vector_index.storage_context.persist(persist_dir=args.index_store)
     except Exception as e: log_error(e)
-
 
 #------------------------------------------------------------------------------
 # Initialize the query engine
@@ -862,6 +880,11 @@ if args.chat:
 #------------------------------------------------------------------------------
 # Summary
 #------------------------------------------------------------------------------
+
+if temp_folder:
+    clean_up_temporary_files()
+if temp_folder:
+    log_error(f"unable to delete temporary files in \"{os.path.normpath(temp_folder)}\"")
 
 total_time = f"({time_since(start_time)})" if args.verbose else ""
 log(f"\nTiger out, peace. {total_time}")
