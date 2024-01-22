@@ -86,7 +86,7 @@ archive_file_types = set([
     # Unpack these archive formats so we can index their contents too
     ".zip", ".7z", ".tar", ".gz", ".tgz", ".bz2", ".tbz2", ".xz", ".txz", 
     # FIXME - unsupported
-    # ".rar", ".lzma", ".lz", ".lz4", ".zst", ".zstd"
+    # ".rar", ".lzma", ".lz", ".lz4", ".zst", 
 ])
 
 chunk_as_text = set([
@@ -100,7 +100,13 @@ chunk_as_text = set([
 ])
 
 model_nicknames = {
-    "default": "TheBloke/Mistral-7B-Instruct-v0.2-GGUF", 
+    "tiny":     "TheBloke/Mistral-7B-Instruct-v0.2-GGUF",
+    "small":    "TheBloke/Mistral-7B-Instruct-v0.2-GGUF",   # Fits in 6GB (RTX 2060)
+    "default":  "TheBloke/Mistral-7B-Instruct-v0.2-GGUF",   # Fits in 12GB (RTX 3080)
+    "large":    "TheBloke/Mistral-7B-Instruct-v0.2-GGUF",   # Fits in 24GB (RTX 4090)
+    "huge":     "TheBloke/Mistral-7B-Instruct-v0.2-GGUF",   # Fits in 48GB (RTX 4090 x2)
+    "best":     "TheBloke/Mistral-7B-Instruct-v0.2-GGUF",
+
 }
 
 #------------------------------------------------------------------------------
@@ -603,6 +609,7 @@ if len(queries) > 0 or args.chat:
             
             ### HuggingFace
             else:
+                os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
                 model_desc = ""
                 model_name = args.llm_model or "default"
                 if model_name in model_nicknames:

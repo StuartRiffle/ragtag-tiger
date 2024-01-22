@@ -14,3 +14,6 @@ tree-sitter-languages
 py7zr
 zstd
 rarfile
+python-pptx
+pillow
+pypdf
