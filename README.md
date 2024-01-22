@@ -13,7 +13,7 @@
 - uses language-aware chunking for source code
 - supports pseudo-interactive "chat" from the command line
 
-It was written for personal use, and it's mostly the same boilerplate/glue you were going to have to write anyway, but if this code saves you an afternoon of sifting through machine-generated LlamaIndex tutorials and arguing with Copilot, please feel free to buy me a coffee.
+It was written for personal use, and it's mostly the same boilerplate/glue code you were going to have to write anyway, but if it saves you an afternoon of sifting through machine-generated LlamaIndex tutorials and arguing with Copilot, please feel free to buy me a coffee.
 
 # Setup
 ```
@@ -54,14 +54,14 @@ Another local option is [text-generation-webui](https://github.com/oobabooga/tex
 --llm-provider openai --llm-server http://localhost:5000/v1
 ```
 
-Running your own `llama.cpp` [server](https://github.com/ggerganov/llama.cpp) requires that you also run `examples/server/api_like_OAI.py` for OpenAI compatibility. Then you can connect the same way:
+Running your own `llama.cpp` [server](https://github.com/ggerganov/llama.cpp) requires that you also run `examples/server/api_like_OAI.py` for OpenAI compatibility. Then you can connect in a similar way:
 ```
 --llm-provider openai --llm-server http://YOUR_SERVER:8081
 ```
 
 To use built-in `llama.cpp` [libraries](https://pypi.org/project/llama-cpp-python/) locally (without running your own server), supply a model filename to provider "llamacpp":
 ```
---llm-provider llamacpp --llm-model phind-codellama-34b-v2.Q4_K_M.gguf
+--llm-provider llamacpp --llm-model codellama-34b.Q4_K_M.gguf
 ```
 
 To connect to an actual [OpenAI](https://platform.openai.com/) endpoint:
@@ -96,7 +96,7 @@ Document indexing:
   --source FOLDER        Folder of files to be indexed recursively
   --source-spec SPEC     Index files matching a pathspec, like "**/*.cpp"
   --source-list FILE     Text file with a list of filenames/pathspecs to index
-  --custom-loader SPEC   Download from LlamaIndex hub, format "JPEGReader:jpg,jpeg"
+  --custom-loader SPEC   Download from hub, i.e. "JPEGReader:jpg,jpeg"
   --no-cache             Do not use the local cache for loaders
   --ignore-unknown       Ignore files with unrecognized extensions
   --index-archives       Index files inside .zip and other archives

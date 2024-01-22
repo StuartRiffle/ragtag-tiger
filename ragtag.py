@@ -99,7 +99,9 @@ chunk_as_text = set([
     ".xml",
 ])
 
-model_nicknames = {
+openai_model_default = "gpt-3.5-turbo-instruct"
+
+hf_model_nicknames = {
     "default": "codellama/CodeLlama-7b-Instruct-hf",
     #"TheBloke/CodeLlama-7B-Instruct-GPTQ", requires package "auto-gptq"
     #"TheBloke/Mistral-7B-Instruct-v0.2-GGUF",
@@ -132,7 +134,7 @@ arg = parser.add_argument_group("Document indexing").add_argument
 arg("--source",         help="Folder of files to be indexed recursively", action="append", metavar="FOLDER")
 arg("--source-spec",    help="Index files matching a pathspec, like \"**/*.cpp\"", action="append", metavar="SPEC")
 arg("--source-list",    help="Text file with a list of filenames/pathspecs to index", action="append", metavar="FILE")
-arg("--custom-loader",  help="Use loaders from LlamaIndex hub, specify like \"JPEGReader:jpg,jpeg\"", action="append", metavar="SPEC")
+arg("--custom-loader",  help="Download from hub, i.e. \"JPEGReader:jpg,jpeg\"", action="append", metavar="SPEC")
 arg("--ignore-unknown", help="Ignore files with unrecognized extensions", action="store_true")
 arg("--ignore-archives",help="Do not index files inside zip/tar/etc archives", action="store_true")
 arg("--no-cache",       help="Do not use the local cache for loaders", action="store_true")
@@ -268,15 +270,14 @@ def unpack_temp_container(container_file, temp_folder):
             tricksy_binary_doc_file = looks_like_binary and container_type == ".doc"
             if not tricksy_binary_doc_file:
                 msg = email.message_from_bytes(file_bytes, policy=email.policy.default)
-
                 part_counter = 0
+
                 for part in msg.walk():
+                    filename_prefix = f"part-{part_counter:03d}"
+                    part_counter += 1
                     part_type = part.get_content_type()
                     part_content = part.get_content()
                     part_maintype = part.get_content_maintype()
-
-                    filename_prefix = f"part-{part_counter:03d}"
-                    part_counter += 1
 
                     if part_maintype == "text":
                         part_encoding = part.get_content_charset() or "utf-8"
@@ -505,23 +506,29 @@ if len(files_to_index) > 0:
 
 def clean_up_temporary_files():
     if temp_folder and os.file.exists(temp_folder):
-        info = f" \"{os.path.normpath(temp_folder)}\"" if args.verbose else ""
+        info = f" \"{temp_folder}\"" if args.verbose else ""
         log(f"Removing temporary folder{info}...")
-        with TimerUntil("done"):
-            for attempt_after_delay in [0, 1, 3]:
-                time.sleep(attempt_after_delay)
-                try:
-                    shutil.rmtree(temp_folder)
-                    temp_folder = None
-                    break
-                except Exception as e: 
-                    # Errors are expected when the OS has files open, all we can do is try again later
-                    log_verbose(f"\tfailed: {e}")
+        time_before = time.time()
+        for reattempt_after_delay in [0, 2, 5, 10]:
+            if reattempt_after_delay:
+                log_verbose(f"\t...retrying in {reattempt_after_delay} seconds")
+                time.sleep(reattempt_after_delay)
+            try:
+                shutil.rmtree(temp_folder)
+                temp_folder = None
+                break
+            except Exception as e: 
+                # Errors are expected sometimes if the OS has files open
+                log_verbose(f"\tignoring error: {e}")
+        if temp_folder:
+            log_error(f"couldn't remove temporary folder \"{temp_folder}\"")
+        else:
+            log_verbose(f"\t...success ({time_since(time_before)})")
 
 if temp_folder:
     clean_up_temporary_files()
 if temp_folder:
-    log_error(f"couldn't clean up the temporary files, will try again before shutdown")
+    log_verbose(f"\t(will try again before exiting)")
 
 #------------------------------------------------------------------------------
 # Collect the user queries
@@ -586,7 +593,7 @@ try:
                 os.environ["OPENAI_API_KEY"] = args.llm_api_key
             if not args.llm_server:
                 llm = OpenAI(
-                    model=args.llm_model,
+                    model=args.llm_model or openai_model_default,
                     model_kwargs=model_kwargs,
                     verbose=args.llm_verbose)
                 log_verbose(f"\tusing OpenAI model \"{llm.model}\"")
@@ -625,9 +632,9 @@ try:
             os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
             model_desc = ""
             model_name = args.llm_model or "default"
-            if model_name in model_nicknames:
+            if model_name in hf_model_nicknames:
                 model_desc = f"\"{model_name}\" which is HF model "
-                model_name = model_nicknames[model_name]
+                model_name = hf_model_nicknames[model_name]
             llm = HuggingFaceLLM(
                 model_name=model_name,
                 model_kwargs=model_kwargs, 
@@ -883,8 +890,6 @@ if args.chat:
 
 if temp_folder:
     clean_up_temporary_files()
-if temp_folder:
-    log_error(f"unable to delete temporary files in \"{os.path.normpath(temp_folder)}\"")
 
 total_time = f"({time_since(start_time)})" if args.verbose else ""
-log(f"\nTiger out, peace. {total_time}")
+log(f"Tiger out, peace {total_time}")
