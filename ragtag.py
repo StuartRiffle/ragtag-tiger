@@ -190,7 +190,8 @@ def log_error(msg, exit_code=0, prefix="\t", suffix="", **kwargs):
     if exit_code:
         exit(exit_code)
 
-log_verbose(f"{program_copyright}\n")
+log_verbose(f"{program_copyright}")
+log("")
 
 #------------------------------------------------------------------------------
 # A scope timer for verbose mode
@@ -411,7 +412,7 @@ unsupported_ext = set(files_with_ext.keys()) - supported_ext
 if len(unsupported_ext) > 0:
     ext_action = "IGNORED" if args.ignore_unknown else "indexed as PLAIN TEXT"
     type_list = ", ".join(sorted(unsupported_ext)).replace(".", "").lower()
-    log(f"Unsupported files will be {ext_action}: {type_list}")
+    log_verbose(f"Unsupported file types {ext_action}: {type_list}")
 
 if args.ignore_unknown:
     for ext in unsupported_ext:
@@ -419,7 +420,7 @@ if args.ignore_unknown:
     files_before = len(files_to_index)
     files_to_index = [f for f in files_to_index if os.path.splitext(f)[1] in supported_ext]
     if len(files_to_index) < files_before:
-        log_verbose(f"\t...{files_before - len(files_to_index)} files ignored")
+        log_verbose(f"\t...{files_before - len(files_to_index)} files dropped")
 
 loader_specs = args.custom_loader or []
 for ext in files_with_ext.keys():
@@ -471,14 +472,15 @@ if len(files_to_index) > 0:
     try:
         non_code_files = [f for f in files_to_index if os.path.splitext(f)[1] not in code_ext]
         if len(non_code_files) > 0:
-            log(f"Loading {len(non_code_files)} documents...")
+            info = f" {len(non_code_files)}" if args.verbose else ""
+            log(f"Loading{info} documents...")
             with TimerUntil("all documents loaded"):
                 non_code_nodes = load_document_nodes(None, non_code_files, show_progress=args.verbose)
                 document_nodes.extend(non_code_nodes)
                 files_processed += len(non_code_files)
 
         if len(non_code_files) < len(files_to_index):
-            log(f"Chunking code...")
+            log(f"Chunking source code...")
             with TimerUntil("all code chunked"):
                 for extensions, code_splitter in source_code_splitters:
                     code_files = [f for f in files_to_index if os.path.splitext(f)[1] in extensions]
@@ -491,7 +493,8 @@ if len(files_to_index) > 0:
     except Exception as e: log_error(e)
 
 if temp_folder:
-    log(f"Removing temporary folder \"{os.path.normpath(temp_folder)}\"...")
+    info = f" \"{os.path.normpath(temp_folder)}\"" if args.verbose else ""
+    log(f"Removing temporary folder{info}...")
     try:
         with TimerUntil("done"):
             shutil.rmtree(temp_folder)
@@ -553,31 +556,40 @@ if len(queries) > 0 or args.chat:
     log(f"Initializing language model...")
     try:
         with TimerUntil("ready"):
+            model_kwargs = args.llm_param or {}
+
+            ### OpenAI
             if args.llm_provider == "openai":
                 if args.llm_api_key:
                     os.environ["OPENAI_API_KEY"] = args.llm_api_key
-                if args.llm_server:
-                    llm = OpenAILike(
-                        model=args.llm_model or "default",
-                        api_base=args.llm_server,
-                        verbose=args.llm_verbose)
-                    log_verbose(f"\tusing model \"{llm.model}\" on OpenAI API server \"{args.llm_server}\"")
-                else:
+                if not args.llm_server:
                     llm = OpenAI(
                         model=args.llm_model,
+                        model_kwargs=model_kwargs,
                         verbose=args.llm_verbose)
                     log_verbose(f"\tusing OpenAI model \"{llm.model}\"")
+                else:
+                    # API compatibility layer
+                    llm = OpenAILike(
+                        model=args.llm_model or "default",
+                        model_kwargs=model_kwargs,
+                        api_base=args.llm_server,
+                        max_iterations=100,
+                        verbose=args.llm_verbose)
+                    log_verbose(f"\tusing model \"{llm.model}\" on OpenAI API server \"{args.llm_server}\"")
                 
+            ### Anthropic
             elif args.llm_provider == "anthropic":
                 llm = Anthropic(
                     model=args.llm_model,
+                    model_kwargs=model_kwargs,
                     base_url=args.llm_server,
                     verbose=args.llm_verbose)
                 log_verbose(f"\tusing Anthropic model \"{llm.model}\"")
                 
+            ### llama.cpp
             elif args.llm_provider == "llamacpp":
                 constructor_params = {}
-                model_kwargs = args.llm_param or {}
                 if torch.cuda.is_available():
                     # this does not work
                     model_kwargs["n_gpu_layers"] = -1
@@ -589,14 +601,16 @@ if len(queries) > 0 or args.chat:
                     **constructor_params)
                 log_verbose(f"\tusing local llama.cpp with \"{os.path.normpath(args.llm_model)}\"")
             
-            else: # default to "huggingface"
+            ### HuggingFace
+            else:
                 model_desc = ""
                 model_name = args.llm_model or "default"
                 if model_name in model_nicknames:
                     model_desc = f"\"{model_name}\" which is HF model "
                     model_name = model_nicknames[model_name]
                 llm = HuggingFaceLLM(
-                    model_name, 
+                    model_name,
+                    model_kwargs=model_kwargs, 
                     device_map=args.torch_device or "auto",
                     system_prompt=system_prompt)
                 log_verbose(f"\tusing model {model_desc}\"{model_name}\" for local inference with HuggingFace")
@@ -626,7 +640,8 @@ if llm:
 vector_index = None
 
 if args.index_load:
-    log(f"Loading the vector index in \"{os.path.normpath(args.index_load)}\"...")
+    info = f" in \"{os.path.normpath(args.index_load)}\"" if args.verbose else ""
+    log(f"Loading the vector index{info}...")
     try:
         with TimerUntil("loaded"):
             storage_context = StorageContext.from_defaults(persist_dir=args.index_load)
@@ -640,14 +655,16 @@ if not vector_index:
     except Exception as e: log_error(e, exit_code=1)
     
 if len(document_nodes) > 0:
-    log(f"Indexing {len(document_nodes)} document nodes...")
+    info = f" {len(document_nodes)}" if args.verbose else ""
+    log(f"Indexing{info} document nodes...")
     try:
         with TimerUntil("indexing complete"):
             vector_index.insert_nodes(document_nodes, show_progress=args.verbose)
     except Exception as e: log_error(e)
 
 if args.index_store:
-    log(f"Storing vector index in \"{os.path.normpath(args.index_store)}\"...")
+    info = f" in \"{os.path.normpath(args.index_store)}\"" if args.verbose else ""
+    log(f"Storing vector index{info}...")
     try:
         with TimerUntil("index stored"):
             if not os.path.exists(args.index_store):
@@ -688,8 +705,6 @@ response_prefix = f"{tag_responses}: " if tag_responses else ""
 
 if len(queries) > 0:
     log(f"Running {len(queries)} queries...")
-    log_verbose("")
-
     with TimerUntil(f"all queries complete"):
         chat_log = ""
         json_log = {
@@ -702,7 +717,7 @@ if len(queries) > 0:
 
             try:
                 with TimerUntil("query complete"):
-                    log_verbose(f"{query_prefix}{query}\n\t...thinking ", end="")
+                    log_verbose(f"\n{query_prefix}{query}\n\t...thinking ", end="")
                     query_start_time = time.time()
 
                     streaming_response = query_engine.query(query)
@@ -789,20 +804,21 @@ if args.chat:
 #------------------------------------------------------------------------------
 
 if args.chat:
-    log(f"Entering RAG chat...")
+    log(f"Entering RAG chat (type \"bye\" to exit, CTRL-C to interrupt)...")
+    log_verbose(f"\t- the LlamaIndex chat mode is \"{args.chat_mode}\"")
     if args.chat_log:
-        log(f"\t- logging to \"{os.path.normpath(args.chat_log)}\"")
-    log(f"\t- the LlamaIndex chat mode is \"{args.chat_mode}\"")
-    log(f"\t- hit CTRL-C to interrupt a response in progress")
-    log(f"\t- type \"bye\" or something when you're done\n")
+        log_verbose(f"\t- logging chat to \"{os.path.normpath(args.chat_log)}\"")
+    log("")
     
     thinking_message = f"{response_prefix}...thinking... "
-    exit_commands = ["bye", "something", "goodbye", "exit", "quit", "done", "stop", "end"]
+    exit_commands = ["bye", "goodbye", "exit", "quit", "peace", "done", "stop", "end"]
     user_prompt = query_prefix or "> "
 
     while True:
         try:
             message = input(user_prompt).strip()
+            if not message:
+                continue
             if message.lower() in exit_commands:
                 break
         except KeyboardInterrupt:
