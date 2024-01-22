@@ -13,7 +13,7 @@
 - uses language-aware chunking for source code
 - supports pseudo-interactive "chat" from the command line
 
-It was written for personal use, and it's mostly the same boilerplate/glue code you were going to have to write anyway, but if it saves you an afternoon of sifting through machine-generated LlamaIndex tutorials and arguing with Copilot, please feel free to buy me a coffee.
+It's mostly the same boilerplate/glue code you were going to have to write anyway, so if this saves you an afternoon of sifting through machine-generated LlamaIndex tutorials and arguing with Copilot, please feel free to buy me a coffee.
 
 # Setup
 ```
@@ -39,12 +39,12 @@ Then use that index to perform your queries:
 ```
 python ragtag.py --index-load my/index --query "Really though, why?"
 ```
-This is **still** slow, because the index takes a long time to load. It's just not as slow as re-indexing everything. To minimize overhead, try to either submit all your queries in one run, or just leave the program idle in "chat mode" when not in use. Use `--verbose` to see actual timings.
+This is **still** slow, because the index can take a long time to load. It's just not as slow as re-indexing everything. To minimize overhead, try to either submit all your queries in one run, or just leave the program idle in "chat mode" when not in use. Use `--verbose` to see actual timings.
 
 
 # Inference
 
-By default, **RAG/TAG Tiger** uses HuggingFace libraries to perform all inference on your machine. It **should** run on GPU if your Python environment is configured for CUDA (which can be non-trivial). You can use `--llm-model` to select specific LLM models from [HuggingFace](https://huggingface.co/models). They will be downloaded and cached. For example:
+By default, **RAG/TAG Tiger** uses HuggingFace libraries to perform all inference on your machine. It **should** run on the GPU if your Python environment is configured properly for CUDA (which can be non-trivial). You can use `--llm-model` to select specific LLM models from [HuggingFace](https://huggingface.co/models). They will be downloaded and cached for re-use. For example:
 ```
 --llm-model TheBloke/CodeLlama-34B-Instruct-AWQ
 ```
@@ -59,28 +59,28 @@ Running your own `llama.cpp` [server](https://github.com/ggerganov/llama.cpp) re
 --llm-provider openai --llm-server http://YOUR_SERVER:8081
 ```
 
-To use built-in `llama.cpp` [libraries](https://pypi.org/project/llama-cpp-python/) locally (without running your own server), supply a model filename to provider "llamacpp":
+To use the built-in `llama.cpp` [libraries](https://pypi.org/project/llama-cpp-python/) locally without running a server, set the provider to "llamacpp" and supply a model filename:
 ```
 --llm-provider llamacpp --llm-model codellama-34b.Q4_K_M.gguf
 ```
 
 To connect to an actual [OpenAI](https://platform.openai.com/) endpoint:
-- remind yourself that RAG queries will exfiltrate chunks of your indexed documents
 - authenticate by setting `OPENAI_API_KEY` etc in your environment (or override it with `--llm-api-key`)
-- specify [one of their models](https://platform.openai.com/docs/models) using `--llm-model` (or use the default, which is currently `gpt-3.5-turbo-instruct`)
+- specify [one of their models](https://platform.openai.com/docs/models) using `--llm-model` (the default otherwise is `gpt-3.5-turbo-instruct`)
 - do not set a custom `--llm-server`
+- remind yourself that RAG queries will exfiltrate chunks of your indexed documents
 ```
---llm-provider openai --llm-model gpt-4-32k --llm-api-key YOUR_KEY
+--llm-provider openai --llm-model gpt-4
 ```
 
 # Options
 
-A full list of options is available on the help page:
+An up-to-date list of options is available on the help page:
 ```
 python ragtag.py --help
 ```
 
-It looks like this:
+It looks roughly like this:
 ```
 Options:
   -h, --help             Show this help message and exit
@@ -197,7 +197,7 @@ For casual/occasional use this may be overthinking things.
 **A:**&nbsp; No.
 
 **Q:**&nbsp; Good enough, how can I buy you that coffee? <br>
-**A:**&nbsp; For clarity, the coffee was a metaphor and contributions will be spent on drugs. 
+**A:**&nbsp; For clarity, the coffee is a metaphor and contributions will be spent on drugs. 
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 <a href="https://www.buymeacoffee.com/stuartriffle">
