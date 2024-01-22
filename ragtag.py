@@ -521,7 +521,7 @@ def clean_up_temporary_files():
 if temp_folder:
     clean_up_temporary_files()
 if temp_folder:
-    log_error(f"couldn't clean up the temporary files, will try again at shutdown")
+    log_error(f"couldn't clean up the temporary files, will try again before shutdown")
 
 #------------------------------------------------------------------------------
 # Collect the user queries
@@ -575,74 +575,74 @@ if len(system_prompt.strip()) > 0:
 
 llm = None
 
-if len(queries) > 0 or args.chat:
-    log(f"Initializing language model...")
-    try:
-        with TimerUntil("ready"):
-            model_kwargs = args.llm_param or {}
+log(f"Initializing language model...")
+try:
+    with TimerUntil("ready"):
+        model_kwargs = args.llm_param or {}
 
-            ### OpenAI
-            if args.llm_provider == "openai":
-                if args.llm_api_key:
-                    os.environ["OPENAI_API_KEY"] = args.llm_api_key
-                if not args.llm_server:
-                    llm = OpenAI(
-                        model=args.llm_model,
-                        model_kwargs=model_kwargs,
-                        verbose=args.llm_verbose)
-                    log_verbose(f"\tusing OpenAI model \"{llm.model}\"")
-                else:
-                    # API compatible server
-                    llm = OpenAILike(
-                        model=args.llm_model or "default",
-                        model_kwargs=model_kwargs,
-                        api_base=args.llm_server,
-                        max_iterations=100,
-                        verbose=args.llm_verbose)
-                    log_verbose(f"\tusing model \"{llm.model}\" on OpenAI API server \"{args.llm_server}\"")
-                
-            ### Anthropic
-            elif args.llm_provider == "anthropic":
-                llm = Anthropic(
+        ### OpenAI
+        if args.llm_provider == "openai":
+            if args.llm_api_key:
+                os.environ["OPENAI_API_KEY"] = args.llm_api_key
+            if not args.llm_server:
+                llm = OpenAI(
                     model=args.llm_model,
                     model_kwargs=model_kwargs,
-                    base_url=args.llm_server,
                     verbose=args.llm_verbose)
-                log_verbose(f"\tusing Anthropic model \"{llm.model}\"")
-                
-            ### Llama.cpp
-            elif args.llm_provider == "llamacpp":
-                if torch.cuda.is_available():
-                    # FIXME - this does nothing
-                    model_kwargs["n_gpu_layers"] = -1
-                    model_kwargs["device"] = "cuda"
-                llm = LlamaCPP(
-                    model_path=args.llm_model,
-                    model_kwargs=model_kwargs,
-                    verbose=args.llm_verbose)
-                log_verbose(f"\tusing local llama.cpp with \"{os.path.normpath(args.llm_model)}\"")
-            
-            ### HuggingFace
+                log_verbose(f"\tusing OpenAI model \"{llm.model}\"")
             else:
-                os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
-                model_desc = ""
-                model_name = args.llm_model or "default"
-                if model_name in model_nicknames:
-                    model_desc = f"\"{model_name}\" which is HF model "
-                    model_name = model_nicknames[model_name]
-                llm = HuggingFaceLLM(
-                    model_name=model_name,
-                    model_kwargs=model_kwargs, 
-                    device_map=args.torch_device or "auto",
-                    system_prompt=system_prompt)
-                log_verbose(f"\tusing model {model_desc}\"{model_name}\" for local inference with HuggingFace")
+                # API compatible server
+                llm = OpenAILike(
+                    model=args.llm_model or "default",
+                    model_kwargs=model_kwargs,
+                    api_base=args.llm_server,
+                    max_tokens=1000,
+                    max_iterations=100,
+                    verbose=args.llm_verbose)
+                log_verbose(f"\tusing model \"{llm.model}\" on OpenAI API server \"{args.llm_server}\"")
+            
+        ### Anthropic
+        elif args.llm_provider == "anthropic":
+            llm = Anthropic(
+                model=args.llm_model,
+                base_url=args.llm_server)
+            log_verbose(f"\tusing Anthropic model \"{llm.model}\"")
+            
+        ### Llama.cpp
+        elif args.llm_provider == "llamacpp":
+            if torch.cuda.is_available():
+                # FIXME - this does nothing
+                model_kwargs["n_gpu_layers"] = -1
+                model_kwargs["device"] = "cuda"
+            llm = LlamaCPP(
+                model_path=args.llm_model,
+                model_kwargs=model_kwargs,
+                verbose=args.llm_verbose)
+            log_verbose(f"\tusing local llama.cpp with \"{os.path.normpath(args.llm_model)}\"")
+        
+        ### HuggingFace
+        else:
+            os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
+            model_desc = ""
+            model_name = args.llm_model or "default"
+            if model_name in model_nicknames:
+                model_desc = f"\"{model_name}\" which is HF model "
+                model_name = model_nicknames[model_name]
+            llm = HuggingFaceLLM(
+                model_name=model_name,
+                model_kwargs=model_kwargs, 
+                device_map=args.torch_device or "auto",
+                system_prompt=system_prompt)
+            log_verbose(f"\tusing model {model_desc}\"{model_name}\" for local inference with HuggingFace")
 
-    except Exception as e: 
-        log_error(f"failed initializing LLM: {e}", exit_code=1)
+except Exception as e: 
+    log_error(f"failed initializing LLM: {e}", exit_code=1)
 
 #------------------------------------------------------------------------------
 # Service context
 #------------------------------------------------------------------------------
+
+service_context = None
 
 if llm:
     log_verbose(f"Setting global service context...")

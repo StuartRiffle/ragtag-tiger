@@ -17,3 +17,5 @@ rarfile
 python-pptx
 pillow
 pypdf
+anthropic
+
