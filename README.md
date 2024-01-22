@@ -1,6 +1,6 @@
-# RAG/TAG Tiger
+**UNDER DEVELOPMENT - STILL DEBUGGING - DO NOT USE FOR IMPORTANT THINGS**
 
-**UNDER DEVELOPMENT - STILL DEBUGGING - DO NOT USE THIS**
+# RAG/TAG Tiger
 
 <img align="right" width="200px" style="padding:10px" src="docs/tiger.jpg">
 
@@ -8,12 +8,12 @@
 - provides a command line interface for doing primitive RAG queries on local documents/code
 - runs queries using an in-process LLM, a local inference server, or a commercial endpoint
 - loads/updates/stores vector indices to avoid redundant processing
-- auto-downloads loaders from the [LlamaIndex hub](https://llamahub.ai) for custom file types
-- indexes documents inside .zip files (and other archives)
-- uses syntax-aware chunking for source code
-- supports pseudo-interactive "chat" on the command line
+- auto-downloads custom file loaders from the [LlamaIndex hub](https://llamahub.ai) 
+- indexes documents inside archive files and email attachments
+- uses language-aware chunking for source code
+- supports pseudo-interactive "chat" from the command line
 
-It's mostly the same boilerplate/glue you were going to have to write anyway. If this code saves you an afternoon of sifting through machine-generated LlamaIndex tutorials and arguing with ChatGPT, please feel free to buy me a coffee.
+It was written for personal use, and it's mostly the same boilerplate/glue you were going to have to write anyway, but if this code saves you an afternoon of sifting through machine-generated LlamaIndex tutorials and arguing with Copilot, please feel free to buy me a coffee.
 
 ## Setup
 ```
@@ -39,13 +39,43 @@ Then use that index to perform your queries:
 ```
 python ragtag.py --index-load my/index --query "Really though, why?"
 ```
-This is **still** slow, because the index takes a long time to load. It's just not as slow as re-indexing everything. Use `--verbose` to see actual timings.
+This is **still** slow, because the index takes a long time to load. It's just not as slow as re-indexing everything. To minimize overhead, try to either submit all your queries in one run, or just leave the program idle in "chat mode" when not in use. Use `--verbose` to see actual timings.
 
-To minimize overhead, try to either submit all your queries in one run, or leave the program idle in "chat mode" when not in use. 
+
+## Inference
+
+By default, **RAG/TAG Tiger** uses HuggingFace libraries to perform all inference on your machine. It **should** run on GPU if your Python environment is configured for CUDA (which can be non-trivial). You can use `--llm-model` to select specific LLM models from [HuggingFace](https://huggingface.co/models). They will be downloaded and cached. For example:
+```
+--llm-model TheBloke/CodeLlama-34B-Instruct-AWQ
+```
+
+Another local option is [text-generation-webui](https://github.com/oobabooga/text-generation-webui). If you enable "API" and "listen" in the extensions page, it will run an OpenAI-compatible server on `http://localhost:5000/v1`. Connect to it like this:
+```
+--llm-provider openai --llm-server http://localhost:5000/v1
+```
+
+Running your own `llama.cpp` [server](https://github.com/ggerganov/llama.cpp) requires that you also run `examples/server/api_like_OAI.py` for OpenAI compatibility. Then you can connect the same way:
+```
+--llm-provider openai --llm-server http://YOUR_SERVER:8081
+```
+
+To use the built-in `llama.cpp` [libraries](https://pypi.org/project/llama-cpp-python/) locally (without running your own server), supply the model filename to `--llm-provider llamacpp`:
+```
+--llm-provider llamacpp --llm-model phind-codellama-34b-v2.Q4_K_M.gguf
+```
+
+To connect to an actual [OpenAI](https://platform.openai.com/) endpoint:
+- remind yourself that RAG queries will exfiltrate chunks of indexed documents
+- authenticate by setting `OPENAI_API_KEY` etc in your environment (or override it with `--llm-api-key`)
+- specify [one of their models](https://platform.openai.com/docs/models) using `--llm-model` (if you don't like the default, which is currently `gpt-3.5-turbo-instruct`)
+- do not set a custom `--llm-server`
+```
+--llm-provider openai --llm-model gpt-4-32k --llm-api-key YOUR_KEY
+```
 
 ## Options
 
-A full list is available on the help page:
+A full list of options is available on the help page:
 ```
 python ragtag.py --help
 ```
@@ -107,17 +137,17 @@ Interactive chat:
 
 ## Workflow
 
-It's easier to edit your command if you put it in a shell script (or batch file), but split the parameters over multiple lines by ending them with `\` (or with `^` on Windows).
+Commands can get long, and they are easier to edit if you put them in a shell script (or batch file), but split the parameters over multiple lines by ending them with `\` (or with `^` on Windows).
 
-For example, a script to consult with a dangerously unqualified virtual doctor, using an in-process LLM and a temporary vector index for privacy, might look like this:
+For example, a script to consult with a dangerously unqualified virtual doctor, using a local LLM and a temporary document index for privacy:
 ```
 python ragtag.py                                        \
     --source          my/personal/medical_data          \
     --llm-model       mistralai/Mistral-7B-v0.2         \
     --llm-param       temperature=1.8                   \
-    --context-file    instructions/jailbreak.txt        \
-    --context-file    instructions/first_do_no_harm.txt \
     --chat-init-file  characters/doctor.txt             \
+    --context-file    instructions/first_do_no_harm.txt \
+    --context-file    instructions/jailbreak.txt        \
     --chat-log        it_still_hurts.txt                \
     --chat
 ```
