@@ -100,13 +100,9 @@ chunk_as_text = set([
 ])
 
 model_nicknames = {
-    "tiny":     "TheBloke/Mistral-7B-Instruct-v0.2-GGUF",
-    "small":    "TheBloke/Mistral-7B-Instruct-v0.2-GGUF",   # Fits in 6GB (RTX 2060)
-    "default":  "TheBloke/Mistral-7B-Instruct-v0.2-GGUF",   # Fits in 12GB (RTX 3080)
-    "large":    "TheBloke/Mistral-7B-Instruct-v0.2-GGUF",   # Fits in 24GB (RTX 4090)
-    "huge":     "TheBloke/Mistral-7B-Instruct-v0.2-GGUF",   # Fits in 48GB (RTX 4090 x2)
-    "best":     "TheBloke/Mistral-7B-Instruct-v0.2-GGUF",
-
+    "default": "codellama/CodeLlama-7b-Instruct-hf",
+    #"TheBloke/CodeLlama-7B-Instruct-GPTQ", requires package "auto-gptq"
+    #"TheBloke/Mistral-7B-Instruct-v0.2-GGUF",
 }
 
 #------------------------------------------------------------------------------
@@ -616,7 +612,7 @@ if len(queries) > 0 or args.chat:
                     model_desc = f"\"{model_name}\" which is HF model "
                     model_name = model_nicknames[model_name]
                 llm = HuggingFaceLLM(
-                    model_name,
+                    model_name=model_name,
                     model_kwargs=model_kwargs, 
                     device_map=args.torch_device or "auto",
                     system_prompt=system_prompt)
@@ -695,7 +691,7 @@ query_engine_params = {
 if len(queries) > 0:
     log(f"Initializing query engine...")
     try:
-        with TimerUntil("engine ready"):        
+        with TimerUntil("ready"):        
             query_engine = vector_index.as_query_engine(**query_engine_params)
     except Exception as e:
         log_error(e, exit_code=1)
