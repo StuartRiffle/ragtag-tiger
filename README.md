@@ -1,4 +1,4 @@
-**UNDER DEVELOPMENT - STILL DEBUGGING - DO NOT USE FOR IMPORTANT THINGS**
+**UNDER DEVELOPMENT - DEBUGGING - DO NOT USE THIS FOR IMPORTANT THINGS**
 
 # RAG/TAG Tiger
 
@@ -15,7 +15,7 @@
 
 It was written for personal use, and it's mostly the same boilerplate/glue you were going to have to write anyway, but if this code saves you an afternoon of sifting through machine-generated LlamaIndex tutorials and arguing with Copilot, please feel free to buy me a coffee.
 
-## Setup
+# Setup
 ```
 git clone https://github.com/stuartriffle/ragtag-tiger
 cd ragtag-tiger
@@ -23,7 +23,7 @@ pip install -r requirements.txt
 ```
 Do this in a [virtual environment](https://www.google.com/search?q=python%20virtual%20environments) if you can.
 
-## Usage
+# Usage
 
 The simplest way to perform a RAG query would be a command like:
 ```
@@ -42,14 +42,14 @@ python ragtag.py --index-load my/index --query "Really though, why?"
 This is **still** slow, because the index takes a long time to load. It's just not as slow as re-indexing everything. To minimize overhead, try to either submit all your queries in one run, or just leave the program idle in "chat mode" when not in use. Use `--verbose` to see actual timings.
 
 
-## Inference
+# Inference
 
 By default, **RAG/TAG Tiger** uses HuggingFace libraries to perform all inference on your machine. It **should** run on GPU if your Python environment is configured for CUDA (which can be non-trivial). You can use `--llm-model` to select specific LLM models from [HuggingFace](https://huggingface.co/models). They will be downloaded and cached. For example:
 ```
 --llm-model TheBloke/CodeLlama-34B-Instruct-AWQ
 ```
 
-Another local option is [text-generation-webui](https://github.com/oobabooga/text-generation-webui). If you enable "API" and "listen" in the extensions page, it will run an OpenAI-compatible server on `http://localhost:5000/v1`. Connect to it like this:
+Another local option is [text-generation-webui](https://github.com/oobabooga/text-generation-webui). If you enable "API" and "listen" in the extensions page, it will run an OpenAI-compatible server on port `5000`. Connect to it like this:
 ```
 --llm-provider openai --llm-server http://localhost:5000/v1
 ```
@@ -59,21 +59,21 @@ Running your own `llama.cpp` [server](https://github.com/ggerganov/llama.cpp) re
 --llm-provider openai --llm-server http://YOUR_SERVER:8081
 ```
 
-To use the built-in `llama.cpp` [libraries](https://pypi.org/project/llama-cpp-python/) locally (without running your own server), supply the model filename to `--llm-provider llamacpp`:
+To use built-in `llama.cpp` [libraries](https://pypi.org/project/llama-cpp-python/) locally (without running your own server), supply a model filename to provider "llamacpp":
 ```
 --llm-provider llamacpp --llm-model phind-codellama-34b-v2.Q4_K_M.gguf
 ```
 
 To connect to an actual [OpenAI](https://platform.openai.com/) endpoint:
-- remind yourself that RAG queries will exfiltrate chunks of indexed documents
+- remind yourself that RAG queries will exfiltrate chunks of your indexed documents
 - authenticate by setting `OPENAI_API_KEY` etc in your environment (or override it with `--llm-api-key`)
-- specify [one of their models](https://platform.openai.com/docs/models) using `--llm-model` (if you don't like the default, which is currently `gpt-3.5-turbo-instruct`)
+- specify [one of their models](https://platform.openai.com/docs/models) using `--llm-model` (or use the default, which is currently `gpt-3.5-turbo-instruct`)
 - do not set a custom `--llm-server`
 ```
 --llm-provider openai --llm-model gpt-4-32k --llm-api-key YOUR_KEY
 ```
 
-## Options
+# Options
 
 A full list of options is available on the help page:
 ```
@@ -135,7 +135,7 @@ Interactive chat:
                          { best, context, condense_question, simple, react, openai }
 ```
 
-## Workflow
+# Workflow
 
 Commands can get long, and they are easier to edit if you put them in a shell script (or batch file), but split the parameters over multiple lines by ending them with `\` (or with `^` on Windows).
 
@@ -179,7 +179,7 @@ python ragtag.py @debug_server.args  ...
 
 For casual/occasional use this may be overthinking things.
 
-## FAQ
+# FAQ
 
 **Q:**&nbsp; What does the name mean? <br>
 **A:**&nbsp; The acronym "RAG" means Retrieval Augmented Generation. Instead of fine tuning a language model on your documents, you give it tools to search them for any details needed.
@@ -197,7 +197,7 @@ For casual/occasional use this may be overthinking things.
 **A:**&nbsp; No.
 
 **Q:**&nbsp; Good enough, how can I buy you that coffee? <br>
-**A:**&nbsp; For clarity, the coffee was a metaphor and all contributions will be spent on drugs. 
+**A:**&nbsp; For clarity, the coffee was a metaphor and contributions will be spent on drugs. 
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 <a href="https://www.buymeacoffee.com/stuartriffle">
