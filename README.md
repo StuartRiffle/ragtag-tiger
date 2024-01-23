@@ -16,12 +16,34 @@
 It's mostly the same boilerplate/glue code you were going to have to write anyway, so if this saves you an afternoon of sifting through machine-generated LlamaIndex tutorials and arguing with Copilot, please feel free to buy me a coffee.
 
 # Setup
+The basic steps are the same as other Python programs:
+
+1) Install development tools (details will vary by OS, but Debian/Ubuntu use `apt`):
+
+```
+sudo apt update -y
+sudo apt-get install -y build-essential cmake git python3 pip python3-venv
+```
+2) Clone this repository
+
 ```
 git clone https://github.com/stuartriffle/ragtag-tiger
 cd ragtag-tiger
+```
+3) Create and activate a [virtual environment](https://www.google.com/search?q=python%20virtual%20environments) (some systems use `conda` instead of `venv`)
+```
+python3 -m venv .venv
+. .venv/bin/activate
+```
+4) Install our package dependencies
+```
 pip install -r requirements.txt
 ```
-Do this in a [virtual environment](https://www.google.com/search?q=python%20virtual%20environments) if you can.
+5) Sanity check
+```
+python ragtag.py --version
+```
+If that prints a version number, and not a long Python error message of some sort, we're in a good place.
 
 # Usage
 
@@ -60,16 +82,16 @@ Running your own `llama.cpp` [server](https://github.com/ggerganov/llama.cpp) re
 --llm-provider openai --llm-server http://YOUR_SERVER:8081
 ```
 
-To use built-in `llama.cpp` [libraries](https://pypi.org/project/llama-cpp-python/) locally _without_ running a server, set the provider to "llamacpp" and supply a model filename:
+To use built-in `llama.cpp` [libraries](https://pypi.org/project/llama-cpp-python/) locally _without_ manually starting a server, set the provider to "llamacpp" and supply a model filename:
 ```
 --llm-provider llamacpp --llm-model codellama-34b.Q4_K_M.gguf
 ```
 
 To connect to an actual [OpenAI](https://platform.openai.com/) endpoint:
-- remind yourself that RAG queries will exfiltrate chunks of your indexed documents
 - authenticate by setting `OPENAI_API_KEY` in your environment (or override it with `--llm-api-key`)
-- select [one of their models](https://platform.openai.com/docs/models) using `--llm-model` (the default is `gpt-3.5-turbo-instruct`)
+- change [models](https://platform.openai.com/docs/models) using `--llm-model` (the default is `gpt-3.5-turbo-instruct`)
 - do **not** set a custom `--llm-server`
+- remind yourself that RAG queries will exfiltrate chunks of your documents
 ```
 --llm-provider openai --llm-model gpt-4
 ```
