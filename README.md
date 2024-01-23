@@ -54,28 +54,29 @@ Another local option is [text-generation-webui](https://github.com/oobabooga/tex
 --llm-provider openai --llm-server http://localhost:5000/v1
 ```
 
-Running your own `llama.cpp` [server](https://github.com/ggerganov/llama.cpp) requires that you also run `examples/server/api_like_OAI.py` for OpenAI compatibility. Then you can connect in a similar way:
+Running your own `llama.cpp` [server](https://github.com/ggerganov/llama.cpp) requires that you also run `examples/server/api_like_OAI.py` for OpenAI compatibility. Then you can connect to it a similar way:
 ```
 --llm-provider openai --llm-server http://YOUR_SERVER:8081
 ```
 
-To use the built-in `llama.cpp` [libraries](https://pypi.org/project/llama-cpp-python/) locally without running a server, set the provider to "llamacpp" and supply a model filename:
+To use built-in `llama.cpp` [libraries](https://pypi.org/project/llama-cpp-python/) locally without running a server, set the provider to "llamacpp" and supply a model filename:
 ```
 --llm-provider llamacpp --llm-model codellama-34b.Q4_K_M.gguf
 ```
 
 To connect to an actual [OpenAI](https://platform.openai.com/) endpoint:
-- authenticate by setting `OPENAI_API_KEY` etc in your environment (or override it with `--llm-api-key`)
-- select [one of their models](https://platform.openai.com/docs/models) using `--llm-model` (the default otherwise is `gpt-3.5-turbo-instruct`)
-- do not set a custom `--llm-server`
 - remind yourself that RAG queries will exfiltrate chunks of your indexed documents
+- authenticate by setting `OPENAI_API_KEY` etc in your environment (or override it with `--llm-api-key`)
+- select [one of their models](https://platform.openai.com/docs/models) using `--llm-model` (the default is `gpt-3.5-turbo-instruct`)
+- do **not** set a custom `--llm-server`
 ```
 --llm-provider openai --llm-model gpt-4
 ```
 
+
 # Options
 
-An up-to-date list of options is available on the help page:
+A list of options is available on the help page:
 ```
 python ragtag.py --help
 ```
@@ -137,7 +138,7 @@ Interactive chat:
 
 # Workflow
 
-Commands can get long, but they are easier to edit if you put them in a shell script (or batch file), but split the parameters over multiple lines by ending them with `\` (or with `^` on Windows).
+Commands can get long, but they are easier to edit if you put them in a shell script (or batch file), and split the parameters over multiple lines by ending them with `\` (or with `^` on Windows).
 
 For example, a script to consult with a dangerously unqualified virtual doctor, using a local LLM and a temporary document index for privacy:
 ```
@@ -154,14 +155,12 @@ python ragtag.py                                        \
 
 You can also set standard arguments in an environment variable called `RAGTAG_FLAGS`. They will be added to the end of every command.
 
-A more flexible way to manage complex configuration is to factor out groups of arguments into response files. The rules there are:
+A more flexible way to manage complex configuration is to factor out groups of arguments into response files. The rules are:
 - **every argument must be on its own line**
 - blank lines, indentation, and trailing whitespace are ignored
 - internal whitespace is part of an argument, no quotes are needed
 - lines starting with # are ignored as comments
 - comments on the same line as arguments are NOT supported
-
-
 ```
 # debug_server.args - example response file
 
@@ -173,7 +172,6 @@ A more flexible way to manage complex configuration is to factor out groups of a
     temperature=0.9
     seed=1337         
 ```
-
 
 To use the response file, pull it in with `@` on the command line (the file extension doesn't matter). This has the same effect as typing all the arguments by hand:
 ```
@@ -208,9 +206,3 @@ For casual/occasional use this may be overthinking things.
 </a>
 
 Thank you for supporting open source software.
-
-
-
-
-
-
