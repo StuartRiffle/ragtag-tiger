@@ -108,6 +108,9 @@ hf_model_nicknames = {
     #"TheBloke/Mistral-7B-Instruct-v0.2-GGUF",
 }
 
+llamaindex_chat_modes = ["best", "context", "condense_question", "simple", "react", "openai"]
+llamaindex_query_response_modes = ["accumulate", "compact", "compact_accumulate", "generation", "no_text", "refine", "simple_summarize", "tree_summarize"]
+
 #------------------------------------------------------------------------------
 # Parse command line arguments and response files
 #------------------------------------------------------------------------------
@@ -158,7 +161,7 @@ arg("--query-list",     help="File containing short queries, one per line", acti
 arg("--query-file",     help="File containing one long query", action="append", metavar="FILE")
 arg("--query-log",      help="Log queries and responses to a text file", metavar="FILE")
 arg("--query-log-json", help="Log queries and responses (plus some metadata) to a JSON file", metavar="FILE")
-arg("--query-mode",     help="Query response mode", choices=["accumulate", "compact", "compact_accumulate", "generation", "no_text", "refine", "simple_summarize", "tree_summarize"], default="tree_summarize")
+arg("--query-mode",     help="Query response mode", choices=llamaindex_query_response_modes, default="tree_summarize")
 arg("--tag-queries",    help="The name/header in the transcript for user queries", metavar="NAME", default="User")
 arg("--tag-responses",  help="The name/header in the transcript for engine responses", metavar="NAME", default="Tiger")
 
@@ -167,7 +170,7 @@ arg("--chat",           help="Enter chat after any query processing", action="st
 arg("--chat-init",      help="Extra instructions/personality for the chat LLM", action="append", metavar="TEXT")
 arg("--chat-init-file", help="File containing a snippet of chat LLM instructions", action="append", metavar="FILE")
 arg("--chat-log",       help="Append chat queries and responses to a text file", metavar="FILE")
-arg("--chat-mode",      help="Chat response mode", choices=["best", "context", "condense_question", "simple", "react", "openai"], default="best")
+arg("--chat-mode",      help="Chat response mode", choices=llamaindex_chat_modes, default="best")
 
 os.sys.argv += shlex.split(os.environ.get("RAGTAG_FLAGS", ""))
 args = parser.parse_args()
@@ -779,14 +782,14 @@ if len(queries) > 0:
     log_verbose("")
 
     if args.query_log:
-        log(f"Writing query log to \"{args.query_log}\"...")
+        log(f"Writing query log to \"{os.path.normpath(args.query_log)}\"...")
         try:
             with open(args.query_log, "w", encoding="utf-8") as f:
                 f.write(chat_log)
         except Exception as e: log_error(e)
 
     if args.query_log_json:
-        log(f"Writing JSON log to \"{args.query_log_json}\"...")
+        log(f"Writing JSON log to \"{os.path.normpath(args.query_log_json)}\"...")
         try:
             with open(args.query_log_json, "w", encoding="utf-8") as f:
                 raw_text = json.dumps(json_log, indent=4)
@@ -843,15 +846,107 @@ if args.chat:
     thinking_message = f"{response_prefix}...thinking... "
     exit_commands = ["bye", "goodbye", "exit", "quit", "peace", "done", "stop", "end"]
     user_prompt = query_prefix or "> "
+    curr_engine = chat_engine
 
     while True:
+        prompt_prefix = ""
+        if args.verbose:
+            curr_engine_desc = "chat" if curr_engine == chat_engine else "query"
+            curr_engine_mode = curr_engine.chat_mode if curr_engine == chat_engine else query_engine.response_mode
+            prompt_prefix = f"{curr_engine_desc}/{curr_engine_mode}"
+            if query_prefix:
+                prompt_prefix = f"({prompt_prefix}) "
+
         try:
-            message = input(user_prompt).strip()
+            message = input(prompt_prefix + user_prompt).strip()
             if not message:
                 continue
-            if message.lower() in exit_commands:
-                break
         except KeyboardInterrupt:
+            continue
+
+        if message.lower() in exit_commands:
+            break
+
+        if message.startswith("/"):
+            command, _, message = message[1:].lower().partition(" ")
+
+            if command == "mode":
+                if message in llamaindex_chat_modes:
+                    command, message = "chat", message
+                elif message in llamaindex_query_response_modes:
+                    command, message = "query", message
+                else:
+                    log(f"Chat modes:  {llamaindex_chat_modes}")
+                    log(f"Query modes: {llamaindex_query_response_modes}")
+                    continue
+
+            if command == "chat":
+                curr_engine = chat_engine
+                if message in llamaindex_chat_modes:
+                    chat_engine.set_chat_mode(message)
+                else:
+                    log(f"Valid chat modes are: {'' if args.verbose else llamaindex_chat_modes}")
+                    log_verbose("\tsimple:  chat with LLM, without making use of a knowledge base")
+                    log_verbose("\treact:   use a ReAct agent loop with query engine tools")
+                    log_verbose("\topenai:  use an OpenAI function calling agent loop")
+                    log_verbose("\tbest:    select between react and openapi based on the current LLM")
+                    log_verbose("\tcondense_question:")
+                    log_verbose("\t  - condense conversation and latest user message to a standalone question")
+                    log_verbose("\tcontext:")
+                    log_verbose("\t  - retrieve text from the index using the user's message")
+                    log_verbose("\t  - use the context in the system prompt to generate a response")
+                    log_verbose("\tcondense_plus_context: ")
+                    log_verbose("\t  - condense a conversation and latest user message to a standalone question")
+                    log_verbose("\t  - build a context for the standalone question from a retriever")
+                    log_verbose("\t  - then pass the context along with prompt and user message to LLM to generate a response")
+                log(f"Chat response mode is \"{message}\"")
+
+            elif command == "query":
+                curr_engine = query_engine
+                if message in llamaindex_query_response_modes:
+                    query_engine.set_response_mode(message)
+                else:
+                    log(f"Valid query modes are: {llamaindex_query_response_modes}")
+                    log_verbose("\taccumulate:")
+                    log_verbose("\t  - synthesize a response for each text chunk")
+                    log_verbose("\t  - combine them into a single response")
+                    log_verbose("\tcompact:")
+                    log_verbose("\t  - consolidate text chunks into larger chunks")
+                    log_verbose("\t  - refine answers across them (faster than refine)")
+                    log_verbose("\t  - (this is faster than refine)")
+                    log_verbose("\tcompact_accumulate:")
+                    log_verbose("\t  - consolidate text chunks into larger chunks")
+                    log_verbose("\t  - accumulate answers for each of them")
+                    log_verbose("\t  - combine them into a single response")
+                    log_verbose("\t  - (this is faster than accumulate)")
+                    log_verbose("\tgeneration: ")
+                    log_verbose("\t  - ignore context, just use LLM to generate responses")
+                    log_verbose("\t  - accumulate all responses into a single response")
+                    log_verbose("\tno_text: ")
+                    log_verbose("\t  - return the retrieved context nodes, without synthesizing a final response")
+                    log_verbose("\trefine: ")
+                    log_verbose("\t  - use the first node, along with the query, to generate an initial answer")
+                    log_verbose("\t  - pass this answer, the query, and the second node into a \"refine prompt\"")
+                    log_verbose("\t  - process the remaining nodes and continue to refine the answer")
+                    log_verbose("\tsimple_summarize: ")
+                    log_verbose("\t  - merge all text chunks into one, and make a LLM call")
+                    log_verbose("\t  - this will fail if the merged text chunk exceeds the context window size")
+                    log_verbose("\ttree_summarize: ")
+                    log_verbose("\t  - generate a summary prompt seeded with the query")
+                    log_verbose("\t  - build a tree index over the set of candidate nodes in a bottom-up fashion")
+                    log_verbose("\t  - return the root node as the response")
+                log(f"Query response mode is \"{message}\"")
+
+            elif command == "clear":
+                chat_engine.reset()
+
+            elif command == "verbose":
+                args.verbose = (not message or message == "on")
+                log(f"Verbose mode is {'on' if args.verbose else 'off'}")
+
+            else:
+                log(f"Commands: chat, query, mode, clear, verbose")
+                   
             continue
 
         if args.chat_log:
@@ -864,7 +959,11 @@ if args.chat:
         response_tokens = []
 
         try:
-            streaming_response = chat_engine.stream_chat(message)
+            if curr_engine == chat_engine:
+                streaming_response = chat_engine.stream_chat(message)
+            else:
+                streaming_response = query_engine.query(query)
+            
             for token in streaming_response.response_gen:
                 if len(response_tokens) == 0:
                     if not token.strip():

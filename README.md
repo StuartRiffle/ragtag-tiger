@@ -1,4 +1,4 @@
-**UNDER DEVELOPMENT - DEBUGGING - DO NOT USE THIS FOR IMPORTANT THINGS**
+**UNDER DEVELOPMENT - DO NOT USE THIS FOR IMPORTANT THINGS**
 
 # RAG/TAG Tiger
 
@@ -137,7 +137,7 @@ Interactive chat:
 
 # Workflow
 
-Commands can get long, and they are easier to edit if you put them in a shell script (or batch file), but split the parameters over multiple lines by ending them with `\` (or with `^` on Windows).
+Commands can get long, but they are easier to edit if you put them in a shell script (or batch file), but split the parameters over multiple lines by ending them with `\` (or with `^` on Windows).
 
 For example, a script to consult with a dangerously unqualified virtual doctor, using a local LLM and a temporary document index for privacy:
 ```
@@ -154,14 +154,14 @@ python ragtag.py                                        \
 
 You can also set standard arguments in an environment variable called `RAGTAG_FLAGS`. They will be added to the end of every command.
 
-A more flexible way to manage complex configuration is to factor out groups of arguments into "response files". The rules there are:
+A more flexible way to manage complex configuration is to factor out groups of arguments into response files. The rules there are:
 - **every argument must be on its own line**
 - blank lines, indentation, and trailing whitespace are ignored
-- internal whitespace is part of an argument, so no quotes needed
-- lines starting with # are treated as comments
-- comments alongside arguments (on the same line) are NOT supported
+- internal whitespace is part of an argument, no quotes are needed
+- lines starting with # are ignored as comments
+- comments on the same line as arguments are NOT supported
 
-Like this:
+
 ```
 # debug_server.args - example response file
 
@@ -173,6 +173,7 @@ Like this:
     temperature=0.9
     seed=1337         
 ```
+
 
 To use the response file, pull it in with `@` on the command line (the file extension doesn't matter). This has the same effect as typing all the arguments by hand:
 ```
@@ -193,7 +194,7 @@ For casual/occasional use this may be overthinking things.
 **A:**&nbsp; Not in production.
 
 **Q:**&nbsp; But why is there a tiger here at all? <br>
-**A:**&nbsp; I anthropomorphize small programs (they enjoy that), but to be fair a lot of species could do RAG in a pinch, and my choice of tiger here was arbitrary. We can revisit this.
+**A:**&nbsp; I anthropomorphize small programs (they enjoy that), but honestly a lot of species could do RAG in a pinch, and my choice of tiger here was arbitrary. We can revisit this.
 
 **Q:**&nbsp; May I have a warranty of merchantability and fitness for my particular purpose? <br>
 **A:**&nbsp; No.
