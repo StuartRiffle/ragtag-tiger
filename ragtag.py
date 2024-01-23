@@ -103,6 +103,8 @@ chunk_as_text = set([
 ])
 
 openai_model_default = "gpt-3.5-turbo-instruct"
+palm_model_default = "models/text-bison-001"
+default_llm_provider = "huggingface"
 
 hf_model_nicknames = {
     "default": "codellama/CodeLlama-7b-Instruct-hf",
@@ -152,11 +154,11 @@ arg("--size-limit",     help="Ignore huge text files unlikely to contain interes
 arg("--no-cache",       help="Do not use the local cache for loaders", action="store_true")
 
 arg = parser.add_argument_group("Language model").add_argument
-arg("--llm-provider",   help="Inference provider/interface", choices=["openai", "anthropic", "palm", "mistral", "llamacpp", "huggingface"], default="huggingface", metavar="NAME")
+arg("--llm-provider",   help="Inference provider/interface", choices=["openai", "anthropic", "palm", "mistral", "llamacpp", "huggingface"], metavar="NAME")
 arg("--llm-model",      help="Model name/path/etc for provider", metavar="NAME")
 arg("--llm-server",     help="Inference server URL (if needed)", metavar="URL")
-arg("--llm-api-key",    help="API key for inference server (if needed)", default="", metavar="KEY")
-arg("--llm-secret",     help="Secret for inference server (if needed)", default="", metavar="SECRET")
+arg("--llm-api-key",    help="API key for inference server (if needed)", metavar="KEY")
+arg("--llm-config",     help="Condensed LLM configuration in the format: provider,model,server,api-key", action="append", metavar="CFG")
 arg("--llm-param",      help="Inference parameter, like \"temperature=0.9\" etc", nargs="+", metavar="KVP")
 arg("--llm-verbose",    help="enable extended/debug output from the LLM", action="store_true")
 arg("--torch-device",   help="Device override, like \"cpu\" or \"cuda:1\" (for second GPU)", metavar="DEVICE")
@@ -609,112 +611,6 @@ if len(system_prompt.strip()) > 0:
     log_verbose(f"System prompt:\n{system_prompt}")
 
 #------------------------------------------------------------------------------
-# Instantiate an LLM
-#------------------------------------------------------------------------------
-
-llm = None
-
-log(f"Initializing language model...")
-try:
-    with TimerUntil("ready"):
-        model_kwargs = args.llm_param or {}
-
-        ### OpenAI
-        if args.llm_provider == "openai":
-            api_key = args.llm_api_key or os.environ.get("OPENAI_API_KEY", "")
-            if not args.llm_server:
-                llm = OpenAI(
-                    model=args.llm_model or openai_model_default,
-                    api_key=api_key,
-                    additional_kwargs=model_kwargs,
-                    verbose=args.llm_verbose)
-                log_verbose(f"\tusing OpenAI model \"{llm.model}\"")
-            else:
-                # API compatible server
-                llm = OpenAILike(
-                    model=args.llm_model or "default",
-                    additional_kwargs=model_kwargs,
-                    api_base=args.llm_server,
-                    max_tokens=1000,
-                    max_iterations=100,
-                    verbose=args.llm_verbose)
-                log_verbose(f"\tusing model \"{llm.model}\" on OpenAI API server \"{args.llm_server}\"")
-            
-        ### Anthropic
-        elif args.llm_provider == "anthropic":
-            api_key = args.llm_api_key or os.environ.get("ANTHROPIC_API_KEY", "")
-            llm = Anthropic(
-                model=args.llm_model,
-                api_key=api_key,
-                base_url=args.llm_server,
-                additional_kwargs=model_kwargs)
-            log_verbose(f"\t[UNTESTED] using Anthropic model \"{llm.model}\"")
-            
-        ### PaLM
-        elif args.llm_provider == "palm":
-            api_key = args.llm_api_key or os.environ.get("GEMINI_API_KEY", "")
-            llm = PaLM(
-                api_key=api_key,
-                model_name=args.llm_model,
-                generate_kwargs=model_kwargs)
-            log_verbose(f"\tusing Google PaLM model \"{llm.model_name}\"")
-            
-        ### Mistral
-        elif args.llm_provider == "mistral":
-            llm = MistralAI(
-                model=args.llm_model,
-                api_key=args.llm_api_key,
-                additional_kwargs=model_kwargs)
-            log_verbose(f"\t[UNTESTED] using MistralAI model \"{llm.model}\"")
-            
-        ### Llama.cpp
-        elif args.llm_provider == "llamacpp":
-            if torch.cuda.is_available():
-                # FIXME - this does nothing
-                model_kwargs["n_gpu_layers"] = -1
-                model_kwargs["device"] = "cuda"
-            llm = LlamaCPP(
-                model_path=args.llm_model,
-                model_kwargs=model_kwargs,
-                verbose=args.llm_verbose)
-            log_verbose(f"\tusing local llama.cpp with \"{os.path.normpath(args.llm_model)}\"")
-        
-        ### HuggingFace
-        else:
-            os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
-            model_desc = ""
-            model_name = args.llm_model or "default"
-            if model_name in hf_model_nicknames:
-                model_desc = f"\"{model_name}\" which is HF model "
-                model_name = hf_model_nicknames[model_name]
-            llm = HuggingFaceLLM(
-                model_name=model_name,
-                model_kwargs=model_kwargs, 
-                device_map=args.torch_device or "auto",
-                system_prompt=system_prompt)
-            log_verbose(f"\tusing model {model_desc}\"{model_name}\" for local inference with HuggingFace")
-
-except Exception as e: 
-    log_error(f"failure initializing LLM: {e}", exit_code=1)
-
-#------------------------------------------------------------------------------
-# Service context
-#------------------------------------------------------------------------------
-
-service_context = None
-
-if llm:
-    log_verbose(f"Setting global service context...")
-    try:
-        with TimerUntil("context set"):
-            service_context = ServiceContext.from_defaults(
-                embed_model="local", 
-                llm=llm)
-            set_global_service_context(service_context)
-
-    except Exception as e: log_error(e, exit_code=1)
-
-#------------------------------------------------------------------------------
 # Update the vector database
 #------------------------------------------------------------------------------
 
@@ -754,94 +650,240 @@ if args.index_store:
     except Exception as e: log_error(e)
 
 #------------------------------------------------------------------------------
-# Initialize the query engine
+# Process the queries on all given LLM configurations in turn
 #------------------------------------------------------------------------------
 
-query_engine = None
-query_engine_params = {
-    "response_mode":    args.query_mode,
-    "system_prompt":    system_prompt,
-    "service_context":  service_context,
-    "streaming":        True,
-}
+llm = None
 
-if len(queries) > 0:
-    log(f"Initializing query engine...")
+if args.llm_config:
+    if args.llm_provider or args.llm_server or args.llm_api_key or args.llm_param:
+        log_error(f"conflicting options, either use --llm-config, or use --llm-[provider,model,server,api-key,param...], not both", exit_code=1)
+else:
+    # Build a fake configuration string out of the options
+    config_str = f"{args.llm_provider or 'huggingface'},{args.llm_model or ''},{args.llm_server or ''},{args.llm_api_key or ''}"
+    for param in args.llm_param or []:
+        config_str += f",{param.strip().replace(' ', '')}"
+    args.llm_config = [config_str]
+
+for llm_config in args.llm_config:
+    llm_config = llm_config.strip("\"' ")
+    llm_fields = llm_config.split(",")
+    if llm_fields:
+        args.llm_provider = llm_fields[0].strip().lower() if len(llm_fields) > 0 else default_llm_provider
+        args.llm_model    = llm_fields[1].strip() if len(llm_fields) > 1 else None
+        args.llm_server   = llm_fields[2].strip() if len(llm_fields) > 2 else None
+        args.llm_api_key  = llm_fields[3].strip() if len(llm_fields) > 3 else None
+        args.llm_param    = llm_fields[4:] if len(llm_fields) > 4 else []
+
+    if llm:
+        # Release resources used by the previous iteration  
+        try:
+            llm.close()
+        except Exception as e:
+            log_verbose(f"Failure closing LLM: {e}")
+        llm = None
+
+    #--------------------------------------------------------------------------
+    # Instantiate the LLM
+    #--------------------------------------------------------------------------
+
+    llm_supports_streaming = True
+
+    log(f"Initializing language model...")
     try:
-        with TimerUntil("ready"):        
-            query_engine = vector_index.as_query_engine(**query_engine_params)
-    except Exception as e:
-        log_error(e, exit_code=1)
+        with TimerUntil("ready"):
+            llm_model_kwargs = dict([param.split("=") for param in args.llm_param]) if args.llm_param else {}
+            model_kwargs = llm_model_kwargs
 
-#------------------------------------------------------------------------------
-# Process all the queries
-#------------------------------------------------------------------------------
+            ### OpenAI
+            if args.llm_provider == "openai":
+                api_key = args.llm_api_key or os.environ.get("OPENAI_API_KEY", "")
+                if not args.llm_server:
+                    llm = OpenAI(
+                        model=args.llm_model or openai_model_default,
+                        api_key=api_key,
+                        additional_kwargs=model_kwargs,
+                        verbose=args.llm_verbose)
+                    log_verbose(f"\tusing OpenAI model \"{llm.model}\"")
+                else:
+                    # API compatible server
+                    llm = OpenAILike(
+                        model=args.llm_model or "default",
+                        additional_kwargs=model_kwargs,
+                        api_base=args.llm_server,
+                        max_tokens=1000,
+                        max_iterations=100,
+                        verbose=args.llm_verbose)
+                    log_verbose(f"\tusing model \"{llm.model}\" on OpenAI API server \"{args.llm_server}\"")
+                
+            ### Anthropic
+            elif args.llm_provider == "anthropic":
+                api_key = args.llm_api_key or os.environ.get("ANTHROPIC_API_KEY", "")
+                llm = Anthropic(
+                    model=args.llm_model,
+                    api_key=api_key,
+                    base_url=args.llm_server,
+                    additional_kwargs=model_kwargs)
+                log_verbose(f"\t[UNTESTED] using Anthropic model \"{llm.model}\"")
+                
+            ### PaLM
+            elif args.llm_provider == "palm":
+                api_key = args.llm_api_key or os.environ.get("GEMINI_API_KEY", "")
+                llm = PaLM(
+                    api_key=api_key,
+                    model_name=args.llm_model or palm_model_default,
+                    generate_kwargs=model_kwargs)
+                llm_supports_streaming = False
+                log_verbose(f"\tusing Google PaLM model \"{llm.model_name}\" [streaming not supported]")
+                
+            ### Mistral
+            elif args.llm_provider == "mistral":
+                llm = MistralAI(
+                    model=args.llm_model,
+                    api_key=args.llm_api_key,
+                    additional_kwargs=model_kwargs)
+                log_verbose(f"\t[UNTESTED] using MistralAI model \"{llm.model}\"")
+                
+            ### Llama.cpp
+            elif args.llm_provider == "llamacpp":
+                if torch.cuda.is_available():
+                    # FIXME - this does nothing
+                    model_kwargs["n_gpu_layers"] = -1
+                    model_kwargs["device"] = "cuda"
+                llm = LlamaCPP(
+                    model_path=args.llm_model,
+                    model_kwargs=model_kwargs,
+                    verbose=args.llm_verbose)
+                log_verbose(f"\tusing local llama.cpp with \"{os.path.normpath(args.llm_model)}\"")
+            
+            ### HuggingFace
+            else:
+                os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
+                model_desc = ""
+                model_name = args.llm_model or "default"
+                if model_name in hf_model_nicknames:
+                    model_desc = f"\"{model_name}\" which is HF model "
+                    model_name = hf_model_nicknames[model_name]
+                llm = HuggingFaceLLM(
+                    model_name=model_name,
+                    model_kwargs=model_kwargs, 
+                    device_map=args.torch_device or "auto",
+                    system_prompt=system_prompt)
+                log_verbose(f"\tusing model {model_desc}\"{model_name}\" for local inference with HuggingFace")
 
-tag_queries = (args.tag_queries or "").strip("\"' ")
-tag_responses = (args.tag_responses or "").strip("\"' ")
+    except Exception as e: 
+        log_error(f"failure initializing LLM: {e}", exit_code=1)
 
-query_prefix = f"{tag_queries}: " if tag_queries else ""
-response_prefix = f"{tag_responses}: " if tag_responses else ""
+    #------------------------------------------------------------------------------
+    # Service context
+    #------------------------------------------------------------------------------
 
-if len(queries) > 0:
-    log(f"Running {len(queries)} queries...")
-    with TimerUntil(f"all queries complete"):
-        chat_log = ""
-        json_log = {
-            "context": system_prompt,
-            "queries": []
-        }
-        for query in queries:
-            query_record = { "query": query }
-            response_tokens = []
+    service_context = None
 
+    if llm:
+        log_verbose(f"Setting global service context...")
+        try:
+            with TimerUntil("context set"):
+                service_context = ServiceContext.from_defaults(
+                    embed_model="local", 
+                    llm=llm)
+                set_global_service_context(service_context)
+
+        except Exception as e: log_error(e, exit_code=1)
+
+    #------------------------------------------------------------------------------
+    # Initialize the query engine
+    #------------------------------------------------------------------------------
+
+    query_engine = None
+    query_engine_params = {
+        "response_mode":    args.query_mode,
+        "system_prompt":    system_prompt,
+        "service_context":  service_context,
+        "streaming":        llm_supports_streaming,
+    }
+
+    if len(queries) > 0:
+        log(f"Initializing query engine...")
+        try:
+            with TimerUntil("ready"):        
+                query_engine = vector_index.as_query_engine(**query_engine_params)
+        except Exception as e:
+            log_error(e, exit_code=1)
+
+    #------------------------------------------------------------------------------
+    # Process all the queries
+    #------------------------------------------------------------------------------
+
+    tag_queries = (args.tag_queries or "").strip("\"' ")
+    tag_responses = (args.tag_responses or "").strip("\"' ")
+
+    query_prefix = f"{tag_queries}: " if tag_queries else ""
+    response_prefix = f"{tag_responses}: " if tag_responses else ""
+
+    if len(queries) > 0:
+        log(f"Running {len(queries)} queries...")
+        with TimerUntil(f"all queries complete"):
+            chat_log = ""
+            json_log = {
+                "context": system_prompt,
+                "queries": []
+            }
+            for query in queries:
+                query_record = { "query": query }
+                response_tokens = []
+
+                try:
+                    with TimerUntil("query complete"):
+                        log_verbose(f"\n{query_prefix}{query}\n\t...thinking ", end="", flush=True)
+                        query_start_time = time.time()
+
+                        if llm_supports_streaming:
+                            streaming_response = query_engine.query(query)
+                            for token in streaming_response.response_gen:
+                                if len(response_tokens) == 0:
+                                    if not token.strip():
+                                        continue
+                                    log_verbose(f"({time_since(query_start_time)})\n{response_prefix}", end="", flush=True)
+
+                                response_tokens.append(token)
+                                log_verbose(token, end="", flush=True)
+                            log_verbose("")
+                        else:
+                            response_tokens = query_engine.query(query).response_tokens
+                            response = "".join(response_tokens).strip()
+                            log_verbose(f"({time_since(query_start_time)})\n{response_prefix}{response}")
+
+                        query_record["response_time"] = time_since(query_start_time)
+
+                except Exception as e:
+                    query_record["error"] = str(e)
+                    response_tokens.append("[ERROR]")
+                    log_error(e)
+
+                    response = "".join(response_tokens).strip()
+                query_record["response"] = response
+                json_log["queries"].append(query_record)
+
+                chat_log += f"{query_prefix}{query}\n"
+                chat_log += f"{response_prefix}{response}\n\n"
+
+        log_verbose("")
+
+        if args.query_log:
+            log(f"Appending query log to \"{os.path.normpath(args.query_log)}\"...")
             try:
-                with TimerUntil("query complete"):
-                    log_verbose(f"\n{query_prefix}{query}\n\t...thinking ", end="", flush=True)
-                    query_start_time = time.time()
+                with open(args.query_log, "a", encoding="utf-8") as f:
+                    f.write(chat_log)
+            except Exception as e: log_error(e)
 
-                    streaming_response = query_engine.query(query)
-                    for token in streaming_response.response_gen:
-                        if len(response_tokens) == 0:
-                            if not token.strip():
-                                continue
-                            log_verbose(f"({time_since(query_start_time)})")
-                            log_verbose(response_prefix, end="", flush=True)
-
-                        response_tokens.append(token)
-                        log_verbose(token, end="", flush=True)
-                    log_verbose("")
-
-                    query_record["response_time"] = time_since(query_start_time)
-
-            except Exception as e:
-                query_record["error"] = str(e)
-                response_tokens.append("[ERROR]")
-                log_error(e)
-
-            response = "".join(response_tokens).strip()
-            query_record["response"] = response
-            json_log["queries"].append(query_record)
-
-            chat_log += f"{query_prefix}{query}\n"
-            chat_log += f"{response_prefix}{response}\n\n"
-
-    log_verbose("")
-
-    if args.query_log:
-        log(f"Appending query log to \"{os.path.normpath(args.query_log)}\"...")
-        try:
-            with open(args.query_log, "a", encoding="utf-8") as f:
-                f.write(chat_log)
-        except Exception as e: log_error(e)
-
-    if args.query_log_json:
-        log(f"Writing JSON log to \"{os.path.normpath(args.query_log_json)}\"...")
-        try:
-            with open(args.query_log_json, "w", encoding="utf-8") as f:
-                raw_text = json.dumps(json_log, indent=4)
-                f.write(raw_text)
-        except Exception as e: log_error(e)
+        if args.query_log_json:
+            log(f"Writing JSON log to \"{os.path.normpath(args.query_log_json)}\"...")
+            try:
+                with open(args.query_log_json, "w", encoding="utf-8") as f:
+                    raw_text = json.dumps(json_log, indent=4)
+                    f.write(raw_text)
+            except Exception as e: log_error(e)
 
 #------------------------------------------------------------------------------
 # Load chat bot instructions

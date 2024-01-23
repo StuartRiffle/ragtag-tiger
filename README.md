@@ -96,6 +96,11 @@ To connect to an actual [OpenAI](https://platform.openai.com/) endpoint:
 --llm-provider openai --llm-model gpt-4
 ```
 
+For Google Gemini:
+ - authenticate by settings `GOOGLE_APPLICATION_CREDENTIALS` and `GEMINI_API_KEY` in your environment
+ - change [models](https://platform.openai.com/docs/models) using `--llm-model` (the default is `gpt-3.5-turbo-instruct`)
+--llm-provider palm --llm-model models/text-bison-001
+
 
 # Options
 
