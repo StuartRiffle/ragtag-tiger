@@ -15,6 +15,7 @@ program_version     = "0.1.0"
 program_license     = "MIT"
 program_copyright   = "Copyright (c) 2024 Stuart Riffle"
 program_description = "Update and query a LlamaIndex vector index"
+program_repository  = "https://github.com/stuartriffle/ragtag-tiger"
 
 #------------------------------------------------------------------------------
 # File type support and default values etc, update these as needed
@@ -199,7 +200,8 @@ def log_error(msg, exit_code=0, prefix="\t", suffix="", **kwargs):
     if exit_code:
         exit(exit_code)
 
-log_verbose(f"{program_copyright}")
+log_verbose(f"{program_copyright}, {program_license} license")
+log_verbose(f"{program_repository}")
 log("")
 
 #------------------------------------------------------------------------------
@@ -615,10 +617,12 @@ try:
             
         ### Anthropic
         elif args.llm_provider == "anthropic":
+            if args.llm_api_key:
+                os.environ["ANTHROPIC_API_KEY"] = args.llm_api_key
             llm = Anthropic(
                 model=args.llm_model,
                 base_url=args.llm_server)
-            log_verbose(f"\tusing Anthropic model \"{llm.model}\"")
+            log_verbose(f"\t[UNTESTED] using Anthropic model \"{llm.model}\"")
             
         ### Llama.cpp
         elif args.llm_provider == "llamacpp":
@@ -648,7 +652,7 @@ try:
             log_verbose(f"\tusing model {model_desc}\"{model_name}\" for local inference with HuggingFace")
 
 except Exception as e: 
-    log_error(f"failed initializing LLM: {e}", exit_code=1)
+    log_error(f"failure initializing LLM: {e}", exit_code=1)
 
 #------------------------------------------------------------------------------
 # Service context

@@ -11,7 +11,7 @@
 - auto-downloads custom file loaders from the [LlamaIndex hub](https://llamahub.ai) 
 - indexes documents inside archive files and email attachments
 - uses language-aware chunking for source code
-- supports pseudo-interactive "chat" from the command line
+- supports pseudo-interactive "chat" from the command line, using any chat/query response mode
 
 It's mostly the same boilerplate/glue code you were going to have to write anyway, so if this saves you an afternoon of sifting through machine-generated LlamaIndex tutorials and arguing with Copilot, please feel free to buy me a coffee.
 
@@ -25,7 +25,7 @@ Do this in a [virtual environment](https://www.google.com/search?q=python%20virt
 
 # Usage
 
-The simplest way to perform a RAG query would be a command like:
+The simplest way to perform a RAG query would be:
 ```
 python ragtag.py --source my/docs --query "But, why?"
 ```
@@ -39,8 +39,9 @@ Then use that index to perform your queries:
 ```
 python ragtag.py --index-load my/index --query "Really though, why?"
 ```
-This is **still** slow, because the index can take a long time to load. It's just not as slow as re-indexing everything. To minimize overhead, try to either submit all your queries in one run, or just leave the program idle in "chat mode" when not in use. Use `--verbose` to see actual timings.
+This is **still** slow, because the index can take a long time to load. It's just not as slow as re-indexing everything. Use `--verbose` to see actual timings.
 
+To minimize overhead, try to either submit all your queries in one run, or leave the program idling in "chat mode" for ad-hoc use.
 
 # Inference
 
@@ -54,19 +55,19 @@ Another local option is [text-generation-webui](https://github.com/oobabooga/tex
 --llm-provider openai --llm-server http://localhost:5000/v1
 ```
 
-Running your own `llama.cpp` [server](https://github.com/ggerganov/llama.cpp) requires that you also run `examples/server/api_like_OAI.py` for OpenAI compatibility. Then you can connect to it a similar way:
+Running your own `llama.cpp` [server](https://github.com/ggerganov/llama.cpp) requires that you also run `examples/server/api_like_OAI.py` for OpenAI compatibility. Then you can connect like so:
 ```
 --llm-provider openai --llm-server http://YOUR_SERVER:8081
 ```
 
-To use built-in `llama.cpp` [libraries](https://pypi.org/project/llama-cpp-python/) locally without running a server, set the provider to "llamacpp" and supply a model filename:
+To use built-in `llama.cpp` [libraries](https://pypi.org/project/llama-cpp-python/) locally _without_ running a server, set the provider to "llamacpp" and supply a model filename:
 ```
 --llm-provider llamacpp --llm-model codellama-34b.Q4_K_M.gguf
 ```
 
 To connect to an actual [OpenAI](https://platform.openai.com/) endpoint:
 - remind yourself that RAG queries will exfiltrate chunks of your indexed documents
-- authenticate by setting `OPENAI_API_KEY` etc in your environment (or override it with `--llm-api-key`)
+- authenticate by setting `OPENAI_API_KEY` in your environment (or override it with `--llm-api-key`)
 - select [one of their models](https://platform.openai.com/docs/models) using `--llm-model` (the default is `gpt-3.5-turbo-instruct`)
 - do **not** set a custom `--llm-server`
 ```
@@ -155,11 +156,11 @@ python ragtag.py                                        \
 
 You can also set standard arguments in an environment variable called `RAGTAG_FLAGS`. They will be added to the end of every command.
 
-A more flexible way to manage complex configuration is to factor out groups of arguments into response files. The rules are:
+A more flexible way to manage complex configuration is to factor out groups of arguments into response files, where...
 - **every argument must be on its own line**
 - blank lines, indentation, and trailing whitespace are ignored
-- internal whitespace is part of an argument, no quotes are needed
-- lines starting with # are ignored as comments
+- internal whitespace is part of an argument, no quotes needed
+- lines starting with # are considered comments and ignored
 - comments on the same line as arguments are NOT supported
 ```
 # debug_server.args - example response file
