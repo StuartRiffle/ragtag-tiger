@@ -1,14 +1,15 @@
 # RAG/TAG Tiger
 # Copyright (c) 2024 Stuart Riffle
 
-import os, argparse, time, json, pathspec, tempfile, shutil, torch, hashlib, py7zr
+import os, argparse, time, json, pathspec, tempfile, shutil, torch, hashlib, py7zr, humanfriendly
 import shlex
 import email, email.policy, email.parser, email.message
+import google.generativeai as palm
 from llama_index import VectorStoreIndex, StorageContext, ServiceContext, SimpleDirectoryReader
 from llama_index import download_loader, set_global_service_context, load_index_from_storage
 from llama_index.node_parser import SimpleNodeParser
 from llama_index.text_splitter import CodeSplitter
-from llama_index.llms import OpenAI, OpenAILike, Anthropic, HuggingFaceLLM, LlamaCPP, LangChainLLM
+from llama_index.llms import OpenAI, OpenAILike, Anthropic, HuggingFaceLLM, LlamaCPP, PaLM, MistralAI
 
 program_name        = "RAG/TAG Tiger"
 program_version     = "0.1.0"
@@ -123,6 +124,10 @@ class ResponseFileArgumentParser(argparse.ArgumentParser):
         if len(line) > 0 and not line.startswith("#"):
             return [line]
         return []
+    
+def human_size_type(size):
+    try:    return humanfriendly.parse_size(size)
+    except: raise argparse.ArgumentTypeError(f"Invalid size: {size}")
 
 parser = ResponseFileArgumentParser(description=program_description, fromfile_prefix_chars='@')
 
@@ -140,12 +145,14 @@ arg("--source",         help="Folder of files to be indexed recursively", action
 arg("--source-spec",    help="Index files matching a pathspec, like \"**/*.cpp\"", action="append", metavar="SPEC")
 arg("--source-list",    help="Text file with a list of filenames/pathspecs to index", action="append", metavar="FILE")
 arg("--custom-loader",  help="Download from hub, i.e. \"JPEGReader:jpg,jpeg\"", action="append", metavar="SPEC")
-arg("--ignore-unknown", help="Ignore files with unrecognized extensions", action="store_true")
+arg("--index-unknown",  help="Index files with unrecognized extensions as text", action="store_true")
 arg("--ignore-archives",help="Do not index files inside zip/tar/etc archives", action="store_true")
+arg("--ignore-types",   help="Do not index these file extensions, even if supported", action="append", metavar="EXT")
+arg("--size-limit",     help="Ignore huge text files unlikely to contain interesting", type=human_size_type, default=0, metavar="SIZE")
 arg("--no-cache",       help="Do not use the local cache for loaders", action="store_true")
 
 arg = parser.add_argument_group("Language model").add_argument
-arg("--llm-provider",   help="Inference provider/interface", choices=["openai", "anthropic", "llamacpp", "huggingface"], default="huggingface", metavar="NAME")
+arg("--llm-provider",   help="Inference provider/interface", choices=["openai", "anthropic", "palm", "mistral", "llamacpp", "huggingface"], default="huggingface", metavar="NAME")
 arg("--llm-model",      help="Model name/path/etc for provider", metavar="NAME")
 arg("--llm-server",     help="Inference server URL (if needed)", metavar="URL")
 arg("--llm-api-key",    help="API key for inference server (if needed)", default="", metavar="KEY")
@@ -173,7 +180,7 @@ arg("--chat-init-file", help="File containing a snippet of chat LLM instructions
 arg("--chat-log",       help="Append chat queries and responses to a text file", metavar="FILE")
 arg("--chat-mode",      help="Chat response mode", choices=llamaindex_chat_modes, default="best")
 
-os.sys.argv += shlex.split(os.environ.get("RAGTAG_FLAGS", ""))
+#os.sys.argv += shlex.split(os.environ.get("RAGTAG_FLAGS", ""))
 args = parser.parse_args()
 
 print(f"{program_name} {program_version}")
@@ -367,6 +374,14 @@ if len(search_specs) > 0:
             matches = match_files_to_index(search_spec)
             files_to_check.extend(matches)
 
+        files_before_filtering = len(files_to_check)
+        if args.size_limit > 0:
+            log_verbose(f"Ignoring files larger than {humanfriendly.format_size(args.size_limit)}...")
+            files_to_check = [f for f in files_to_check if os.path.getsize(f) <= args.size_limit]
+            files_ignored = (files_before_filtering - len(files_to_check))
+            if files_ignored > 0:
+                log_verbose(f"\t...{files_ignored} oversized files ignored")
+
         while files_to_check:
             container_file_types = archive_file_types | mime_file_types
             containers, non_containers = separate_files_by_extension(files_to_check, container_file_types)
@@ -410,6 +425,16 @@ supported_ext.update(available_hub_loaders.keys())
 supported_ext.update(code_ext)
 supported_ext.update(chunk_as_text)
 
+if args.ignore_types:
+    ignored_extenstions = []
+    for ext in args.ignore_types:
+        if ext in supported_ext:
+            supported_ext.remove(ext)
+            ignored_extenstions.append(ext)
+    if ignored_extenstions:
+        ignored_extenstion_list = ", ".join(sorted(ignored_extenstions)).replace(".", "").strip(", ").lower()
+        log_verbose(f"Ignoring files with specified extensions: \"{', '.join(ignored_extenstions)}\"")
+
 files_with_ext = {}
 for file_path in files_to_index:
     _, ext = os.path.splitext(file_path)
@@ -425,17 +450,17 @@ if args.verbose and len(files_to_index) > 0:
 
 unsupported_ext = set(files_with_ext.keys()) - supported_ext
 if len(unsupported_ext) > 0:
-    ext_action = "IGNORED" if args.ignore_unknown else "indexed as PLAIN TEXT"
     type_list = ", ".join(sorted(unsupported_ext)).replace(".", "").strip(", ").lower()
-    log_verbose(f"Unsupported file types {ext_action}: {type_list}")
-
-if args.ignore_unknown:
-    for ext in unsupported_ext:
-        del files_with_ext[ext]
-    files_before = len(files_to_index)
-    files_to_index = [f for f in files_to_index if os.path.splitext(f)[1] in supported_ext]
-    if len(files_to_index) < files_before:
-        log_verbose(f"\t...{files_before - len(files_to_index)} files dropped")
+    if args.index_unknown:
+        log_verbose(f"WARNING: indexing unknown file types as plain text: {type_list}")
+    else:
+        log_verbose(f"Ignoring these unsupported file types: {type_list}")
+        for ext in unsupported_ext:
+            del files_with_ext[ext]
+        files_before = len(files_to_index)
+        files_to_index = [f for f in files_to_index if os.path.splitext(f)[1] in supported_ext]
+        if len(files_to_index) < files_before:
+            log_verbose(f"\t...{files_before - len(files_to_index)} files ignored")
 
 loader_specs = args.custom_loader or []
 for ext in files_with_ext.keys():
@@ -596,19 +621,19 @@ try:
 
         ### OpenAI
         if args.llm_provider == "openai":
-            if args.llm_api_key:
-                os.environ["OPENAI_API_KEY"] = args.llm_api_key
+            api_key = args.llm_api_key or os.environ.get("OPENAI_API_KEY", "")
             if not args.llm_server:
                 llm = OpenAI(
                     model=args.llm_model or openai_model_default,
-                    model_kwargs=model_kwargs,
+                    api_key=api_key,
+                    additional_kwargs=model_kwargs,
                     verbose=args.llm_verbose)
                 log_verbose(f"\tusing OpenAI model \"{llm.model}\"")
             else:
                 # API compatible server
                 llm = OpenAILike(
                     model=args.llm_model or "default",
-                    model_kwargs=model_kwargs,
+                    additional_kwargs=model_kwargs,
                     api_base=args.llm_server,
                     max_tokens=1000,
                     max_iterations=100,
@@ -617,12 +642,30 @@ try:
             
         ### Anthropic
         elif args.llm_provider == "anthropic":
-            if args.llm_api_key:
-                os.environ["ANTHROPIC_API_KEY"] = args.llm_api_key
+            api_key = args.llm_api_key or os.environ.get("ANTHROPIC_API_KEY", "")
             llm = Anthropic(
                 model=args.llm_model,
-                base_url=args.llm_server)
+                api_key=api_key,
+                base_url=args.llm_server,
+                additional_kwargs=model_kwargs)
             log_verbose(f"\t[UNTESTED] using Anthropic model \"{llm.model}\"")
+            
+        ### PaLM
+        elif args.llm_provider == "palm":
+            api_key = args.llm_api_key or os.environ.get("GEMINI_API_KEY", "")
+            llm = PaLM(
+                api_key=api_key,
+                model_name=args.llm_model,
+                generate_kwargs=model_kwargs)
+            log_verbose(f"\tusing Google PaLM model \"{llm.model_name}\"")
+            
+        ### Mistral
+        elif args.llm_provider == "mistral":
+            llm = MistralAI(
+                model=args.llm_model,
+                api_key=args.llm_api_key,
+                additional_kwargs=model_kwargs)
+            log_verbose(f"\t[UNTESTED] using MistralAI model \"{llm.model}\"")
             
         ### Llama.cpp
         elif args.llm_provider == "llamacpp":

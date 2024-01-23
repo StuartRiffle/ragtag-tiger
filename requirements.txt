@@ -11,11 +11,13 @@ autoawq
 llama-cpp-python
 tree-sitter
 tree-sitter-languages
-py7zr
 zstd
 rarfile
 python-pptx
 pillow
 pypdf
 anthropic
+google
+google-generativeai
+py7zr
 
