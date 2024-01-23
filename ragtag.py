@@ -750,7 +750,7 @@ if len(queries) > 0:
 
             try:
                 with TimerUntil("query complete"):
-                    log_verbose(f"\n{query_prefix}{query}\n\t...thinking ", end="")
+                    log_verbose(f"\n{query_prefix}{query}\n\t...thinking ", end="", flush=True)
                     query_start_time = time.time()
 
                     streaming_response = query_engine.query(query)
@@ -759,10 +759,10 @@ if len(queries) > 0:
                             if not token.strip():
                                 continue
                             log_verbose(f"({time_since(query_start_time)})")
-                            log_verbose(response_prefix, end="")
+                            log_verbose(response_prefix, end="", flush=True)
 
                         response_tokens.append(token)
-                        log_verbose(token, end="")
+                        log_verbose(token, end="", flush=True)
                     log_verbose("")
 
                     query_record["response_time"] = time_since(query_start_time)
@@ -782,9 +782,9 @@ if len(queries) > 0:
     log_verbose("")
 
     if args.query_log:
-        log(f"Writing query log to \"{os.path.normpath(args.query_log)}\"...")
+        log(f"Appending query log to \"{os.path.normpath(args.query_log)}\"...")
         try:
-            with open(args.query_log, "w", encoding="utf-8") as f:
+            with open(args.query_log, "a", encoding="utf-8") as f:
                 f.write(chat_log)
         except Exception as e: log_error(e)
 
@@ -955,7 +955,7 @@ if args.chat:
                     f.write(f"{query_prefix}{message}\n")
             except Exception as e: log_error(e)
 
-        log(thinking_message, end="")
+        log(thinking_message, end="", flush=True)
         response_tokens = []
 
         try:
@@ -969,10 +969,10 @@ if args.chat:
                     if not token.strip():
                         continue
                     log(f"\r{' ' * len(thinking_message)}", end="\r")
-                    log(response_prefix, end="")
+                    log(response_prefix, end="", flush=True)
 
                 response_tokens.append(token)
-                log(token, end="")
+                log(token, end="", flush=True)
             log("")
         except KeyboardInterrupt:
             log("-[BREAK]")
