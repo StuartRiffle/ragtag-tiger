@@ -16,34 +16,48 @@
 It's mostly the same boilerplate/glue code you were going to have to write anyway, so if this saves you an afternoon of sifting through machine-generated LlamaIndex tutorials and arguing with Copilot, please feel free to buy me a coffee.
 
 # Setup
-The basic steps are the same as other Python programs:
+The steps are the same as other Python programs.
 
-1) Install development tools (details will vary by OS, but Debian/Ubuntu use `apt`):
+### 1) Install development tools
+Details will vary by OS, but on [Debian]()/[Ubuntu]() you would use `apt` to install these packages:
 
 ```
 sudo apt update -y
 sudo apt-get install -y build-essential cmake git python3 pip python3-venv
 ```
-2) Clone this repository
+On Windows you could use [WSL](https://learn.microsoft.com/en-us/windows/wsl/), or use something like [Chocolatey](https://chocolatey.org/install):
+```
+choco install /y python git cuda
+```
 
+### 2) Clone this repository
 ```
-git clone https://github.com/stuartriffle/ragtag-tiger
-cd ragtag-tiger
+git clone https://github.com/stuartriffle/ragtag-tiger ragtag
+cd ragtag
 ```
-3) Create and activate a [virtual environment](https://www.google.com/search?q=python%20virtual%20environments) (some systems use `conda` instead of `venv`)
+### 3) Create and activate a [virtual environment](https://docs.python.org/3/library/venv.html)
 ```
 python3 -m venv .venv
 . .venv/bin/activate
 ```
-4) Install our package dependencies
+On Windows, activate the environment with `.venv\Scripts\activate.bat`
+
+You can also use [conda](https://conda.io) to manage the Python environment.
+
+### 4) Install dependencies
 ```
+pip install --upgrade pip
 pip install -r requirements.txt
 ```
-5) Sanity check
+If that fails, go to step 4.
+
+### 5) Sanity check
 ```
 python ragtag.py --version
 ```
-If that prints a version number, and not a long Python error message of some sort, we're in a good place.
+If that does not print some kind of Python error message, we're in a good place. 
+
+If it wants more packages, please add them to requirements.txt and submit a pull request!
 
 # Usage
 
@@ -63,44 +77,57 @@ python ragtag.py --index-load my/index --query "Really though, why?"
 ```
 This is **still** slow, because the index can take a long time to load. It's just not as slow as re-indexing everything. Use `--verbose` to see actual timings.
 
-To minimize overhead, try to either submit all your queries in one run, or leave the program idling in "chat mode" for ad-hoc use.
+To minimize overhead, try to either submit all your queries in one run, or leave a window open with the program idling in "chat mode" for ad-hoc use. Be aware that there are multiple chat modes, and the default does not respond the same way as a query. Use the `/mode` command in chat to switch response types. 
 
-# Inference
+For query-style responses in chat mode, type `/mode tree_summarize` at the chat prompt.
 
-By default, **RAG/TAG Tiger** uses HuggingFace libraries to perform all inference on your machine. It **should** run on the GPU if your Python environment is configured properly for CUDA (which can be non-trivial). You can use `--llm-model` to select specific LLM models from [HuggingFace](https://huggingface.co/models). They will be downloaded and cached for re-use. For example:
-```
---llm-model TheBloke/CodeLlama-34B-Instruct-AWQ
-```
+# Local inference
 
-Another local option is [text-generation-webui](https://github.com/oobabooga/text-generation-webui). If you enable "API" and "listen" in the extensions page, it will run an OpenAI-compatible server on port `5000`. Connect to it like this:
-```
---llm-provider openai --llm-server http://localhost:5000/v1
-```
+By default, **RAG/TAG Tiger** performs all inference locally, on your machine. Queries **should** run on GPU if your Python environment is configured for CUDA (which can be non-trivial).
 
-Running your own `llama.cpp` [server](https://github.com/ggerganov/llama.cpp) requires that you also run `examples/server/api_like_OAI.py` for OpenAI compatibility. Then you can connect like so:
+### [HuggingFace](https://huggingface.co/models)
+This is the default provider, so `--llm-provider huggingface` isn't strictly required. Use `--llm-model` to select specific models by name. They will be downloaded and cached for re-use. For example:
 ```
---llm-provider openai --llm-server http://YOUR_SERVER:8081
+--llm-provider huggingface  --llm-model TheBloke/CodeLlama-34B-Instruct-AWQ
 ```
 
-To use built-in `llama.cpp` [libraries](https://pypi.org/project/llama-cpp-python/) locally _without_ manually starting a server, set the provider to "llamacpp" and supply a model filename:
+### [text-generation-webui](https://github.com/oobabooga/text-generation-webui)
+If you enable the "API" and "listen" checkboxes on the extensions page of the web UI, it will run an OpenAI-compatible inference server on port `5000`. Connect to it like this:
 ```
---llm-provider llamacpp --llm-model codellama-34b.Q4_K_M.gguf
+--llm-provider openai  --llm-server http://localhost:5000/v1
 ```
 
-To connect to an actual [OpenAI](https://platform.openai.com/) endpoint:
-- authenticate by setting `OPENAI_API_KEY` in your environment (or override it with `--llm-api-key`)
-- change [models](https://platform.openai.com/docs/models) using `--llm-model` (the default is `gpt-3.5-turbo-instruct`)
+### [llama.cpp](https://github.com/ggerganov/llama.cpp)
+If you run your own `llama.cpp` server, also run `examples/server/api_like_OAI.py` to enable the OpenAI compatibility layer, then:
+```
+--llm-provider openai  --llm-server http://YOUR_SERVER:8081
+```
+
+Or, to use the built-in `llama.cpp` [library](https://pypi.org/project/llama-cpp-python/) locally (without manually starting a server), set the provider to "llamacpp" and supply a pre-downloaded model:
+```
+--llm-provider llamacpp  --llm-model codellama-34b.Q4_K_M.gguf
+```
+
+# Commercial inference
+
+RAG queries can exfiltrate chunks of _any_ documents you index, including apparently off-topic ones.
+
+If that's not a problem:
+
+### [OpenAI](https://platform.openai.com/)
+- authenticate by setting `OPENAI_API_KEY` in your environment, or override it with `--llm-api-key`
+- change [models](https://platform.openai.com/docs/models) using `--llm-model` (you get `gpt-3.5-turbo-instruct` by default)
 - do **not** set a custom `--llm-server`
-- remind yourself that RAG queries will exfiltrate chunks of your documents
 ```
---llm-provider openai --llm-model gpt-4
+--llm-provider openai  --llm-model gpt-4
 ```
 
-For Google Gemini:
- - authenticate by settings `GOOGLE_APPLICATION_CREDENTIALS` and `GEMINI_API_KEY` in your environment
+### Google Gemini
+ - authenticate by setting `GOOGLE_APPLICATION_CREDENTIALS` and `GEMINI_API_KEY` in your environment (or `--llm-api-key` to override)
  - change [models](https://platform.openai.com/docs/models) using `--llm-model` (the default is `gpt-3.5-turbo-instruct`)
---llm-provider palm --llm-model models/text-bison-001
-
+ ```
+--llm-provider palm  --llm-model models/text-bison-001
+```
 
 # Options
 
@@ -198,7 +225,6 @@ A more flexible way to manage complex configuration is to factor out groups of a
     http://localhost:8081             
 --llm-param       
     temperature=0.9
-    seed=1337         
 ```
 
 To use the response file, pull it in with `@` on the command line (the file extension doesn't matter). This has the same effect as typing all the arguments by hand:

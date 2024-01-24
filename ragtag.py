@@ -1,26 +1,111 @@
 # RAG/TAG Tiger
 # Copyright (c) 2024 Stuart Riffle
 
+program_name            = "RAG/TAG Tiger"
+program_version         = "0.1.0"
+program_license         = "MIT"
+program_copyright       = "Copyright (c) 2024 Stuart Riffle"
+program_description     = "Update and query a LlamaIndex vector index"
+program_repository      = "github.com/stuartriffle/ragtag-tiger"
+
+default_llm_provider    = "huggingface"
+hf_model_nicknames      = { "default": "codellama/CodeLlama-7b-Instruct-hf" }
+openai_model_default    = "gpt-3.5-turbo-instruct"
+palm_model_default      = "models/text-bison-001"
+anthropic_model_default = "claude-2"
+
+llamaindex_chat_modes = ["best", "context", "condense_question", "simple", "react", "openai"]
+llamaindex_query_response_modes = ["accumulate", "compact", "compact_accumulate", "generation", "no_text", "refine", "simple_summarize", "tree_summarize"]
+
+print(f"{program_name} v{program_version}")
+
+#------------------------------------------------------------------------------
+# Parse command line arguments and response files
+#------------------------------------------------------------------------------
+
+import argparse
+
+class ResponseFileArgumentParser(argparse.ArgumentParser):
+    """Ignore comments and whitespace in response files"""
+    def convert_arg_line_to_args(self, arg_line):
+        line = arg_line.strip()
+        if len(line) > 0 and not line.startswith("#"):
+            return [line]
+        return []
+    
+def human_size_type(size):
+    try:    return humanfriendly.parse_size(size)
+    except: raise argparse.ArgumentTypeError(f"Invalid size: {size}")
+
+parser = ResponseFileArgumentParser(description=program_description, fromfile_prefix_chars='@')
+
+arg = parser.add_argument
+arg("--quiet",          help="suppress all output except errors", action="store_true")
+arg("--verbose",        help="enable extended/debug output", action="store_true")
+arg("--version",        help="print the version number and exit", action="store_true")
+
+arg = parser.add_argument_group("Vector database").add_argument
+arg("--index-load",     help="Load the vector index from a given path", metavar="PATH")
+arg("--index-store",    help="Save the updated vector index to a given path", metavar="PATH")
+
+arg = parser.add_argument_group("Document indexing").add_argument
+arg("--source",         help="Folder of files to be indexed recursively", action="append", metavar="FOLDER")
+arg("--source-spec",    help="Index files matching a pathspec, like \"**/*.cpp\"", action="append", metavar="SPEC")
+arg("--source-list",    help="Text file with a list of filenames/pathspecs to index", action="append", metavar="FILE")
+arg("--custom-loader",  help="Download from hub, i.e. \"JPEGReader:jpg,jpeg\"", action="append", metavar="SPEC")
+arg("--index-unknown",  help="Index files with unrecognized extensions as text", action="store_true")
+arg("--ignore-archives",help="Do not index files inside zip/tar/etc archives", action="store_true")
+arg("--ignore-types",   help="Do not index these file extensions, even if supported", action="append", metavar="EXT")
+arg("--size-limit",     help="Ignore huge text files unlikely to contain interesting", type=human_size_type, default=0, metavar="SIZE")
+arg("--no-cache",       help="Do not use the local cache for loaders", action="store_true")
+
+arg = parser.add_argument_group("Language model").add_argument
+arg("--llm-provider",   help="Inference provider/interface", choices=["openai", "anthropic", "palm", "mistral", "llamacpp", "huggingface"], metavar="NAME")
+arg("--llm-model",      help="Model name/path/etc for provider", metavar="NAME")
+arg("--llm-server",     help="Inference server URL (if needed)", metavar="URL")
+arg("--llm-api-key",    help="API key for inference server (if needed)", metavar="KEY")
+arg("--llm-param",      help="Inference parameter, like \"temperature=0.9\" etc", nargs="+", metavar="KVP")
+arg("--llm-config",     help="Condensed LLM config: provider,model,server,api-key,params...", action="append", metavar="CFG")
+arg("--llm-config-mod", help="Moderator LLM to consolidate the responses of multiple providers", action="append", metavar="CFG")
+arg("--llm-verbose",    help="enable extended/debug output from the LLM", action="store_true")
+arg("--torch-device",   help="Device override, like \"cpu\" or \"cuda:1\" (for second GPU)", metavar="DEVICE")
+arg("--context",        help="Command line context/system prompt", action="append", metavar="TEXT")
+arg("--context-file",   help="File containing a snippet of context",action="append", metavar="FILE")
+
+arg = parser.add_argument_group("Query processing").add_argument
+arg("--query",          help="Command line query", action="append", metavar="TEXT")
+arg("--query-list",     help="File containing short queries, one per line", action="append", metavar="FILE")
+arg("--query-file",     help="File containing one long query", action="append", metavar="FILE")
+arg("--query-log",      help="Log queries and responses to a text file", metavar="FILE")
+arg("--query-log-json", help="Log queries and responses (plus some metadata) to a JSON file", metavar="FILE")
+arg("--query-mode",     help="Query response mode", choices=llamaindex_query_response_modes, default="tree_summarize")
+arg("--tag-queries",    help="The name/header in the transcript for user queries", metavar="NAME", default="User")
+arg("--tag-responses",  help="The name/header in the transcript for engine responses", metavar="NAME", default="Tiger")
+arg("--skip-summary",   help="When querying multiple models, don't consolidate responses", action="store_true")
+
+arg = parser.add_argument_group("Interactive chat").add_argument
+arg("--chat",           help="Enter chat after any query processing", action="store_true")
+arg("--chat-init",      help="Extra instructions/personality for the chat LLM", action="append", metavar="TEXT")
+arg("--chat-init-file", help="File containing a snippet of chat LLM instructions", action="append", metavar="FILE")
+arg("--chat-log",       help="Append chat queries and responses to a text file", metavar="FILE")
+arg("--chat-mode",      help="Chat response mode", choices=llamaindex_chat_modes, default="best")
+
+#import shlex
+#os.sys.argv += shlex.split(os.environ.get("RAGTAG_FLAGS", ""))
+
+args = parser.parse_args()
+if args.version:
+    exit(0)
+if args.verbose:
+    print(f"{program_copyright}\n{program_repository}\n\nStarting up...")
+
+#------------------------------------------------------------------------------
+# Default values etc, update these as needed
+#------------------------------------------------------------------------------
+
 import os, argparse, time, json, pathspec, tempfile, shutil, torch, hashlib, py7zr, humanfriendly
-import shlex
 import email, email.policy, email.parser, email.message
-import google.generativeai as palm
-from llama_index import VectorStoreIndex, StorageContext, ServiceContext, SimpleDirectoryReader
-from llama_index import download_loader, set_global_service_context, load_index_from_storage
-from llama_index.node_parser import SimpleNodeParser
 from llama_index.text_splitter import CodeSplitter
-from llama_index.llms import OpenAI, OpenAILike, Anthropic, HuggingFaceLLM, LlamaCPP, PaLM, MistralAI
-
-program_name        = "RAG/TAG Tiger"
-program_version     = "0.1.0"
-program_license     = "MIT"
-program_copyright   = "Copyright (c) 2024 Stuart Riffle"
-program_description = "Update and query a LlamaIndex vector index"
-program_repository  = "https://github.com/stuartriffle/ragtag-tiger"
-
-#------------------------------------------------------------------------------
-# File type support and default values etc, update these as needed
-#------------------------------------------------------------------------------
 
 built_in_loaders = set([
     # SimpleDirectoryReader supports these out-of-the-box
@@ -80,7 +165,8 @@ source_code_splitters = [
 mime_file_types = set([
     # Pull out embedded text/html and uuencoded files
     ".eml", ".msg",
-    # Special case: sometimes actually MIME, not old binary Word docs
+
+    # Special case: sometimes .doc files are actually MIME, not old binary Word documents
     ".doc", 
 ])
 
@@ -88,106 +174,20 @@ shutil.register_unpack_format('7zip', ['.7z'], py7zr.unpack_7zarchive)
 archive_file_types = set([
     # Unpack these archive formats so we can index their contents too
     ".zip", ".7z", ".tar", ".gz", ".tgz", ".bz2", ".tbz2", ".xz", ".txz", 
-    # FIXME - unsupported
+
+    # FIXME - common but currently unsupported
     # ".rar", ".lzma", ".lz", ".lz4", ".zst", 
 ])
 
 chunk_as_text = set([
     # Plain text files, no special handling 
-    ".txt", ".TXT", ".rtf", ".log", ".asc", 
-    ".ini", ".cfg", 
-    # FIXME - use a proper splitter/loader when one becomes available
+    ".txt", ".TXT", ".rtf", ".log", ".asc", ".ini", ".cfg", 
+
+    # FIXME - use a proper splitter/loader for these when one becomes available
     ".hlsl", ".hlsli", ".fxh", ".glsl", ".glsli", ".shader",
     ".asm", ".s",
     ".xml",
 ])
-
-openai_model_default = "gpt-3.5-turbo-instruct"
-palm_model_default = "models/text-bison-001"
-default_llm_provider = "huggingface"
-
-hf_model_nicknames = {
-    "default": "codellama/CodeLlama-7b-Instruct-hf",
-    #"TheBloke/CodeLlama-7B-Instruct-GPTQ", requires package "auto-gptq"
-    #"TheBloke/Mistral-7B-Instruct-v0.2-GGUF",
-}
-
-llamaindex_chat_modes = ["best", "context", "condense_question", "simple", "react", "openai"]
-llamaindex_query_response_modes = ["accumulate", "compact", "compact_accumulate", "generation", "no_text", "refine", "simple_summarize", "tree_summarize"]
-
-#------------------------------------------------------------------------------
-# Parse command line arguments and response files
-#------------------------------------------------------------------------------
-
-class ResponseFileArgumentParser(argparse.ArgumentParser):
-    """Ignore comments and whitespace in response files"""
-    def convert_arg_line_to_args(self, arg_line):
-        line = arg_line.strip()
-        if len(line) > 0 and not line.startswith("#"):
-            return [line]
-        return []
-    
-def human_size_type(size):
-    try:    return humanfriendly.parse_size(size)
-    except: raise argparse.ArgumentTypeError(f"Invalid size: {size}")
-
-parser = ResponseFileArgumentParser(description=program_description, fromfile_prefix_chars='@')
-
-arg = parser.add_argument
-arg("--quiet",          help="suppress all output except errors", action="store_true")
-arg("--verbose",        help="enable extended/debug output", action="store_true")
-arg("--version",        help="print the version number and exit", action="store_true")
-
-arg = parser.add_argument_group("Vector database").add_argument
-arg("--index-load",     help="Load the vector index from a given path", metavar="PATH")
-arg("--index-store",    help="Save the updated vector index to a given path", metavar="PATH")
-
-arg = parser.add_argument_group("Document indexing").add_argument
-arg("--source",         help="Folder of files to be indexed recursively", action="append", metavar="FOLDER")
-arg("--source-spec",    help="Index files matching a pathspec, like \"**/*.cpp\"", action="append", metavar="SPEC")
-arg("--source-list",    help="Text file with a list of filenames/pathspecs to index", action="append", metavar="FILE")
-arg("--custom-loader",  help="Download from hub, i.e. \"JPEGReader:jpg,jpeg\"", action="append", metavar="SPEC")
-arg("--index-unknown",  help="Index files with unrecognized extensions as text", action="store_true")
-arg("--ignore-archives",help="Do not index files inside zip/tar/etc archives", action="store_true")
-arg("--ignore-types",   help="Do not index these file extensions, even if supported", action="append", metavar="EXT")
-arg("--size-limit",     help="Ignore huge text files unlikely to contain interesting", type=human_size_type, default=0, metavar="SIZE")
-arg("--no-cache",       help="Do not use the local cache for loaders", action="store_true")
-
-arg = parser.add_argument_group("Language model").add_argument
-arg("--llm-provider",   help="Inference provider/interface", choices=["openai", "anthropic", "palm", "mistral", "llamacpp", "huggingface"], metavar="NAME")
-arg("--llm-model",      help="Model name/path/etc for provider", metavar="NAME")
-arg("--llm-server",     help="Inference server URL (if needed)", metavar="URL")
-arg("--llm-api-key",    help="API key for inference server (if needed)", metavar="KEY")
-arg("--llm-config",     help="Condensed LLM configuration in the format: provider,model,server,api-key", action="append", metavar="CFG")
-arg("--llm-param",      help="Inference parameter, like \"temperature=0.9\" etc", nargs="+", metavar="KVP")
-arg("--llm-verbose",    help="enable extended/debug output from the LLM", action="store_true")
-arg("--torch-device",   help="Device override, like \"cpu\" or \"cuda:1\" (for second GPU)", metavar="DEVICE")
-arg("--context",        help="Command line context/system prompt", action="append", metavar="TEXT")
-arg("--context-file",   help="File containing a snippet of context",action="append", metavar="FILE")
-
-arg = parser.add_argument_group("Query processing").add_argument
-arg("--query",          help="Command line query", action="append", metavar="TEXT")
-arg("--query-list",     help="File containing short queries, one per line", action="append", metavar="FILE")
-arg("--query-file",     help="File containing one long query", action="append", metavar="FILE")
-arg("--query-log",      help="Log queries and responses to a text file", metavar="FILE")
-arg("--query-log-json", help="Log queries and responses (plus some metadata) to a JSON file", metavar="FILE")
-arg("--query-mode",     help="Query response mode", choices=llamaindex_query_response_modes, default="tree_summarize")
-arg("--tag-queries",    help="The name/header in the transcript for user queries", metavar="NAME", default="User")
-arg("--tag-responses",  help="The name/header in the transcript for engine responses", metavar="NAME", default="Tiger")
-
-arg = parser.add_argument_group("Interactive chat").add_argument
-arg("--chat",           help="Enter chat after any query processing", action="store_true")
-arg("--chat-init",      help="Extra instructions/personality for the chat LLM", action="append", metavar="TEXT")
-arg("--chat-init-file", help="File containing a snippet of chat LLM instructions", action="append", metavar="FILE")
-arg("--chat-log",       help="Append chat queries and responses to a text file", metavar="FILE")
-arg("--chat-mode",      help="Chat response mode", choices=llamaindex_chat_modes, default="best")
-
-#os.sys.argv += shlex.split(os.environ.get("RAGTAG_FLAGS", ""))
-args = parser.parse_args()
-
-print(f"{program_name} {program_version}")
-if args.version:
-    exit(0)
 
 #------------------------------------------------------------------------------
 # Misc loggery
@@ -208,10 +208,6 @@ def log_error(msg, exit_code=0, prefix="\t", suffix="", **kwargs):
     log(f"{prefix}{error_desc}ERROR: {msg}{suffix}", **kwargs)
     if exit_code:
         exit(exit_code)
-
-log_verbose(f"{program_copyright}, {program_license} license")
-log_verbose(f"{program_repository}")
-log("")
 
 #------------------------------------------------------------------------------
 # A scope timer for verbose mode
@@ -475,6 +471,7 @@ file_extractor_list = {}
 
 if len(loader_specs) > 0:
     log(f"Downloading file loaders from the LlamaIndex hub...")
+    from llama_index import download_loader
     for loader_spec in loader_specs:
         try:
             loader_class, _, extensions = loader_spec.partition(':')
@@ -495,6 +492,11 @@ if len(loader_specs) > 0:
 #------------------------------------------------------------------------------
 # Load and chunk all those documents
 #------------------------------------------------------------------------------
+from llama_index import SimpleDirectoryReader
+from llama_index.node_parser import SimpleNodeParser
+
+
+
 
 document_nodes = []
 
@@ -611,61 +613,32 @@ if len(system_prompt.strip()) > 0:
     log_verbose(f"System prompt:\n{system_prompt}")
 
 #------------------------------------------------------------------------------
-# Update the vector database
-#------------------------------------------------------------------------------
-
-vector_index = None
-
-if args.index_load:
-    info = f" in \"{os.path.normpath(args.index_load)}\"" if args.verbose else ""
-    log(f"Loading the vector index{info}...")
-    try:
-        with TimerUntil("loaded"):
-            storage_context = StorageContext.from_defaults(persist_dir=args.index_load)
-            vector_index = load_index_from_storage(storage_context, show_progress=args.verbose)            
-    except Exception as e: log_error(e)
-
-if not vector_index:
-    log_verbose(f"Creating a new vector index in memory...")
-    try:
-        vector_index = VectorStoreIndex([], service_context=service_context)
-    except Exception as e: log_error(e, exit_code=1)
-    
-if len(document_nodes) > 0:
-    info = f" {len(document_nodes)}" if args.verbose else ""
-    log(f"Indexing{info} document nodes...")
-    try:
-        with TimerUntil("indexing complete"):
-            vector_index.insert_nodes(document_nodes, show_progress=args.verbose)
-    except Exception as e: log_error(e)
-
-if args.index_store:
-    info = f" in \"{os.path.normpath(args.index_store)}\"" if args.verbose else ""
-    log(f"Storing vector index{info}...")
-    try:
-        with TimerUntil("index stored"):
-            if not os.path.exists(args.index_store):
-                os.makedirs(args.index_store)
-            vector_index.storage_context.persist(persist_dir=args.index_store)
-    except Exception as e: log_error(e)
-
-#------------------------------------------------------------------------------
 # Process the queries on all given LLM configurations in turn
 #------------------------------------------------------------------------------
 
-llm = None
 
-if args.llm_config:
-    if args.llm_provider or args.llm_server or args.llm_api_key or args.llm_param:
-        log_error(f"conflicting options, either use --llm-config, or use --llm-[provider,model,server,api-key,param...], not both", exit_code=1)
-else:
-    # Build a fake configuration string out of the options
+
+
+
+llm = None
+vector_index = None
+rough_transcript = ""
+json_log = {
+    "context": system_prompt,
+    "queries": []
+}
+
+llm_config_list = args.llm_config_list or []
+
+if args.llm_provider or args.llm_server or args.llm_api_key or args.llm_param:
+    # Build a configuration string out of the options
     config_str = f"{args.llm_provider or 'huggingface'},{args.llm_model or ''},{args.llm_server or ''},{args.llm_api_key or ''}"
     for param in args.llm_param or []:
         config_str += f",{param.strip().replace(' ', '')}"
-    args.llm_config = [config_str]
+    llm_config_list.insert(config_str, 0)
 
-for llm_config in args.llm_config:
+
+for llm_config in args.llm_config_list:
     llm_config = llm_config.strip("\"' ")
     llm_fields = llm_config.split(",")
     if llm_fields:
@@ -676,11 +649,7 @@ for llm_config in args.llm_config:
         args.llm_param    = llm_fields[4:] if len(llm_fields) > 4 else []
 
     if llm:
-        # Release resources used by the previous iteration  
-        try:
-            llm.close()
-        except Exception as e:
-            log_verbose(f"Failure closing LLM: {e}")
+        # FIXME any way to release VRAM used by the LLM from the previous iteration?
         llm = None
 
     #--------------------------------------------------------------------------
@@ -689,7 +658,6 @@ for llm_config in args.llm_config:
 
     llm_supports_streaming = True
 
-    log(f"Initializing language model...")
     try:
         with TimerUntil("ready"):
             llm_model_kwargs = dict([param.split("=") for param in args.llm_param]) if args.llm_param else {}
@@ -699,50 +667,59 @@ for llm_config in args.llm_config:
             if args.llm_provider == "openai":
                 api_key = args.llm_api_key or os.environ.get("OPENAI_API_KEY", "")
                 if not args.llm_server:
+                    model_name = args.llm_model or openai_model_default
+                    log(f"Using OpenAI model \"{model_name}\"...")
+                    from llama_index.llms import OpenAI
                     llm = OpenAI(
-                        model=args.llm_model or openai_model_default,
+                        model=model_name,
                         api_key=api_key,
                         additional_kwargs=model_kwargs,
                         verbose=args.llm_verbose)
-                    log_verbose(f"\tusing OpenAI model \"{llm.model}\"")
                 else:
                     # API compatible server
+                    model_name = args.llm_model or "default"
+                    log(f"Using model \"{model_name}\" on server \"{args.llm_server}\"...")
+                    from llama_index.llms import OpenAILike
                     llm = OpenAILike(
-                        model=args.llm_model or "default",
+                        model=model_name,
                         additional_kwargs=model_kwargs,
                         api_base=args.llm_server,
                         max_tokens=1000,
                         max_iterations=100,
                         verbose=args.llm_verbose)
-                    log_verbose(f"\tusing model \"{llm.model}\" on OpenAI API server \"{args.llm_server}\"")
                 
             ### Anthropic
             elif args.llm_provider == "anthropic":
                 api_key = args.llm_api_key or os.environ.get("ANTHROPIC_API_KEY", "")
+                model_name = args.llm_model or anthropic_model_default
+                log(f"[UNTESTED] Uusing Anthropic model \"{model_name}\"...")
+                from llama_index.llms import Anthropic
                 llm = Anthropic(
-                    model=args.llm_model,
+                    model=model_name,
                     api_key=api_key,
                     base_url=args.llm_server,
                     additional_kwargs=model_kwargs)
-                log_verbose(f"\t[UNTESTED] using Anthropic model \"{llm.model}\"")
                 
             ### PaLM
             elif args.llm_provider == "palm":
                 api_key = args.llm_api_key or os.environ.get("GEMINI_API_KEY", "")
+                model_name = args.llm_model or palm_model_default
+                log(f"Using Google PaLM model \"{model_name}\"...")
+                from llama_index.llms import PaLM
                 llm = PaLM(
                     api_key=api_key,
-                    model_name=args.llm_model or palm_model_default,
+                    model_name=model_name,
                     generate_kwargs=model_kwargs)
                 llm_supports_streaming = False
-                log_verbose(f"\tusing Google PaLM model \"{llm.model_name}\" [streaming not supported]")
                 
             ### Mistral
             elif args.llm_provider == "mistral":
+                log(f"[UNTESTED] Using MistralAI model \"{llm.model}\"")
+                from llama_index.llms import MistralAI
                 llm = MistralAI(
                     model=args.llm_model,
                     api_key=args.llm_api_key,
                     additional_kwargs=model_kwargs)
-                log_verbose(f"\t[UNTESTED] using MistralAI model \"{llm.model}\"")
                 
             ### Llama.cpp
             elif args.llm_provider == "llamacpp":
@@ -750,11 +727,12 @@ for llm_config in args.llm_config:
                     # FIXME - this does nothing
                     model_kwargs["n_gpu_layers"] = -1
                     model_kwargs["device"] = "cuda"
+                log(f"Loading llama.cpp model \"{os.path.normpath(args.llm_model)}\"...")
+                from llama_index.llms import LlamaCPP
                 llm = LlamaCPP(
                     model_path=args.llm_model,
                     model_kwargs=model_kwargs,
                     verbose=args.llm_verbose)
-                log_verbose(f"\tusing local llama.cpp with \"{os.path.normpath(args.llm_model)}\"")
             
             ### HuggingFace
             else:
@@ -762,14 +740,15 @@ for llm_config in args.llm_config:
                 model_desc = ""
                 model_name = args.llm_model or "default"
                 if model_name in hf_model_nicknames:
-                    model_desc = f"\"{model_name}\" which is HF model "
+                    model_desc = f" (\"{model_name}\")"
                     model_name = hf_model_nicknames[model_name]
+                log(f"Loading HuggingFace model \"{model_name}\"{model_desc}...")
+                from llama_index.llms import HuggingFaceLLM
                 llm = HuggingFaceLLM(
                     model_name=model_name,
                     model_kwargs=model_kwargs, 
                     device_map=args.torch_device or "auto",
                     system_prompt=system_prompt)
-                log_verbose(f"\tusing model {model_desc}\"{model_name}\" for local inference with HuggingFace")
 
     except Exception as e: 
         log_error(f"failure initializing LLM: {e}", exit_code=1)
@@ -778,10 +757,14 @@ for llm_config in args.llm_config:
     # Service context
     #------------------------------------------------------------------------------
 
+    from llama_index import ServiceContext
+    from llama_index import set_global_service_context
+
+
     service_context = None
 
     if llm:
-        log_verbose(f"Setting global service context...")
+        log_verbose(f"Setting up global service context...")
         try:
             with TimerUntil("context set"):
                 service_context = ServiceContext.from_defaults(
@@ -790,6 +773,47 @@ for llm_config in args.llm_config:
                 set_global_service_context(service_context)
 
         except Exception as e: log_error(e, exit_code=1)
+
+    #--------------------------------------------------------------------------
+    # Update the vector database
+    #--------------------------------------------------------------------------
+
+    from llama_index import VectorStoreIndex
+
+    if not vector_index:
+        if args.index_load:
+            info = f" in \"{os.path.normpath(args.index_load)}\"" if args.verbose else ""
+            log(f"Loading vector index{info}...")
+            try:
+                with TimerUntil("loaded"):
+                    from llama_index import StorageContext, load_index_from_storage
+                    storage_context = StorageContext.from_defaults(persist_dir=args.index_load)
+                    vector_index = load_index_from_storage(storage_context, show_progress=args.verbose)            
+            except Exception as e: log_error(e)
+
+        if not vector_index:
+            log_verbose(f"Creating a new vector index in memory...")
+            try:
+                vector_index = VectorStoreIndex([])
+            except Exception as e: log_error(e, exit_code=1)
+            
+        if len(document_nodes) > 0:
+            info = f" {len(document_nodes)}" if args.verbose else ""
+            log(f"Indexing{info} document nodes...")
+            try:
+                with TimerUntil("indexing complete"):
+                    vector_index.insert_nodes(document_nodes, show_progress=args.verbose)
+            except Exception as e: log_error(e)
+
+        if args.index_store:
+            info = f" in \"{os.path.normpath(args.index_store)}\"" if args.verbose else ""
+            log(f"Storing vector index{info}...")
+            try:
+                with TimerUntil("index stored"):
+                    if not os.path.exists(args.index_store):
+                        os.makedirs(args.index_store)
+                    vector_index.storage_context.persist(persist_dir=args.index_store)
+            except Exception as e: log_error(e)
 
     #------------------------------------------------------------------------------
     # Initialize the query engine
@@ -804,7 +828,7 @@ for llm_config in args.llm_config:
     }
 
     if len(queries) > 0:
-        log(f"Initializing query engine...")
+        log_verbose(f"Initializing query engine...")
         try:
             with TimerUntil("ready"):        
                 query_engine = vector_index.as_query_engine(**query_engine_params)
@@ -822,13 +846,9 @@ for llm_config in args.llm_config:
     response_prefix = f"{tag_responses}: " if tag_responses else ""
 
     if len(queries) > 0:
-        log(f"Running {len(queries)} queries...")
+        query_count = f"{len(queries)} queries" if len(queries) > 1 else "query"
+        log(f"Running {query_count}...")
         with TimerUntil(f"all queries complete"):
-            chat_log = ""
-            json_log = {
-                "context": system_prompt,
-                "queries": []
-            }
             for query in queries:
                 query_record = { "query": query }
                 response_tokens = []
@@ -849,41 +869,156 @@ for llm_config in args.llm_config:
                                 response_tokens.append(token)
                                 log_verbose(token, end="", flush=True)
                             log_verbose("")
-                        else:
-                            response_tokens = query_engine.query(query).response_tokens
                             response = "".join(response_tokens).strip()
+                        else:
+                            response = str(query_engine.query(query))
                             log_verbose(f"({time_since(query_start_time)})\n{response_prefix}{response}")
 
                         query_record["response_time"] = time_since(query_start_time)
 
                 except Exception as e:
                     query_record["error"] = str(e)
-                    response_tokens.append("[ERROR]")
+                    response = "".join(response_tokens).strip() if response_tokens else ""
+                    response += "[ERROR]"
                     log_error(e)
 
-                    response = "".join(response_tokens).strip()
+               
                 query_record["response"] = response
                 json_log["queries"].append(query_record)
 
-                chat_log += f"{query_prefix}{query}\n"
-                chat_log += f"{response_prefix}{response}\n\n"
+                rough_transcript += f"{query_prefix}{query}\n"
+                rough_transcript += f"{response_prefix}{response}\n\n"
 
         log_verbose("")
 
+if args.query_log:
+    log(f"Appending query log to \"{os.path.normpath(args.query_log)}\"...")
+    try:
+        with open(args.query_log, "a", encoding="utf-8") as f:
+            f.write(rough_transcript)
+    except Exception as e: log_error(e)
+
+if args.query_log_json:
+    log(f"Writing JSON log to \"{os.path.normpath(args.query_log_json)}\"...")
+    try:
+        with open(args.query_log_json, "w", encoding="utf-8") as f:
+            raw_text = json.dumps(json_log, indent=4)
+            f.write(raw_text)
+    except Exception as e: log_error(e)
+
+#------------------------------------------------------------------------------
+# Consolidate responses after querying multiple models
+#------------------------------------------------------------------------------
+
+
+"""
+A query is given below that has been run on multiple LLMs, each of which performed
+RAG analysis and generated a draft response. These are quite different systems
+and may have responsed in different ways. The task of this model is to
+consolidate those drafts and produce a final response for the user. This is
+a standardized process with a fixed 3-part format for the output, which must
+be followed precisely.
+
+For the first part, evaluate each response against these considerations:
+
+1)  Check the LLM output, and note any technical problems, for example:
+    - truncated output indicating a configuration error or missing tokens
+    - gibberish or degenerate output, like a phrase repeated multiple times
+    - fragments of the LLM system prompt or instructions leaking through
+    - artifacts of unrelated training data, metadata, or transcripts
+    - runtime error messages
+2)  Make a list of overt factual errors and hallucinations. Propose corrections
+    only if they are known with high confidence.
+3)  Evaluate the response for relevance to the query. Note any sections that
+    don't contribute to the answer, are off-topic, redundant, overly 
+    conversational, or otherwise unhelpful in context.
+4)  Evaluate the response for apparent completeness. The RAG process may
+    have surfaced information out of context, too narrowly focused, based
+    on simple confusion about terminology, etc, and every response might 
+    not cover the full scope of the query. 
+
+Generate this four-point evaluation for each response in turn. That will
+complete the first section.
+
+The second part must summarize the quality of all these responses in 
+aggregate. For example, do any responses directly contradict each other?
+Do some appear based on more sophisticated analysis? Are any of them
+just plain wrong and should be ignored? As a matter of style, do any of
+them do a better job of explaining the answer?
+
+To end section two, stack rank the responses from best to worst, based
+on the value they would deliver to the user in isolation.
+
+The third and final section will be presented to the user as the response 
+to their original query. Leverage the analysis you generated in the first two
+sections, and consolidate the high-quality information into a single, coherent
+response. If it doesn't look like a satisfactory reply will be possible,
+it is valid to say so and explain the reason why. That's much more useful
+than an incomplete or uncertain answer.
+
+So to recap, you must produce output in three sections:
+- first, evalate each response against the four quality criteria above
+- second, summarize the quality of the input responses, and stack rank them
+- third, curate and consolidate this information into a final response
+
+The original query and all draft responses follow.
+
+# QUERY
+
+
+
+
+
+
+
+
+
+
+
+
+
+into a coherent response.
+
+Remember the goal is to maximize value for the user. 
+
+
+4)  Evaluate the response for 
+4)  Evaluate the response for style, and note any sections that are awkward,
+
+- obvious factual errors, hallucinations, or malfunctions
+
+
+
+"""
+
+
+if len(args.llm_config) > 1 and not args.skip_summary:
+
+
+    log(f"Consolidating responses from multiple LLMs...")
+    with TimerUntil("complete"):
+        consolidated_transcript = ""
+        for query_record in json_log["queries"]:
+            query = query_record["query"]
+            response = query_record["response"]
+            consolidated_transcript += f"{query_prefix}{query}\n"
+            consolidated_transcript += f"{response_prefix}{response}\n\n"
+
         if args.query_log:
-            log(f"Appending query log to \"{os.path.normpath(args.query_log)}\"...")
+            log(f"Appending consolidated query log to \"{os.path.normpath(args.query_log)}\"...")
             try:
                 with open(args.query_log, "a", encoding="utf-8") as f:
-                    f.write(chat_log)
+                    f.write(consolidated_transcript)
             except Exception as e: log_error(e)
 
         if args.query_log_json:
-            log(f"Writing JSON log to \"{os.path.normpath(args.query_log_json)}\"...")
+            log(f"Writing consolidated JSON log to \"{os.path.normpath(args.query_log_json)}\"...")
             try:
                 with open(args.query_log_json, "w", encoding="utf-8") as f:
                     raw_text = json.dumps(json_log, indent=4)
                     f.write(raw_text)
             except Exception as e: log_error(e)
+
 
 #------------------------------------------------------------------------------
 # Load chat bot instructions
@@ -1081,5 +1216,5 @@ if args.chat:
 if temp_folder:
     clean_up_temporary_files()
 
-total_time = f"({time_since(start_time)})" if args.verbose else ""
-log(f"Tiger out, peace {total_time}")
+total_time = f" ({time_since(start_time)})" if args.verbose else "."
+log(f"Tiger out, peace{total_time}")
