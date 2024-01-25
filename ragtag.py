@@ -16,6 +16,7 @@ openai_model_default    = "gpt-3.5-turbo-instruct"
 palm_model_default      = "models/text-bison-001"
 anthropic_model_default = "claude-2"
 perplexity_default      = "llama-2-70b-chat"
+replicate_default       = "kcaverly/nous-hermes-2-yi-34b-gguf"
 default_llm_provider    = "huggingface"
 hf_model_nicknames      = { "default": "codellama/CodeLlama-7b-Instruct-hf" }
 llamaindex_chat_modes   = ["best", "context", "condense_question", "simple", "react", "openai"]
@@ -730,6 +731,16 @@ def load_llm(provider, model, server, api_key, params, set_service_context=True)
                     api_key=api_key,
                     model=model_name,
                     model_kwargs=model_kwargs)
+                
+            ### Replicate
+            elif provider == "replicate":
+                model_name = model or replicate_default
+                log(f"Preparing Perplexity model \"{os.path.normpath(model_name)}\"...")
+                from llama_index.llms import Replicate
+                result = Replicate(
+                    model=model_name,
+                    additional_kwargs=model_kwargs)
+
             
             ### HuggingFace
             else:
@@ -791,7 +802,7 @@ json_log = {
     "queries": []
 }
 
-llm_config_list = args.config or []
+llm_config_list = args.llm_config or []
 
 if args.provider or args.server or args.api_key or args.param:
     # Build a configuration string out of the individual options
@@ -814,7 +825,7 @@ for llm_config in llm_config_list:
         llm = None
         gc.collect()
 
-    llm, streaming_supported = load_llm(provider, model, server, api_key, param)
+    llm, streaming_supported = load_llm(llm_config)
 
     #--------------------------------------------------------------------------
     # Update the vector database
@@ -875,14 +886,15 @@ for llm_config in llm_config_list:
     tag_queries = (args.tag_queries or "").strip("\"' ")
     tag_responses = (args.tag_responses or "").strip("\"' ")
 
-    query_prefix = f"{tag_queries}: " if tag_queries else ""
-    response_prefix = f"{tag_responses}: " if tag_responses else ""
+    query_prefix = f"### {tag_queries}\n" if tag_queries else ""
+    response_prefix = f"### {tag_responses}\n" if tag_responses else ""
 
     if len(queries) > 0:
         query_count = f"{len(queries)} queries" if len(queries) > 1 else "query"
         #log(f"Running {query_count}...")
         with TimerUntil(f"all queries complete"):
             for query in queries:
+
                 query_record = { "query": query }
                 response_tokens = []
 
@@ -954,7 +966,7 @@ be followed methodically and exactly.
 Start the first part with the header `## VALIDATION`, then evaluate each response 
 against these considerations:
 
-1)  Note any technical problems with the LLM output, for example:
+1)  Note technical problems with the LLM output, like:
     - truncated output indicating a configuration error or missing tokens
     - gibberish or degenerate output, like a phrase repeated multiple times
     - fragments of the LLM system prompt or instructions leaking through
@@ -970,7 +982,7 @@ against these considerations:
     on simple confusion about terminology, etc, and the response might 
     not cover the full scope of the query. 
 
-Address these four points for each response in turn. 
+Address these four points for each LLM's response in turn. 
 
 The second part (`## EVALUATION`) must summarize the quality of all these 
 responses in aggregate. For example, do any responses directly contradict
@@ -981,18 +993,18 @@ when composing the final draft.
 
 To end section two, stack rank the responses from best to worst.
 
-The third and final section (header `## SUMMARY`) will be presented to the user as the response 
-to their original query. Leverage the analysis you generated in the first two
-sections, and consolidate the high-quality information available into a single, coherent
-response for the user. If it doesn't look like a satisfactory reply will be possible,
-say so and explain why. That's more useful than incomplete or potentially
-incorrect answer.
+The third and final section (header `## SUMMARY`) will be presented to the user 
+as the response to their original query. Leverage the analysis you generated in 
+the first two sections, and consolidate the best information available
+into a single, coherent response for the user. If it doesn't look like a
+satisfactory reply will be possible, say so and explain why. That's more useful
+than an incomplete or potentially incorrect answer.
 
-In summary, you must produce output in three sections under the headers given:
+To recap, produce output in three sections:
 
-1) `## VALIDATION` - evaluate each response against the four quality/correctness criteria listed
-2) `## EVALUATION` - summarize the overall quality of the responses, and stack rank them for quality
-3) `## SUMMARY` - curate and consolidate this information into a high-quality final response
+VALIDATION - evaluate each response against the four criteria listed
+EVALUATION - summarize the quality of the responses and stack rank them
+SUMMARY    - consolidate this information into a high-quality final response
 
 This is very important for my job! You have been selected for your advanced
 analytical ability and excellent communication skills. Follow these instructions
@@ -1000,6 +1012,7 @@ exactly and generate a precise, lucid, and insightful answer.
 
 The original query and all draft responses follow. Begin the first section
 of your response (`## VALIDATION`) immediately, with no commentary.
+
 """
 
 if args.llm_config_mod:

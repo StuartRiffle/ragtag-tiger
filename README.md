@@ -115,39 +115,63 @@ RAG queries can exfiltrate chunks of _any_ documents you index, including appare
 If that's not a problem:
 
 ### [OpenAI](https://platform.openai.com/)
-- authenticate by setting `OPENAI_API_KEY` in your environment, or override it with `--llm-api-key`
-- change [models](https://platform.openai.com/docs/models) using `--llm-model` (you get `gpt-3.5-turbo-instruct` by default)
+- authenticate by setting `OPENAI_API_KEY` in your environment (or override with `--llm-api-key`)
+- change [models](https://platform.openai.com/docs/models) using `--llm-model` (the default is `gpt-3.5-turbo-instruct`)
 - do **not** set a custom `--llm-server`
 ```
 --llm-provider openai  --llm-model gpt-4
 ```
 
-### Google Gemini
- - authenticate by setting `GOOGLE_APPLICATION_CREDENTIALS` and `GEMINI_API_KEY` in your environment (or `--llm-api-key` to override)
+### Google
+ - authenticate by setting `GOOGLE_APPLICATION_CREDENTIALS` and `GEMINI_API_KEY` in your environment (or override with `--llm-api-key`)
  - change [models](https://platform.openai.com/docs/models) using `--llm-model` (the default is `gpt-3.5-turbo-instruct`)
  ```
---llm-provider palm  --llm-model models/text-bison-001
+--llm-provider google  --llm-model models/text-bison-001
 ```
 
 # RAG gauntlet
 
-What if 
+There's another, more compact way to configure inference providers, which is `--llm-config`
+```
+provider[,model[,server[,api-key[,parameters...]]]]
+```
+
+Basically, you just glue all the settings together with commas.
+
+Most of the time, all you need is the first couple of fields, and you can skip unused fields by leaving them empty. For a complicated example, to connect with a local (OpenAI API-compatible) [text-generation-webui](https://github.com/oobabooga/text-generation-webui) server, using a couple of custom inference parameters:
+
+```
+--llm-config openai,,http://localhost:5000/v1,,temperature=1.6,top_p=0.9
+```
+
+The benefit of this format is that now you can submit a *list* of inference providers with multiple `--llm-config` arguments, and **RAG/TAG Tiger** will run your queries through *all* of them, allowing you to compare the responses.
+
+But nobody has time for that, so to complete the circle you can configure a **moderator** LLM using `--llm-config-mod`. The moderator will look at all the other responses, perform a short quality analysis, then consolidate everything into one final answer.
+
+### LLM config examples
 
 | | Model | Params | Context| --llm-config |
 | --- | --- | --- | --- | --- |
 | **OpenAI** | GPT 3.5 | | 4k | `openai,gpt-3.5-turbo-instruct` |
-| | | | 16k | openai,gpt-3.5-turbo-16k |
-| | GPT 4 | | 8k | openai,gpt-4 |
-| | | | 32k | openai,gpt-4-32k |
-| | | | 128k | openai,gpt-4-1106-preview |
-|  **Perplexity** | CodeLlama | 33B | 16k | perplexity,codellama-34b-instruct |
-| | Mixtral | 8x7B | 32k| perplexity,mixtral-8x7b-instruct |
-| | Llama 2 | 70B | 4k | perplexity,llama-2-70b-chat |
-| **Google** | PaLM | | 8k | google,text-bison-001 |
-| | Gemini | | 30k | google,models/gemini-pro |
-| **HuggingFace** | Goliath | 120B | 4k | huggingface,thebloke/goliath-120b-awq |
-| | BLOOM | 176B | 2k |  |
-| | Falcon | 180B | 2k | huggingface,thebloke/falcon-180B-chat-awq |
+| | | | 16k | `openai,gpt-3.5-turbo-16k` |
+| | GPT 4 | | 8k | `openai,gpt-4` |
+| | | | 32k | `openai,gpt-4-32k` |
+| | | | 128k | `openai,gpt-4-1106-preview` |
+| **Google** | PaLM | | 8k | `google,text-bison-001` |
+| | Gemini | | 30k | `google,models/gemini-pro` |
+|  **Perplexity** | CodeLlama | 33B | 16k | `perplexity,codellama-34b-instruct` |
+| | Llama 2 | 70B | 4k | `perplexity,llama-2-70b-chat` |
+| **Replicate** | Mixtral | 8x 7B | 32k | `replicate,mistralai/mixtral-8x7b-instruct-v0.1` |
+| | Nous Hermes 2 | 34B | 4k | `kcaverly/nous-hermes-2-yi-34b-gguf` |
+| **HuggingFace** | Goliath | 120B | 4k | `huggingface,thebloke/goliath-120b-awq` |
+| | BLOOM | 176B | 2k | `huggingface,thebloke/bloomchat-176b-v1-gptq` |
+| | Falcon | 180B | 2k | `huggingface,thebloke/falcon-180B-chat-awq` |
+| **text_generation_gui** | _(server)_ | | | `openai,,http://YOUR_SERVER:5000/v1` |
+| | _(local)_ | | | `openai,,http://127.0.0.1:5000/v1` |
+| **llama.cpp** | _(server)_ | | | `openai,,http://YOUR_SERVER:8081` |
+| | _(local)_ | | | `openai,,http://127.0.0.1:8081` |
+| | _(local file)_ | | | `llamacpp,YOUR_MODEL.gguf` |
+
 
 # Options
 
