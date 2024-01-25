@@ -162,11 +162,11 @@ But nobody has time for that, so to complete the circle you can configure a **mo
 |  **Perplexity** | CodeLlama | 33B | 16k | `perplexity,codellama-34b-instruct` |
 | | Llama 2 | 70B | 4k | `perplexity,llama-2-70b-chat` |
 | **Replicate** | Mixtral | 8x 7B | 32k | `replicate,mistralai/mixtral-8x7b-instruct-v0.1` |
-| | Nous Hermes 2 | 34B | 4k | `kcaverly/nous-hermes-2-yi-34b-gguf` |
+| | Nous Hermes 2 | 34B | 4k | `replicate,kcaverly/nous-hermes-2-yi-34b-gguf` |
 | **HuggingFace** | Goliath | 120B | 4k | `huggingface,thebloke/goliath-120b-awq` |
 | | BLOOM | 176B | 2k | `huggingface,thebloke/bloomchat-176b-v1-gptq` |
 | | Falcon | 180B | 2k | `huggingface,thebloke/falcon-180B-chat-awq` |
-| **text_generation_gui** | _(server)_ | | | `openai,,http://YOUR_SERVER:5000/v1` |
+| **tggui** | _(server)_ | | | `openai,,http://YOUR_SERVER:5000/v1` |
 | | _(local)_ | | | `openai,,http://127.0.0.1:5000/v1` |
 | **llama.cpp** | _(server)_ | | | `openai,,http://YOUR_SERVER:8081` |
 | | _(local)_ | | | `openai,,http://127.0.0.1:8081` |

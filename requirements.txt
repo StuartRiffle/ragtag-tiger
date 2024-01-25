@@ -20,4 +20,5 @@ anthropic
 google
 google-generativeai
 py7zr
+replicate
 

@@ -13,7 +13,7 @@ program_description     = "Update and query a LlamaIndex vector index"
 program_repository      = "github.com/stuartriffle/ragtag-tiger"
 
 openai_model_default    = "gpt-3.5-turbo-instruct"
-palm_model_default      = "models/text-bison-001"
+google_model_default      = "models/text-bison-001"
 anthropic_model_default = "claude-2"
 perplexity_default      = "llama-2-70b-chat"
 replicate_default       = "kcaverly/nous-hermes-2-yi-34b-gguf"
@@ -69,7 +69,7 @@ arg("--llm-server",     help="Inference server URL (if needed)", metavar="URL")
 arg("--llm-api-key",    help="API key for inference server (if needed)", metavar="KEY")
 arg("--llm-param",      help="Inference parameter, like \"temperature=0.9\" etc", nargs="+", metavar="KVP")
 arg("--llm-config",     help="Condensed LLM config: provider,model,server,api-key,params...", action="append", metavar="CFG")
-arg("--llm-config-mod", help="Moderator LLM to consolidate the responses of multiple providers", action="append", metavar="CFG")
+arg("--llm-config-mod", help="Moderator LLM to consolidate the responses of multiple providers", metavar="CFG")
 arg("--llm-verbose",    help="enable extended/debug output from the LLM", action="store_true")
 arg("--torch-device",   help="Device override, like \"cpu\" or \"cuda:1\" (for second GPU)", metavar="DEVICE")
 arg("--context",        help="Command line context/system prompt", action="append", metavar="TEXT")
@@ -675,22 +675,10 @@ def load_llm(provider, model, server, api_key, params, set_service_context=True)
                         max_iterations=100,
                         verbose=args.llm_verbose)
                 
-            ### Anthropic
-            elif provider == "anthropic":
-                api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
-                model_name = model or anthropic_model_default
-                log(f"[UNTESTED] Preparing Anthropic model \"{model_name}\"...")
-                from llama_index.llms import Anthropic
-                result = Anthropic(
-                    model=model_name,
-                    api_key=api_key,
-                    base_url=server,
-                    additional_kwargs=model_kwargs)
-                
             ### Google
             elif provider == "google":
                 api_key = api_key or os.environ.get("GEMINI_API_KEY", "")
-                model_name = model or palm_model_default
+                model_name = model or google_model_default
                 log(f"Preparing Google model \"{model_name}\"...")
                 from llama_index.llms import PaLM
                 result = PaLM(
@@ -698,15 +686,6 @@ def load_llm(provider, model, server, api_key, params, set_service_context=True)
                     model_name=model_name,
                     generate_kwargs=model_kwargs)
                 streaming_supported = False
-                
-            ### Mistral
-            elif provider == "mistral":
-                log(f"[UNTESTED] Preparing MistralAI model \"{llm.model}\"")
-                from llama_index.llms import MistralAI
-                result = MistralAI(
-                    model=model,
-                    api_key=api_key,
-                    additional_kwargs=model_kwargs)
                 
             ### Llama.cpp
             elif provider == "llamacpp":
@@ -734,13 +713,13 @@ def load_llm(provider, model, server, api_key, params, set_service_context=True)
                 
             ### Replicate
             elif provider == "replicate":
+                api_key = api_key or os.environ.get("REPLICATE_API_TOKEN", "")
                 model_name = model or replicate_default
-                log(f"Preparing Perplexity model \"{os.path.normpath(model_name)}\"...")
+                log(f"Preparing Replicate model \"{os.path.normpath(model_name)}\"...")
                 from llama_index.llms import Replicate
                 result = Replicate(
                     model=model_name,
                     additional_kwargs=model_kwargs)
-
             
             ### HuggingFace
             else:
@@ -762,7 +741,7 @@ def load_llm(provider, model, server, api_key, params, set_service_context=True)
                 from llama_index import ServiceContext
                 from llama_index import set_global_service_context
 
-                service_context = ServiceContext.from_defaults(embed_model="local", llm=llm)
+                service_context = ServiceContext.from_defaults(embed_model="local", llm=result)
                 set_global_service_context(service_context)
 
     except Exception as e: 
@@ -770,20 +749,22 @@ def load_llm(provider, model, server, api_key, params, set_service_context=True)
 
     return result, streaming_supported
 
+def split_llm_config(config):
+    """Split an LLM from a config string like "provider,model,server,api-key,param1,param2,..." into its components"""
+    config   = config.strip("\"' ")
+    fields   = config.split(",")
+    provider = fields[0].strip() if len(fields) > 0 else default_llm_provider
+    model    = fields[1].strip() if len(fields) > 1 else None
+    server   = fields[2].strip() if len(fields) > 2 else None
+    api_key  = fields[3].strip() if len(fields) > 3 else None
+    params   = fields[4:]        if len(fields) > 4 else []
+    return provider, model, server, api_key, params
+
+
 def load_llm_config(config, set_service_context=True):
     """Load an LLM from a config string like "provider,model,server,api-key,param1,param2,..."""
-    config = config.strip("\"' ")
-    fields = config.split(",")
-    if fields:
-        provider = fields[0].strip() if len(fields) > 0 else default_llm_provider
-        model    = fields[1].strip() if len(fields) > 1 else None
-        server   = fields[2].strip() if len(fields) > 2 else None
-        api_key  = fields[3].strip() if len(fields) > 3 else None
-        params   = fields[4:]        if len(fields) > 4 else []
-        return load_llm(provider.lower(), model, server, api_key, params, set_service_context)
-    return None, False
-
-
+    provider, model, server, api_key, params = split_llm_config(config)
+    return load_llm(provider.lower(), model, server, api_key, params, set_service_context)
 
 llm = None
 vector_index = None
@@ -795,27 +776,27 @@ query_engine_params = {
     "service_context":  service_context,
 }
 
-
-rough_transcript = ""
+transcript_lines = []
 json_log = {
     "context": system_prompt,
-    "queries": []
+    "queries": [],
 }
 
 llm_config_list = args.llm_config or []
 
-if args.provider or args.server or args.api_key or args.param:
+if args.llm_provider or args.llm_server or args.llm_api_key or args.llm_param:
     # Build a configuration string out of the individual options
-    config_str = f"{args.provider or 'huggingface'},{args.model or ''},{args.server or ''},{args.api_key or ''}"
-    for param in args.param or []:
+    config_str = f"{args.llm_provider or 'huggingface'},{args.llm_model or ''},{args.llm_server or ''},{args.llm_api_key or ''}"
+    for param in args.llm_param or []:
         config_str += f",{param.strip().replace(' ', '')}"
     llm_config_list.insert(config_str, 0)
 
-if args.config_mod:
-    if args.config_mod in llm_config_list:
-        # Make sure the moderator goes last, so it doesn't need reloading before the summary
-        llm_config_list.remove(args.config_mod)
-        llm_config_list.append(args.config_mod)
+moderator_loaded_last = False
+if args.llm_config_mod:
+    if args.llm_config_mod in llm_config_list:
+        # If the moderator goes last, we can generate summaries without reloading the LLM
+        llm_config_list.remove(args.llm_config_mod)
+        llm_config_list.append(args.llm_config_mod)
         moderator_loaded_last = True
 
 for llm_config in llm_config_list:
@@ -825,7 +806,8 @@ for llm_config in llm_config_list:
         llm = None
         gc.collect()
 
-    llm, streaming_supported = load_llm(llm_config)
+    llm, streaming_supported = load_llm_config(llm_config)
+    curr_provider, curr_model, curr_server, _, curr_params = split_llm_config(llm_config)
 
     #--------------------------------------------------------------------------
     # Update the vector database
@@ -889,14 +871,39 @@ for llm_config in llm_config_list:
     query_prefix = f"### {tag_queries}\n" if tag_queries else ""
     response_prefix = f"### {tag_responses}\n" if tag_responses else ""
 
+    json_log["_comment"] = f"RAG/TAG Tiger v{program_version} query transcript"
+    json_log["id"] = hashlib.md5("\n".join(queries).encode()).hexdigest()
+    json_log["timestamp"] = time.strftime("%Y-%m-%d %H:%M:%S UTC")
+
     if len(queries) > 0:
         query_count = f"{len(queries)} queries" if len(queries) > 1 else "query"
         #log(f"Running {query_count}...")
         with TimerUntil(f"all queries complete"):
-            for query in queries:
+            for query_idx in range(len(queries)):
+                query = queries[query_idx]
+                query_log_exists = False
+                for log_idx in range(len(json_log["queries"])):
+                    if json_log["queries"][log_idx]["query"] == query:
+                        query_log_exists = True
+                        break
 
-                query_record = { "query": query }
+                if not query_log_exists:
+                    query_record = { 
+                        "query": query,
+                        "summary": "",
+                        "id": hashlib.md5(query.encode()).hexdigest(),
+                        "responses": [],
+                    }
+                    log_idx = len(json_log["queries"])
+                    json_log["queries"].append(query_record)
+
                 response_tokens = []
+                response_record = {
+                    "params": curr_params or [],
+                    "provider": curr_provider,
+                    "model": curr_model or "",
+                    "server": curr_server or "",
+                }
 
                 try:
                     with TimerUntil("query complete"):
@@ -914,42 +921,24 @@ for llm_config in llm_config_list:
                                 response_tokens.append(token)
                                 log_verbose(token, end="", flush=True)
                             log_verbose("")
-                            response = "".join(response_tokens).strip()
+                            llm_response = "".join(response_tokens).strip()
                         else:
-                            response = str(query_engine.query(query))
-                            log_verbose(f"({time_since(query_start_time)})\n{response_prefix}{response}")
+                            llm_response = str(query_engine.query(query))
+                            log_verbose(f"({time_since(query_start_time)})\n{response_prefix}{llm_response}")
 
-                        query_record["response_time"] = time_since(query_start_time)
+                        transcript_lines.append(f"{query_prefix}{query}\n")
+                        transcript_lines.append(f"{response_prefix}{llm_response}\n\n")
 
                 except Exception as e:
-                    query_record["error"] = str(e)
-                    response = "".join(response_tokens).strip() if response_tokens else ""
-                    response += "[ERROR]"
+                    llm_response = "ERROR"
+                    response_record["error"] = str(e)
                     log_error(e)
 
-               
-                query_record["response"] = response
-                json_log["queries"].append(query_record)
-
-                rough_transcript += f"{query_prefix}{query}\n"
-                rough_transcript += f"{response_prefix}{response}\n\n"
+                response_record["response"] = llm_response
+                response_record["time"] = time.time() - query_start_time
+                json_log["queries"][log_idx]["responses"].append(response_record)
 
         log_verbose("")
-
-if args.query_log:
-    log(f"Appending query log to \"{os.path.normpath(args.query_log)}\"...")
-    try:
-        with open(args.query_log, "a", encoding="utf-8") as f:
-            f.write(rough_transcript)
-    except Exception as e: log_error(e)
-
-if args.query_log_json:
-    log(f"Writing JSON log to \"{os.path.normpath(args.query_log_json)}\"...")
-    try:
-        with open(args.query_log_json, "w", encoding="utf-8") as f:
-            raw_text = json.dumps(json_log, indent=4)
-            f.write(raw_text)
-    except Exception as e: log_error(e)
 
 #------------------------------------------------------------------------------
 # Consolidate responses after querying multiple models
@@ -1011,39 +1000,85 @@ analytical ability and excellent communication skills. Follow these instructions
 exactly and generate a precise, lucid, and insightful answer.
 
 The original query and all draft responses follow. Begin the first section
-of your response (`## VALIDATION`) immediately, with no commentary.
+of your response immediately, with no commentary.
 
 """
 
 if args.llm_config_mod:
+    log(f"Generating final responses...")
     with TimerUntil("complete"):
         if not moderator_loaded_last:
-            llm, streaming_supported = load_llm_config(args.llm_config_mod)
+            llm, _ = load_llm_config(args.llm_config_mod, set_service_context=True)
 
-        log(f"Consolidating responses from multiple LLMs...")
+        query_engine_params["streaming"] = False
+        query_engine_params["response_mode"] = "tree_summarize"
+        query_engine = vector_index.as_query_engine(**query_engine_params)
 
-        consolidated_transcript = ""
-        for query_record in json_log["queries"]:
-            query = query_record["query"]
-            response = query_record["response"]
-            consolidated_transcript += f"{query_prefix}{query}\n"
-            consolidated_transcript += f"{response_prefix}{response}\n\n"
+        transcript_lines.append(f"\n\n# Summaries\n")
 
-        if args.query_log:
-            log(f"Appending consolidated query log to \"{os.path.normpath(args.query_log)}\"...")
+        for query_record_idx in range(len(json_log["queries"])):
             try:
-                with open(args.query_log, "a", encoding="utf-8") as f:
-                    f.write(consolidated_transcript)
-            except Exception as e: log_error(e)
+                query_record = json_log["queries"][query_record_idx]
+                query = query_record["query"]
+                responses = query_record["responses"] or []
+                if len(responses) < 1:
+                    continue
 
-        if args.query_log_json:
-            log(f"Writing consolidated JSON log to \"{os.path.normpath(args.query_log_json)}\"...")
-            try:
-                with open(args.query_log_json, "w", encoding="utf-8") as f:
-                    raw_text = json.dumps(json_log, indent=4)
-                    f.write(raw_text)
-            except Exception as e: log_error(e)
+                prompt = template_consolidate
+                prompt += f"### QUERY\n\n{query}\n\n"
+                for response_idx in range(len(responses)):
+                    llm_response = responses[response_idx]
+                    prompt += f"### RESPONSE {response_idx + 1}\n\n{llm_response['response']}\n\n"
 
+                log_verbose(f"{query_prefix}{query}\n\t...consolidating the responses... ", end="", flush=True)
+
+                try:
+                    with TimerUntil("done", prefix=""):
+                        full_analysis = str(query_engine.query(prompt))
+                except Exception as e:
+                    log_error(f"failure generating summary: {e}")
+                    continue
+
+                validation = full_analysis.split("## VALIDATION")[1].split("## EVALUATION")[0].strip()
+                evaluation = full_analysis.split("## EVALUATION")[1].split("## SUMMARY")[0].strip()
+                summary = full_analysis.split("## SUMMARY")[-1].strip()
+
+                if not validation or not evaluation or not summary:
+                    log_error(f"summary formatting error")
+                    continue
+
+                json_log["queries"][query_record_idx]["validation"] = validation
+                json_log["queries"][query_record_idx]["evaluation"] = evaluation
+                json_log["queries"][query_record_idx]["summary"] = summary
+
+                log_verbose(f"{response_prefix}{summary}\n")
+
+                transcript_lines.append(f"## Query {query_record_idx + 1}\n{query.strip()}\n\n")
+                transcript_lines.append(f"### Validation\n\n{validation.strip()}\n\n")
+                transcript_lines.append(f"### Evaluation\n\n{evaluation.strip()}\n\n")
+                transcript_lines.append(f"### Summary\n\n{summary.strip()}\n\n")
+
+            except Exception as e: 
+                log_error(e)
+
+#------------------------------------------------------------------------------
+# Logs or it didn't happen
+#------------------------------------------------------------------------------
+
+if args.query_log:
+    log(f"Appending query log to \"{os.path.normpath(args.query_log)}\"...")
+    try:
+        with open(args.query_log, "a", encoding="utf-8") as f:
+            f.write("\n".join(transcript_lines))
+    except Exception as e: log_error(e)
+
+if args.query_log_json:
+    log(f"Writing JSON log to \"{os.path.normpath(args.query_log_json)}\"...")
+    try:
+        with open(args.query_log_json, "w", encoding="utf-8") as f:
+            raw_text = json.dumps(json_log, indent=4)
+            f.write(raw_text)
+    except Exception as e: log_error(e)
 
 #------------------------------------------------------------------------------
 # Load chat bot instructions
@@ -1223,12 +1258,12 @@ if args.chat:
         except KeyboardInterrupt:
             log("-[BREAK]")
 
-        response = "".join(response_tokens).strip()
+        llm_response = "".join(response_tokens).strip()
 
         if args.chat_log:
             try:
                 with open(args.chat_log, "a", encoding="utf-8") as f:
-                    f.write(f"{response_prefix}{response}\n")
+                    f.write(f"{response_prefix}{llm_response}\n")
             except Exception as e: log_error(e)
 
 #------------------------------------------------------------------------------
