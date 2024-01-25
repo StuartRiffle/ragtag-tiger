@@ -21,6 +21,7 @@ default_llm_provider    = "huggingface"
 hf_model_nicknames      = { "default": "codellama/CodeLlama-7b-Instruct-hf" }
 llamaindex_chat_modes   = ["best", "context", "condense_question", "simple", "react", "openai"]
 llamaindex_query_modes  = ["accumulate", "compact", "compact_accumulate", "generation", "no_text", "refine", "simple_summarize", "tree_summarize"]
+default_timeout         = 180
 
 #------------------------------------------------------------------------------
 # Parse command line arguments and response files
@@ -595,26 +596,6 @@ for file in args.query_list or []:
             queries.extend(short_queries)
     except Exception as e: log_error(e)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 #------------------------------------------------------------------------------
 # Construct the system prompt
 #------------------------------------------------------------------------------
@@ -659,6 +640,7 @@ def load_llm(provider, model, server, api_key, params, set_service_context=True)
                     from llama_index.llms import OpenAI
                     result = OpenAI(
                         model=model_name,
+                        timeout=default_timeout,
                         api_key=api_key,
                         additional_kwargs=model_kwargs,
                         verbose=args.llm_verbose)
@@ -673,6 +655,7 @@ def load_llm(provider, model, server, api_key, params, set_service_context=True)
                         api_base=server,
                         max_tokens=1000,
                         max_iterations=100,
+                        timeout=default_timeout,
                         verbose=args.llm_verbose)
                 
             ### Google
@@ -889,11 +872,11 @@ for llm_config in llm_config_list:
 
                 if not query_log_exists:
                     query_record = { 
+                        "id": hashlib.md5(query.encode()).hexdigest(),
                         "query": query,
                         "response": "",
-                        "id": hashlib.md5(query.encode()).hexdigest(),
-                        "responses": [],
                         "moderator": "",
+                        "responses": [],
                     }
                     log_idx = len(json_log["queries"])
                     json_log["queries"].append(query_record)
@@ -933,6 +916,7 @@ for llm_config in llm_config_list:
                 except Exception as e:
                     llm_response = "ERROR"
                     response_record["error"] = str(e)
+                    log_verbose("")
                     log_error(e)
 
                 response_record["response"] = llm_response
@@ -1006,7 +990,7 @@ of your response immediately, with no commentary.
 """
 
 if args.llm_config_mod:
-    log(f"Generating final responses...")
+    log(f"Generating final answers...")
     with TimerUntil("complete"):
         if not moderator_loaded_last:
             llm, _ = load_llm_config(args.llm_config_mod, set_service_context=True)
@@ -1031,7 +1015,7 @@ if args.llm_config_mod:
                     llm_response = responses[response_idx]
                     prompt += f"### RESPONSE {response_idx + 1}\n\n{llm_response['response']}\n\n"
 
-                log_verbose(f"{query_prefix}{query}\n\t...consolidating the responses... ", end="", flush=True)
+                log_verbose(f"{query_prefix}{query}\n\t...consolidating responses, please hold... ", end="", flush=True)
 
                 try:
                     with TimerUntil("done", prefix=""):
