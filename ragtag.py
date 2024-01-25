@@ -1,6 +1,7 @@
 # RAG/TAG Tiger
 # Copyright (c) 2024 Stuart Riffle
 
+import gc
 import time
 start_time = time.time()
 
@@ -61,7 +62,7 @@ arg("--size-limit",     help="Ignore huge text files unlikely to contain interes
 arg("--no-cache",       help="Do not use the local cache for loaders", action="store_true")
 
 arg = parser.add_argument_group("Language model").add_argument
-arg("--llm-provider",   help="Inference provider/interface", choices=["openai", "anthropic", "palm", "mistral", "llamacpp", "huggingface"], metavar="NAME")
+arg("--llm-provider",   help="Inference provider/interface", choices=["openai", "anthropic", "google", "mistral", "llamacpp", "huggingface"], metavar="NAME")
 arg("--llm-model",      help="Model name/path/etc for provider", metavar="NAME")
 arg("--llm-server",     help="Inference server URL (if needed)", metavar="URL")
 arg("--llm-api-key",    help="API key for inference server (if needed)", metavar="KEY")
@@ -82,7 +83,6 @@ arg("--query-log-json", help="Log queries and responses (plus some metadata) to 
 arg("--query-mode",     help="Query response mode", choices=llamaindex_query_modes, default="tree_summarize")
 arg("--tag-queries",    help="The name/header in the transcript for user queries", metavar="NAME", default="User")
 arg("--tag-responses",  help="The name/header in the transcript for engine responses", metavar="NAME", default="Tiger")
-arg("--skip-summary",   help="When querying multiple models, don't consolidate responses", action="store_true")
 
 arg = parser.add_argument_group("Interactive chat").add_argument
 arg("--chat",           help="Enter chat after any query processing", action="store_true")
@@ -594,6 +594,26 @@ for file in args.query_list or []:
             queries.extend(short_queries)
     except Exception as e: log_error(e)
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 #------------------------------------------------------------------------------
 # Construct the system prompt
 #------------------------------------------------------------------------------
@@ -622,6 +642,138 @@ if len(system_prompt.strip()) > 0:
 # Process the queries on all given LLM configurations in turn
 #------------------------------------------------------------------------------
 
+def load_llm(provider, model, server, api_key, params, set_service_context=True):
+    result = None
+    streaming_supported = True
+    try:
+        with TimerUntil("ready"):
+            model_kwargs = dict([param.split("=") for param in params]) if params else {}
+
+            ### OpenAI
+            if provider == "openai":
+                api_key = api_key or os.environ.get("OPENAI_API_KEY", "")
+                if not server:
+                    model_name = model or openai_model_default
+                    log(f"Preparing OpenAI model \"{model_name}\"...")
+                    from llama_index.llms import OpenAI
+                    result = OpenAI(
+                        model=model_name,
+                        api_key=api_key,
+                        additional_kwargs=model_kwargs,
+                        verbose=args.llm_verbose)
+                else:
+                    # API compatible server
+                    model_name = model or "default"
+                    log(f"Preparing model \"{model_name}\" on server \"{server}\"...")
+                    from llama_index.llms import OpenAILike
+                    result = OpenAILike(
+                        model=model_name,
+                        additional_kwargs=model_kwargs,
+                        api_base=server,
+                        max_tokens=1000,
+                        max_iterations=100,
+                        verbose=args.llm_verbose)
+                
+            ### Anthropic
+            elif provider == "anthropic":
+                api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
+                model_name = model or anthropic_model_default
+                log(f"[UNTESTED] Preparing Anthropic model \"{model_name}\"...")
+                from llama_index.llms import Anthropic
+                result = Anthropic(
+                    model=model_name,
+                    api_key=api_key,
+                    base_url=server,
+                    additional_kwargs=model_kwargs)
+                
+            ### Google
+            elif provider == "google":
+                api_key = api_key or os.environ.get("GEMINI_API_KEY", "")
+                model_name = model or palm_model_default
+                log(f"Preparing Google model \"{model_name}\"...")
+                from llama_index.llms import PaLM
+                result = PaLM(
+                    api_key=api_key,
+                    model_name=model_name,
+                    generate_kwargs=model_kwargs)
+                streaming_supported = False
+                
+            ### Mistral
+            elif provider == "mistral":
+                log(f"[UNTESTED] Preparing MistralAI model \"{llm.model}\"")
+                from llama_index.llms import MistralAI
+                result = MistralAI(
+                    model=model,
+                    api_key=api_key,
+                    additional_kwargs=model_kwargs)
+                
+            ### Llama.cpp
+            elif provider == "llamacpp":
+                if torch.cuda.is_available():
+                    # FIXME - this does nothing
+                    model_kwargs["n_gpu_layers"] = -1
+                    model_kwargs["device"] = "cuda"
+                log(f"Preparing llama.cpp model \"{os.path.normpath(model)}\"...")
+                from llama_index.llms import LlamaCPP
+                result = LlamaCPP(
+                    model_path=model,
+                    model_kwargs=model_kwargs,
+                    verbose=args.llm_verbose)
+                
+            ### Perplexity
+            elif provider == "perplexity":
+                api_key = api_key or os.environ.get("PERPLEXITYAI_API_KEY", "")
+                model_name = model or perplexity_default
+                log(f"Preparing Perplexity model \"{os.path.normpath(model_name)}\"...")
+                from llama_index.llms import Perplexity
+                result = Perplexity(
+                    api_key=api_key,
+                    model=model_name,
+                    model_kwargs=model_kwargs)
+            
+            ### HuggingFace
+            else:
+                os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
+                model_desc = ""
+                model_name = model or "default"
+                if model_name in hf_model_nicknames:
+                    model_desc = f" (\"{model_name}\")"
+                    model_name = hf_model_nicknames[model_name]
+                log(f"Preparing HuggingFace model \"{model_name}\"{model_desc}...")
+                from llama_index.llms import HuggingFaceLLM
+                result = HuggingFaceLLM(
+                    model_name=model_name,
+                    model_kwargs=model_kwargs, 
+                    device_map=args.torch_device or "auto",
+                    system_prompt=system_prompt)
+
+            if set_service_context:
+                from llama_index import ServiceContext
+                from llama_index import set_global_service_context
+
+                service_context = ServiceContext.from_defaults(embed_model="local", llm=llm)
+                set_global_service_context(service_context)
+
+    except Exception as e: 
+        log_error(f"failure initializing LLM: {e}", exit_code=1)
+
+    return result, streaming_supported
+
+def load_llm_config(config, set_service_context=True):
+    """Load an LLM from a config string like "provider,model,server,api-key,param1,param2,..."""
+    config = config.strip("\"' ")
+    fields = config.split(",")
+    if fields:
+        provider = fields[0].strip() if len(fields) > 0 else default_llm_provider
+        model    = fields[1].strip() if len(fields) > 1 else None
+        server   = fields[2].strip() if len(fields) > 2 else None
+        api_key  = fields[3].strip() if len(fields) > 3 else None
+        params   = fields[4:]        if len(fields) > 4 else []
+        return load_llm(provider.lower(), model, server, api_key, params, set_service_context)
+    return None, False
+
+
+
 llm = None
 vector_index = None
 service_context = None
@@ -639,150 +791,30 @@ json_log = {
     "queries": []
 }
 
-llm_config_list = args.llm_config or []
+llm_config_list = args.config or []
 
-if args.llm_provider or args.llm_server or args.llm_api_key or args.llm_param:
+if args.provider or args.server or args.api_key or args.param:
     # Build a configuration string out of the individual options
-    config_str = f"{args.llm_provider or 'huggingface'},{args.llm_model or ''},{args.llm_server or ''},{args.llm_api_key or ''}"
-    for param in args.llm_param or []:
+    config_str = f"{args.provider or 'huggingface'},{args.model or ''},{args.server or ''},{args.api_key or ''}"
+    for param in args.param or []:
         config_str += f",{param.strip().replace(' ', '')}"
     llm_config_list.insert(config_str, 0)
 
+if args.config_mod:
+    if args.config_mod in llm_config_list:
+        # Make sure the moderator goes last, so it doesn't need reloading before the summary
+        llm_config_list.remove(args.config_mod)
+        llm_config_list.append(args.config_mod)
+        moderator_loaded_last = True
 
 for llm_config in llm_config_list:
-    llm_config = llm_config.strip("\"' ")
-    llm_fields = llm_config.split(",")
-    if llm_fields:
-        args.llm_provider = llm_fields[0].strip().lower() if len(llm_fields) > 0 else default_llm_provider
-        args.llm_model    = llm_fields[1].strip() if len(llm_fields) > 1 else None
-        args.llm_server   = llm_fields[2].strip() if len(llm_fields) > 2 else None
-        args.llm_api_key  = llm_fields[3].strip() if len(llm_fields) > 3 else None
-        args.llm_param    = llm_fields[4:] if len(llm_fields) > 4 else []
 
+    # FIXME any way to release VRAM used by the LLM from the previous iteration?
     if llm:
-        # FIXME any way to release VRAM used by the LLM from the previous iteration?
         llm = None
+        gc.collect()
 
-    #--------------------------------------------------------------------------
-    # Instantiate the LLM
-    #--------------------------------------------------------------------------
-
-    llm_supports_streaming = True
-
-    try:
-        with TimerUntil("ready"):
-            llm_model_kwargs = dict([param.split("=") for param in args.llm_param]) if args.llm_param else {}
-            model_kwargs = llm_model_kwargs
-
-            ### OpenAI
-            if args.llm_provider == "openai":
-                api_key = args.llm_api_key or os.environ.get("OPENAI_API_KEY", "")
-                if not args.llm_server:
-                    model_name = args.llm_model or openai_model_default
-                    log(f"Preparing OpenAI model \"{model_name}\"...")
-                    from llama_index.llms import OpenAI
-                    llm = OpenAI(
-                        model=model_name,
-                        api_key=api_key,
-                        additional_kwargs=model_kwargs,
-                        verbose=args.llm_verbose)
-                else:
-                    # API compatible server
-                    model_name = args.llm_model or "default"
-                    log(f"Preparing model \"{model_name}\" on server \"{args.llm_server}\"...")
-                    from llama_index.llms import OpenAILike
-                    llm = OpenAILike(
-                        model=model_name,
-                        additional_kwargs=model_kwargs,
-                        api_base=args.llm_server,
-                        max_tokens=1000,
-                        max_iterations=100,
-                        verbose=args.llm_verbose)
-                
-            ### Anthropic
-            elif args.llm_provider == "anthropic":
-                api_key = args.llm_api_key or os.environ.get("ANTHROPIC_API_KEY", "")
-                model_name = args.llm_model or anthropic_model_default
-                log(f"[UNTESTED] Preparing Anthropic model \"{model_name}\"...")
-                from llama_index.llms import Anthropic
-                llm = Anthropic(
-                    model=model_name,
-                    api_key=api_key,
-                    base_url=args.llm_server,
-                    additional_kwargs=model_kwargs)
-                
-            ### PaLM
-            elif args.llm_provider == "palm":
-                api_key = args.llm_api_key or os.environ.get("GEMINI_API_KEY", "")
-                model_name = args.llm_model or palm_model_default
-                log(f"Preparing Google PaLM model \"{model_name}\"...")
-                from llama_index.llms import PaLM
-                llm = PaLM(
-                    api_key=api_key,
-                    model_name=model_name,
-                    generate_kwargs=model_kwargs)
-                llm_supports_streaming = False
-                
-            ### Mistral
-            elif args.llm_provider == "mistral":
-                log(f"[UNTESTED] Preparing MistralAI model \"{llm.model}\"")
-                from llama_index.llms import MistralAI
-                llm = MistralAI(
-                    model=args.llm_model,
-                    api_key=args.llm_api_key,
-                    additional_kwargs=model_kwargs)
-                
-            ### Llama.cpp
-            elif args.llm_provider == "llamacpp":
-                if torch.cuda.is_available():
-                    # FIXME - this does nothing
-                    model_kwargs["n_gpu_layers"] = -1
-                    model_kwargs["device"] = "cuda"
-                log(f"Preparing llama.cpp model \"{os.path.normpath(args.llm_model)}\"...")
-                from llama_index.llms import LlamaCPP
-                llm = LlamaCPP(
-                    model_path=args.llm_model,
-                    model_kwargs=model_kwargs,
-                    verbose=args.llm_verbose)
-                
-            ### Perplexity
-            elif args.llm_provider == "perplexity":
-                api_key = args.llm_api_key or os.environ.get("PERPLEXITYAI_API_KEY", "")
-                model_name = args.llm_model or perplexity_default
-                log(f"Preparing Perplexity model \"{os.path.normpath(model_name)}\"...")
-                from llama_index.llms import Perplexity
-                llm = Perplexity(
-                    api_key=api_key,
-                    model=model_name,
-                    model_kwargs=model_kwargs)
-            
-            ### HuggingFace
-            else:
-                os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
-                model_desc = ""
-                model_name = args.llm_model or "default"
-                if model_name in hf_model_nicknames:
-                    model_desc = f" (\"{model_name}\")"
-                    model_name = hf_model_nicknames[model_name]
-                log(f"Preparing HuggingFace model \"{model_name}\"{model_desc}...")
-                from llama_index.llms import HuggingFaceLLM
-                llm = HuggingFaceLLM(
-                    model_name=model_name,
-                    model_kwargs=model_kwargs, 
-                    device_map=args.torch_device or "auto",
-                    system_prompt=system_prompt)
-            
-            if llm:
-                from llama_index import ServiceContext
-                from llama_index import set_global_service_context
-
-                service_context = ServiceContext.from_defaults(
-                    embed_model="local", 
-                    llm=llm)
-                set_global_service_context(service_context)
-
-    except Exception as e: 
-        log_error(f"failure initializing LLM: {e}", exit_code=1)
+    llm, streaming_supported = load_llm(provider, model, server, api_key, param)
 
     #--------------------------------------------------------------------------
     # Update the vector database
@@ -831,7 +863,7 @@ for llm_config in llm_config_list:
 
     if vector_index:
         try:
-            query_engine_params["streaming"] = llm_supports_streaming
+            query_engine_params["streaming"] = streaming_supported
             query_engine = vector_index.as_query_engine(**query_engine_params)
 
         except Exception as e: log_error(f"can't initialize query engine: {e}", exit_code=1)
@@ -859,7 +891,7 @@ for llm_config in llm_config_list:
                         log_verbose(f"\n{query_prefix}{query}\n\t...thinking ", end="", flush=True)
                         query_start_time = time.time()
 
-                        if llm_supports_streaming:
+                        if streaming_supported:
                             streaming_response = query_engine.query(query)
                             for token in streaming_response.response_gen:
                                 if len(response_tokens) == 0:
@@ -914,10 +946,10 @@ if args.query_log_json:
 template_consolidate = """
 A query is given below that has been run on multiple LLMs, each of which performed
 RAG analysis and generated a draft response. These are quite different systems
-and may have responsed in different ways. The task of this model is to
+and may have responded in different ways. The task of this model is to
 consolidate those drafts and produce a final response for the user. This is
 a standardized process with a fixed 3-part format for the output, which must
-be followed precisely.
+be followed methodically and exactly.
 
 Start the first part with the header `## VALIDATION`, then evaluate each response 
 against these considerations:
@@ -938,41 +970,45 @@ against these considerations:
     on simple confusion about terminology, etc, and the response might 
     not cover the full scope of the query. 
 
-Generate this four-point evaluation for each response in turn. 
+Address these four points for each response in turn. 
 
 The second part (`## EVALUATION`) must summarize the quality of all these 
 responses in aggregate. For example, do any responses directly contradict
 each other? Do some appear based on more sophisticated understanding? Are any 
 of them just plain wrong and should be ignored? As a matter of style, do any
-of them do a better job of explaining the answer? Add notes that might help
+of them do a better job of explaining the answer? Add any notes that might help
 when composing the final draft.
 
 To end section two, stack rank the responses from best to worst.
 
 The third and final section (header `## SUMMARY`) will be presented to the user as the response 
 to their original query. Leverage the analysis you generated in the first two
-sections, and consolidate the high-quality information into a single, coherent
-response. If it doesn't look like a satisfactory reply will be possible,
-say so and explain why. That's more useful than incomplete or uncertain answer.
+sections, and consolidate the high-quality information available into a single, coherent
+response for the user. If it doesn't look like a satisfactory reply will be possible,
+say so and explain why. That's more useful than incomplete or potentially
+incorrect answer.
 
-In summary, produce output in three sections under the headers specified:
+In summary, you must produce output in three sections under the headers given:
 
-1) evaluate each response against the four quality/correctness criteria
-2) summarize the quality of the responses together, and stack rank them
-3) curate and consolidate this information into a comprehensive final response
+1) `## VALIDATION` - evaluate each response against the four quality/correctness criteria listed
+2) `## EVALUATION` - summarize the overall quality of the responses, and stack rank them for quality
+3) `## SUMMARY` - curate and consolidate this information into a high-quality final response
 
-This is very important for my job! Please produce a high-quality summary.
+This is very important for my job! You have been selected for your advanced
+analytical ability and excellent communication skills. Follow these instructions
+exactly and generate a precise, lucid, and insightful answer.
 
 The original query and all draft responses follow. Begin the first section
 of your response (`## VALIDATION`) immediately, with no commentary.
-
-## QUERY
 """
 
-
-if False:#len(args.llm_config) > 1 and not args.skip_summary:
-    log(f"Consolidating responses from multiple LLMs...")
+if args.llm_config_mod:
     with TimerUntil("complete"):
+        if not moderator_loaded_last:
+            llm, streaming_supported = load_llm_config(args.llm_config_mod)
+
+        log(f"Consolidating responses from multiple LLMs...")
+
         consolidated_transcript = ""
         for query_record in json_log["queries"]:
             query = query_record["query"]

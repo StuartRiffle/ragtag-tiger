@@ -129,6 +129,26 @@ If that's not a problem:
 --llm-provider palm  --llm-model models/text-bison-001
 ```
 
+# RAG gauntlet
+
+What if 
+
+| | Model | Params | Context| --llm-config |
+| --- | --- | --- | --- | --- |
+| **OpenAI** | GPT 3.5 | | 4k | `openai,gpt-3.5-turbo-instruct` |
+| | | | 16k | openai,gpt-3.5-turbo-16k |
+| | GPT 4 | | 8k | openai,gpt-4 |
+| | | | 32k | openai,gpt-4-32k |
+| | | | 128k | openai,gpt-4-1106-preview |
+|  **Perplexity** | CodeLlama | 33B | 16k | perplexity,codellama-34b-instruct |
+| | Mixtral | 8x7B | 32k| perplexity,mixtral-8x7b-instruct |
+| | Llama 2 | 70B | 4k | perplexity,llama-2-70b-chat |
+| **Google** | PaLM | | 8k | google,text-bison-001 |
+| | Gemini | | 30k | google,models/gemini-pro |
+| **HuggingFace** | Goliath | 120B | 4k | huggingface,thebloke/goliath-120b-awq |
+| | BLOOM | 176B | 2k |  |
+| | Falcon | 180B | 2k | huggingface,thebloke/falcon-180B-chat-awq |
+
 # Options
 
 A list of options is available on the help page:
@@ -192,35 +212,6 @@ Interactive chat:
 ```
 
 # Workflow
-
-
-# Query
-What is mybirthday?>
-
-# Summary
-
-afsdf
-asdf
-
-# Responses
-```
-Total time:
-```
-
-### openai text-davinci-001
-> Your birthday is unknown
-
----
-
-### llama.2 c-
-> Fuck off
-
-**llama.2 c-**
-> Fuck off
-
-
-
-
 
 Commands can get long, but they are easier to edit if you put them in a shell script (or batch file), and split the parameters over multiple lines by ending them with `\` (or with `^` on Windows).
 
