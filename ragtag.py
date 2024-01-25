@@ -1,6 +1,9 @@
 # RAG/TAG Tiger
 # Copyright (c) 2024 Stuart Riffle
 
+import time
+start_time = time.time()
+
 program_name            = "RAG/TAG Tiger"
 program_version         = "0.1.0"
 program_license         = "MIT"
@@ -8,16 +11,14 @@ program_copyright       = "Copyright (c) 2024 Stuart Riffle"
 program_description     = "Update and query a LlamaIndex vector index"
 program_repository      = "github.com/stuartriffle/ragtag-tiger"
 
-default_llm_provider    = "huggingface"
-hf_model_nicknames      = { "default": "codellama/CodeLlama-7b-Instruct-hf" }
 openai_model_default    = "gpt-3.5-turbo-instruct"
 palm_model_default      = "models/text-bison-001"
 anthropic_model_default = "claude-2"
-
-llamaindex_chat_modes = ["best", "context", "condense_question", "simple", "react", "openai"]
-llamaindex_query_response_modes = ["accumulate", "compact", "compact_accumulate", "generation", "no_text", "refine", "simple_summarize", "tree_summarize"]
-
-print(f"{program_name} v{program_version}")
+perplexity_default      = "llama-2-70b-chat"
+default_llm_provider    = "huggingface"
+hf_model_nicknames      = { "default": "codellama/CodeLlama-7b-Instruct-hf" }
+llamaindex_chat_modes   = ["best", "context", "condense_question", "simple", "react", "openai"]
+llamaindex_query_modes  = ["accumulate", "compact", "compact_accumulate", "generation", "no_text", "refine", "simple_summarize", "tree_summarize"]
 
 #------------------------------------------------------------------------------
 # Parse command line arguments and response files
@@ -78,7 +79,7 @@ arg("--query-list",     help="File containing short queries, one per line", acti
 arg("--query-file",     help="File containing one long query", action="append", metavar="FILE")
 arg("--query-log",      help="Log queries and responses to a text file", metavar="FILE")
 arg("--query-log-json", help="Log queries and responses (plus some metadata) to a JSON file", metavar="FILE")
-arg("--query-mode",     help="Query response mode", choices=llamaindex_query_response_modes, default="tree_summarize")
+arg("--query-mode",     help="Query response mode", choices=llamaindex_query_modes, default="tree_summarize")
 arg("--tag-queries",    help="The name/header in the transcript for user queries", metavar="NAME", default="User")
 arg("--tag-responses",  help="The name/header in the transcript for engine responses", metavar="NAME", default="Tiger")
 arg("--skip-summary",   help="When querying multiple models, don't consolidate responses", action="store_true")
@@ -94,16 +95,21 @@ arg("--chat-mode",      help="Chat response mode", choices=llamaindex_chat_modes
 #os.sys.argv += shlex.split(os.environ.get("RAGTAG_FLAGS", ""))
 
 args = parser.parse_args()
+
+spacer = "\n" if args.verbose else ""
+print(f'{spacer}{program_name} v{program_version}')
+if args.verbose:
+    print(f"{program_copyright}\n{program_repository}\n")
 if args.version:
     exit(0)
-if args.verbose:
-    print(f"{program_copyright}\n{program_repository}\n\nStarting up...")
+    
+print("Waking up tiger...")
 
 #------------------------------------------------------------------------------
 # Default values etc, update these as needed
 #------------------------------------------------------------------------------
 
-import os, argparse, time, json, pathspec, tempfile, shutil, torch, hashlib, py7zr, humanfriendly
+import os, json, pathspec, tempfile, shutil, torch, hashlib, py7zr, humanfriendly, weakref
 import email, email.policy, email.parser, email.message
 from llama_index.text_splitter import CodeSplitter
 
@@ -193,8 +199,6 @@ chunk_as_text = set([
 # Misc loggery
 #------------------------------------------------------------------------------
 
-start_time = time.time()
-
 def log(msg, **kwargs):
     if not args.quiet:
        print(msg, **kwargs)
@@ -230,10 +234,12 @@ class TimerUntil:
         if not exc_type:
             log_verbose(f"{self.prefix}{self.msg} ({time_since(self.start_time)}{self.suffix})")
 
+log_verbose(f"\t...at your service ({time_since(start_time)})")
+
 #------------------------------------------------------------------------------
 # Gather all the file specs we'll have to search when indexing
 #------------------------------------------------------------------------------
-        
+       
 search_specs = []
 
 def strip_and_remove_comments(text):
@@ -616,29 +622,34 @@ if len(system_prompt.strip()) > 0:
 # Process the queries on all given LLM configurations in turn
 #------------------------------------------------------------------------------
 
-
-
-
-
 llm = None
 vector_index = None
+service_context = None
+query_engine = None
+query_engine_params = {
+    "response_mode":    args.query_mode,
+    "system_prompt":    system_prompt,
+    "service_context":  service_context,
+}
+
+
 rough_transcript = ""
 json_log = {
     "context": system_prompt,
     "queries": []
 }
 
-llm_config_list = args.llm_config_list or []
+llm_config_list = args.llm_config or []
 
 if args.llm_provider or args.llm_server or args.llm_api_key or args.llm_param:
-    # Build a configuration string out of the options
+    # Build a configuration string out of the individual options
     config_str = f"{args.llm_provider or 'huggingface'},{args.llm_model or ''},{args.llm_server or ''},{args.llm_api_key or ''}"
     for param in args.llm_param or []:
         config_str += f",{param.strip().replace(' ', '')}"
     llm_config_list.insert(config_str, 0)
 
 
-for llm_config in args.llm_config_list:
+for llm_config in llm_config_list:
     llm_config = llm_config.strip("\"' ")
     llm_fields = llm_config.split(",")
     if llm_fields:
@@ -668,7 +679,7 @@ for llm_config in args.llm_config_list:
                 api_key = args.llm_api_key or os.environ.get("OPENAI_API_KEY", "")
                 if not args.llm_server:
                     model_name = args.llm_model or openai_model_default
-                    log(f"Using OpenAI model \"{model_name}\"...")
+                    log(f"Preparing OpenAI model \"{model_name}\"...")
                     from llama_index.llms import OpenAI
                     llm = OpenAI(
                         model=model_name,
@@ -678,7 +689,7 @@ for llm_config in args.llm_config_list:
                 else:
                     # API compatible server
                     model_name = args.llm_model or "default"
-                    log(f"Using model \"{model_name}\" on server \"{args.llm_server}\"...")
+                    log(f"Preparing model \"{model_name}\" on server \"{args.llm_server}\"...")
                     from llama_index.llms import OpenAILike
                     llm = OpenAILike(
                         model=model_name,
@@ -692,7 +703,7 @@ for llm_config in args.llm_config_list:
             elif args.llm_provider == "anthropic":
                 api_key = args.llm_api_key or os.environ.get("ANTHROPIC_API_KEY", "")
                 model_name = args.llm_model or anthropic_model_default
-                log(f"[UNTESTED] Uusing Anthropic model \"{model_name}\"...")
+                log(f"[UNTESTED] Preparing Anthropic model \"{model_name}\"...")
                 from llama_index.llms import Anthropic
                 llm = Anthropic(
                     model=model_name,
@@ -704,7 +715,7 @@ for llm_config in args.llm_config_list:
             elif args.llm_provider == "palm":
                 api_key = args.llm_api_key or os.environ.get("GEMINI_API_KEY", "")
                 model_name = args.llm_model or palm_model_default
-                log(f"Using Google PaLM model \"{model_name}\"...")
+                log(f"Preparing Google PaLM model \"{model_name}\"...")
                 from llama_index.llms import PaLM
                 llm = PaLM(
                     api_key=api_key,
@@ -714,7 +725,7 @@ for llm_config in args.llm_config_list:
                 
             ### Mistral
             elif args.llm_provider == "mistral":
-                log(f"[UNTESTED] Using MistralAI model \"{llm.model}\"")
+                log(f"[UNTESTED] Preparing MistralAI model \"{llm.model}\"")
                 from llama_index.llms import MistralAI
                 llm = MistralAI(
                     model=args.llm_model,
@@ -727,12 +738,23 @@ for llm_config in args.llm_config_list:
                     # FIXME - this does nothing
                     model_kwargs["n_gpu_layers"] = -1
                     model_kwargs["device"] = "cuda"
-                log(f"Loading llama.cpp model \"{os.path.normpath(args.llm_model)}\"...")
+                log(f"Preparing llama.cpp model \"{os.path.normpath(args.llm_model)}\"...")
                 from llama_index.llms import LlamaCPP
                 llm = LlamaCPP(
                     model_path=args.llm_model,
                     model_kwargs=model_kwargs,
                     verbose=args.llm_verbose)
+                
+            ### Perplexity
+            elif args.llm_provider == "perplexity":
+                api_key = args.llm_api_key or os.environ.get("PERPLEXITYAI_API_KEY", "")
+                model_name = args.llm_model or perplexity_default
+                log(f"Preparing Perplexity model \"{os.path.normpath(model_name)}\"...")
+                from llama_index.llms import Perplexity
+                llm = Perplexity(
+                    api_key=api_key,
+                    model=model_name,
+                    model_kwargs=model_kwargs)
             
             ### HuggingFace
             else:
@@ -742,37 +764,25 @@ for llm_config in args.llm_config_list:
                 if model_name in hf_model_nicknames:
                     model_desc = f" (\"{model_name}\")"
                     model_name = hf_model_nicknames[model_name]
-                log(f"Loading HuggingFace model \"{model_name}\"{model_desc}...")
+                log(f"Preparing HuggingFace model \"{model_name}\"{model_desc}...")
                 from llama_index.llms import HuggingFaceLLM
                 llm = HuggingFaceLLM(
                     model_name=model_name,
                     model_kwargs=model_kwargs, 
                     device_map=args.torch_device or "auto",
                     system_prompt=system_prompt)
+            
+            if llm:
+                from llama_index import ServiceContext
+                from llama_index import set_global_service_context
 
-    except Exception as e: 
-        log_error(f"failure initializing LLM: {e}", exit_code=1)
-
-    #------------------------------------------------------------------------------
-    # Service context
-    #------------------------------------------------------------------------------
-
-    from llama_index import ServiceContext
-    from llama_index import set_global_service_context
-
-
-    service_context = None
-
-    if llm:
-        log_verbose(f"Setting up global service context...")
-        try:
-            with TimerUntil("context set"):
                 service_context = ServiceContext.from_defaults(
                     embed_model="local", 
                     llm=llm)
                 set_global_service_context(service_context)
 
-        except Exception as e: log_error(e, exit_code=1)
+    except Exception as e: 
+        log_error(f"failure initializing LLM: {e}", exit_code=1)
 
     #--------------------------------------------------------------------------
     # Update the vector database
@@ -782,7 +792,7 @@ for llm_config in args.llm_config_list:
 
     if not vector_index:
         if args.index_load:
-            info = f" in \"{os.path.normpath(args.index_load)}\"" if args.verbose else ""
+            info = f" from \"{os.path.normpath(args.index_load)}\"" if args.verbose else ""
             log(f"Loading vector index{info}...")
             try:
                 with TimerUntil("loaded"):
@@ -819,21 +829,12 @@ for llm_config in args.llm_config_list:
     # Initialize the query engine
     #------------------------------------------------------------------------------
 
-    query_engine = None
-    query_engine_params = {
-        "response_mode":    args.query_mode,
-        "system_prompt":    system_prompt,
-        "service_context":  service_context,
-        "streaming":        llm_supports_streaming,
-    }
-
-    if len(queries) > 0:
-        log_verbose(f"Initializing query engine...")
+    if vector_index:
         try:
-            with TimerUntil("ready"):        
-                query_engine = vector_index.as_query_engine(**query_engine_params)
-        except Exception as e:
-            log_error(e, exit_code=1)
+            query_engine_params["streaming"] = llm_supports_streaming
+            query_engine = vector_index.as_query_engine(**query_engine_params)
+
+        except Exception as e: log_error(f"can't initialize query engine: {e}", exit_code=1)
 
     #------------------------------------------------------------------------------
     # Process all the queries
@@ -847,7 +848,7 @@ for llm_config in args.llm_config_list:
 
     if len(queries) > 0:
         query_count = f"{len(queries)} queries" if len(queries) > 1 else "query"
-        log(f"Running {query_count}...")
+        #log(f"Running {query_count}...")
         with TimerUntil(f"all queries complete"):
             for query in queries:
                 query_record = { "query": query }
@@ -910,8 +911,7 @@ if args.query_log_json:
 # Consolidate responses after querying multiple models
 #------------------------------------------------------------------------------
 
-
-"""
+template_consolidate = """
 A query is given below that has been run on multiple LLMs, each of which performed
 RAG analysis and generated a draft response. These are quite different systems
 and may have responsed in different ways. The task of this model is to
@@ -919,82 +919,58 @@ consolidate those drafts and produce a final response for the user. This is
 a standardized process with a fixed 3-part format for the output, which must
 be followed precisely.
 
-For the first part, evaluate each response against these considerations:
+Start the first part with the header `## VALIDATION`, then evaluate each response 
+against these considerations:
 
-1)  Check the LLM output, and note any technical problems, for example:
+1)  Note any technical problems with the LLM output, for example:
     - truncated output indicating a configuration error or missing tokens
     - gibberish or degenerate output, like a phrase repeated multiple times
     - fragments of the LLM system prompt or instructions leaking through
     - artifacts of unrelated training data, metadata, or transcripts
     - runtime error messages
-2)  Make a list of overt factual errors and hallucinations. Propose corrections
+2)  Make a list of overt errors and hallucinations. Propose corrections
     only if they are known with high confidence.
 3)  Evaluate the response for relevance to the query. Note any sections that
     don't contribute to the answer, are off-topic, redundant, overly 
     conversational, or otherwise unhelpful in context.
 4)  Evaluate the response for apparent completeness. The RAG process may
     have surfaced information out of context, too narrowly focused, based
-    on simple confusion about terminology, etc, and every response might 
+    on simple confusion about terminology, etc, and the response might 
     not cover the full scope of the query. 
 
-Generate this four-point evaluation for each response in turn. That will
-complete the first section.
+Generate this four-point evaluation for each response in turn. 
 
-The second part must summarize the quality of all these responses in 
-aggregate. For example, do any responses directly contradict each other?
-Do some appear based on more sophisticated analysis? Are any of them
-just plain wrong and should be ignored? As a matter of style, do any of
-them do a better job of explaining the answer?
+The second part (`## EVALUATION`) must summarize the quality of all these 
+responses in aggregate. For example, do any responses directly contradict
+each other? Do some appear based on more sophisticated understanding? Are any 
+of them just plain wrong and should be ignored? As a matter of style, do any
+of them do a better job of explaining the answer? Add notes that might help
+when composing the final draft.
 
-To end section two, stack rank the responses from best to worst, based
-on the value they would deliver to the user in isolation.
+To end section two, stack rank the responses from best to worst.
 
-The third and final section will be presented to the user as the response 
+The third and final section (header `## SUMMARY`) will be presented to the user as the response 
 to their original query. Leverage the analysis you generated in the first two
 sections, and consolidate the high-quality information into a single, coherent
 response. If it doesn't look like a satisfactory reply will be possible,
-it is valid to say so and explain the reason why. That's much more useful
-than an incomplete or uncertain answer.
+say so and explain why. That's more useful than incomplete or uncertain answer.
 
-So to recap, you must produce output in three sections:
-- first, evalate each response against the four quality criteria above
-- second, summarize the quality of the input responses, and stack rank them
-- third, curate and consolidate this information into a final response
+In summary, produce output in three sections under the headers specified:
 
-The original query and all draft responses follow.
+1) evaluate each response against the four quality/correctness criteria
+2) summarize the quality of the responses together, and stack rank them
+3) curate and consolidate this information into a comprehensive final response
 
-# QUERY
+This is very important for my job! Please produce a high-quality summary.
 
+The original query and all draft responses follow. Begin the first section
+of your response (`## VALIDATION`) immediately, with no commentary.
 
-
-
-
-
-
-
-
-
-
-
-
-into a coherent response.
-
-Remember the goal is to maximize value for the user. 
-
-
-4)  Evaluate the response for 
-4)  Evaluate the response for style, and note any sections that are awkward,
-
-- obvious factual errors, hallucinations, or malfunctions
-
-
-
+## QUERY
 """
 
 
-if len(args.llm_config) > 1 and not args.skip_summary:
-
-
+if False:#len(args.llm_config) > 1 and not args.skip_summary:
     log(f"Consolidating responses from multiple LLMs...")
     with TimerUntil("complete"):
         consolidated_transcript = ""
@@ -1044,16 +1020,13 @@ if args.chat:
 #------------------------------------------------------------------------------
 
 if args.chat:
-    log("Initializing chat engine...")
     try:
         chat_engine_params = query_engine_params.copy()
         del chat_engine_params["response_mode"]
+
         chat_engine_params["chat_mode"] = args.chat_mode
         chat_engine_params["system_prompt"] = f"{system_prompt}\n{chat_init}"
-
-        with TimerUntil("ready"):
-            chat_engine = vector_index.as_chat_engine(**chat_engine_params)
-
+        chat_engine = vector_index.as_chat_engine(**chat_engine_params)
     except Exception as e: log_error(e, exit_code=1)
 
 #------------------------------------------------------------------------------
@@ -1097,11 +1070,11 @@ if args.chat:
             if command == "mode":
                 if message in llamaindex_chat_modes:
                     command, message = "chat", message
-                elif message in llamaindex_query_response_modes:
+                elif message in llamaindex_query_modes:
                     command, message = "query", message
                 else:
                     log(f"Chat modes:  {llamaindex_chat_modes}")
-                    log(f"Query modes: {llamaindex_query_response_modes}")
+                    log(f"Query modes: {llamaindex_query_modes}")
                     continue
 
             if command == "chat":
@@ -1127,10 +1100,10 @@ if args.chat:
 
             elif command == "query":
                 curr_engine = query_engine
-                if message in llamaindex_query_response_modes:
+                if message in llamaindex_query_modes:
                     query_engine.set_response_mode(message)
                 else:
-                    log(f"Valid query modes are: {llamaindex_query_response_modes}")
+                    log(f"Valid query modes are: {llamaindex_query_modes}")
                     log_verbose("\taccumulate:")
                     log_verbose("\t  - synthesize a response for each text chunk")
                     log_verbose("\t  - combine them into a single response")
@@ -1216,5 +1189,4 @@ if args.chat:
 if temp_folder:
     clean_up_temporary_files()
 
-total_time = f" ({time_since(start_time)})" if args.verbose else "."
-log(f"Tiger out, peace{total_time}")
+log_verbose(f"\nTiger out, peace ({time_since(start_time)})")

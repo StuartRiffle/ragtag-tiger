@@ -193,6 +193,35 @@ Interactive chat:
 
 # Workflow
 
+
+# Query
+What is mybirthday?>
+
+# Summary
+
+afsdf
+asdf
+
+# Responses
+```
+Total time:
+```
+
+### openai text-davinci-001
+> Your birthday is unknown
+
+---
+
+### llama.2 c-
+> Fuck off
+
+**llama.2 c-**
+> Fuck off
+
+
+
+
+
 Commands can get long, but they are easier to edit if you put them in a shell script (or batch file), and split the parameters over multiple lines by ending them with `\` (or with `^` on Windows).
 
 For example, a script to consult with a dangerously unqualified virtual doctor, using a local LLM and a temporary document index for privacy:
@@ -254,7 +283,6 @@ For casual/occasional use this may be overthinking things.
 **Q:**&nbsp; Good enough, how can I buy you that coffee? <br>
 **A:**&nbsp; For clarity, the coffee is a metaphor and contributions will be spent on drugs. 
 
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 <a href="https://www.buymeacoffee.com/stuartriffle">
   <img src="docs/coffee.png" width="200px">
 </a>
