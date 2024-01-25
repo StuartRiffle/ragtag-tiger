@@ -11,6 +11,7 @@
 - auto-downloads custom file loaders from the [LlamaIndex hub](https://llamahub.ai) 
 - indexes documents inside archive files and email attachments
 - uses language-aware chunking for source code
+- consolidates RAG responses from multiple models with a "moderator" LLM that writes the final output
 - supports pseudo-interactive "chat" from the command line, using any chat/query response mode
 
 It's mostly the same boilerplate/glue code you were going to have to write anyway, so if this saves you an afternoon of sifting through machine-generated LlamaIndex tutorials and arguing with Copilot, please feel free to buy me a coffee.
@@ -126,7 +127,24 @@ If that's not a problem:
  - authenticate by setting `GOOGLE_APPLICATION_CREDENTIALS` and `GEMINI_API_KEY` in your environment (or override with `--llm-api-key`)
  - change [models](https://platform.openai.com/docs/models) using `--llm-model` (the default is `gpt-3.5-turbo-instruct`)
  ```
---llm-provider google  --llm-model models/text-bison-001
+--llm-provider perplexity  --llm-model 
+```
+
+### Perplexity
+ - authenticate by setting `df` in your environment (or override with `--llm-api-key`)
+ - change [models]() using `--llm-model` (the default is ``)
+ ```
+--llm-provider google  --llm-model 
+```
+### Replicate
+ - authenticate by setting `df` in your environment (or override with `--llm-api-key`)
+ - change [models]() using `--llm-model` (the default is ``)
+ ```
+--llm-provider replicate  --llm-model 
+```
+If your inference provider is not here, there's a good chance they run an OpenAI-compatible server somewhere _anyway_. Give this a try:
+```
+--llm-provider openai  --llm-server URL  --llm-model NAME
 ```
 
 # RAG gauntlet
@@ -146,7 +164,7 @@ Most of the time, all you need is the first couple of fields, and you can skip u
 
 The benefit of this format is that now you can submit a *list* of inference providers with multiple `--llm-config` arguments, and **RAG/TAG Tiger** will run your queries through *all* of them, allowing you to compare the responses.
 
-But nobody has time for that, so to complete the circle you can configure a **moderator** LLM using `--llm-config-mod`. The moderator will look at all the other responses, perform a short quality analysis, then consolidate everything into one final answer.
+But nobody has time for that, so to complete the circle you can configure a **moderator** LLM using `--llm-config-mod`. The moderator will look at all the other responses, perform a short quality analysis, then consolidate everything into one final answer. It may need a bigger context window.
 
 ### LLM config examples
 

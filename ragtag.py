@@ -890,9 +890,10 @@ for llm_config in llm_config_list:
                 if not query_log_exists:
                     query_record = { 
                         "query": query,
-                        "summary": "",
+                        "response": "",
                         "id": hashlib.md5(query.encode()).hexdigest(),
                         "responses": [],
+                        "moderator": "",
                     }
                     log_idx = len(json_log["queries"])
                     json_log["queries"].append(query_record)
@@ -1049,7 +1050,8 @@ if args.llm_config_mod:
 
                 json_log["queries"][query_record_idx]["validation"] = validation
                 json_log["queries"][query_record_idx]["evaluation"] = evaluation
-                json_log["queries"][query_record_idx]["summary"] = summary
+                json_log["queries"][query_record_idx]["response"] = summary
+                json_log["queries"][query_record_idx]["moderator"] = args.llm_config_mod
 
                 log_verbose(f"{response_prefix}{summary}\n")
 
