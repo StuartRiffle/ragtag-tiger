@@ -16,7 +16,7 @@ openai_model_default    = "gpt-3.5-turbo-instruct"
 google_model_default      = "models/text-bison-001"
 anthropic_model_default = "claude-2"
 perplexity_default      = "llama-2-70b-chat"
-replicate_default       = "kcaverly/nous-hermes-2-yi-34b-gguf"
+replicate_default       = "mistralai/mixtral-8x7b-instruct-v0.1"
 default_llm_provider    = "huggingface"
 hf_model_nicknames      = { "default": "codellama/CodeLlama-7b-Instruct-hf" }
 llamaindex_chat_modes   = ["best", "context", "condense_question", "simple", "react", "openai"]
@@ -64,7 +64,7 @@ arg("--size-limit",     help="Ignore huge text files unlikely to contain interes
 arg("--no-cache",       help="Do not use the local cache for loaders", action="store_true")
 
 arg = parser.add_argument_group("Language model").add_argument
-arg("--llm-provider",   help="Inference provider/interface", choices=["openai", "anthropic", "google", "mistral", "llamacpp", "huggingface"], metavar="NAME")
+arg("--llm-provider",   help="Inference provider/interface", choices=["openai", "google", "llamacpp", "huggingface", "perplexity", "replicate"], metavar="NAME")
 arg("--llm-model",      help="Model name/path/etc for provider", metavar="NAME")
 arg("--llm-server",     help="Inference server URL (if needed)", metavar="URL")
 arg("--llm-api-key",    help="API key for inference server (if needed)", metavar="KEY")
@@ -615,7 +615,7 @@ for file in args.context_file or []:
             system_prompt_lines.extend(snippet.splitlines())
     except Exception as e: log_error(e)
 
-system_prompt = "\n".join(system_prompt_lines) + "\n"
+system_prompt = "\n".join(system_prompt_lines).strip()
 
 if len(system_prompt.strip()) > 0:
     log_verbose(f"System prompt:\n{system_prompt}")
@@ -761,6 +761,9 @@ query_engine_params = {
 
 transcript_lines = []
 json_log = {
+    "comment": "",
+    "id": "",
+    "timestamp": "",
     "context": system_prompt,
     "queries": [],
 }
@@ -854,7 +857,7 @@ for llm_config in llm_config_list:
     query_prefix = f"### {tag_queries}\n" if tag_queries else ""
     response_prefix = f"### {tag_responses}\n" if tag_responses else ""
 
-    json_log["_comment"] = f"RAG/TAG Tiger v{program_version} query transcript"
+    json_log["comment"] = f"{program_name} v{program_version} ({program_repository})"
     json_log["id"] = hashlib.md5("\n".join(queries).encode()).hexdigest()
     json_log["timestamp"] = time.strftime("%Y-%m-%d %H:%M:%S UTC")
 
@@ -872,11 +875,11 @@ for llm_config in llm_config_list:
 
                 if not query_log_exists:
                     query_record = { 
-                        "id": hashlib.md5(query.encode()).hexdigest(),
                         "query": query,
                         "response": "",
                         "moderator": "",
-                        "responses": [],
+                        "id": "",
+                        "drafts": [],
                     }
                     log_idx = len(json_log["queries"])
                     json_log["queries"].append(query_record)
@@ -921,7 +924,10 @@ for llm_config in llm_config_list:
 
                 response_record["response"] = llm_response
                 response_record["time"] = time.time() - query_start_time
-                json_log["queries"][log_idx]["responses"].append(response_record)
+
+                json_log["queries"][log_idx]["drafts"].append(response_record)
+                if not "response" in json_log["queries"][log_idx]:
+                    json_log["queries"][log_idx]["response"] = llm_response
 
         log_verbose("")
 
@@ -1005,14 +1011,14 @@ if args.llm_config_mod:
             try:
                 query_record = json_log["queries"][query_record_idx]
                 query = query_record["query"]
-                responses = query_record["responses"] or []
-                if len(responses) < 1:
+                drafts = query_record["drafts"] or []
+                if len(drafts) < 1:
                     continue
 
                 prompt = template_consolidate
                 prompt += f"### QUERY\n\n{query}\n\n"
-                for response_idx in range(len(responses)):
-                    llm_response = responses[response_idx]
+                for response_idx in range(len(drafts)):
+                    llm_response = drafts[response_idx]
                     prompt += f"### RESPONSE {response_idx + 1}\n\n{llm_response['response']}\n\n"
 
                 log_verbose(f"{query_prefix}{query}\n\t...consolidating responses, please hold... ", end="", flush=True)
@@ -1032,10 +1038,11 @@ if args.llm_config_mod:
                     log_error(f"summary formatting error")
                     continue
 
+                json_log["queries"][query_record_idx]["id"] = hashlib.md5(query.encode()).hexdigest()
+                json_log["queries"][query_record_idx]["moderator"] = args.llm_config_mod
                 json_log["queries"][query_record_idx]["validation"] = validation
                 json_log["queries"][query_record_idx]["evaluation"] = evaluation
                 json_log["queries"][query_record_idx]["response"] = summary
-                json_log["queries"][query_record_idx]["moderator"] = args.llm_config_mod
 
                 log_verbose(f"{response_prefix}{summary}\n")
 

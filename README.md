@@ -26,7 +26,7 @@ Details will vary by OS, but on [Debian]()/[Ubuntu]() you would use `apt` to ins
 sudo apt update -y
 sudo apt-get install -y build-essential cmake git python3 pip python3-venv
 ```
-On Windows you could use [WSL](https://learn.microsoft.com/en-us/windows/wsl/), or use something like [Chocolatey](https://chocolatey.org/install):
+On Windows you could use [WSL](https://learn.microsoft.com/en-us/windows/wsl/), or something native like [Chocolatey](https://chocolatey.org/install):
 ```
 choco install /y python git cuda
 ```
@@ -76,6 +76,9 @@ Then use that index to perform your queries:
 ```
 python ragtag.py --index-load my/index --query "Really though, why?"
 ```
+
+<img align="left" width="250px" style="padding:10px" src="docs/noidealol.jpg">
+
 This is **still** slow, because the index can take a long time to load. It's just not as slow as re-indexing everything. Use `--verbose` to see actual timings.
 
 To minimize overhead, try to either submit all your queries in one run, or leave a window open with the program idling in "chat mode" for ad-hoc use. Be aware that there are multiple chat modes, and the default does not respond the same way as a query. Use the `/mode` command in chat to switch response types. 
@@ -84,7 +87,7 @@ For query-style responses in chat mode, type `/mode tree_summarize` at the chat 
 
 # Local inference
 
-By default, **RAG/TAG Tiger** performs all inference locally, on your machine. Queries **should** run on GPU if your Python environment is configured for CUDA (which can be non-trivial).
+By default, **RAG/TAG Tiger** performs all inference locally, on your machine. Queries **should** run on GPU if your Python environment is configured for CUDA (which can be... non-trivial).
 
 ### [HuggingFace](https://huggingface.co/models)
 This is the default provider, so `--llm-provider huggingface` isn't strictly required. Use `--llm-model` to select specific models by name. They will be downloaded and cached for re-use. For example:
@@ -116,33 +119,35 @@ RAG queries can exfiltrate chunks of _any_ documents you index, including appare
 If that's not a problem:
 
 ### [OpenAI](https://platform.openai.com/)
-- authenticate by setting `OPENAI_API_KEY` in your environment (or override with `--llm-api-key`)
+- set `OPENAI_API_KEY` in your environment (override with `--llm-api-key`)
 - change [models](https://platform.openai.com/docs/models) using `--llm-model` (the default is `gpt-3.5-turbo-instruct`)
 - do **not** set a custom `--llm-server`
 ```
 --llm-provider openai  --llm-model gpt-4
 ```
 
-### Google
- - authenticate by setting `GOOGLE_APPLICATION_CREDENTIALS` and `GEMINI_API_KEY` in your environment (or override with `--llm-api-key`)
- - change [models](https://platform.openai.com/docs/models) using `--llm-model` (the default is `gpt-3.5-turbo-instruct`)
- ```
---llm-provider perplexity  --llm-model 
+### [Google](https://deepmind.google)
+ - set `GOOGLE_APPLICATION_CREDENTIALS` and `GOOGLE_API_KEY` in your environment (override with `--llm-api-key`)
+ - change [models](https://ai.google.dev/models) using `--llm-model` (the default is `text-bison-001`)
+```
+--llm-provider google  --llm-model models/gemini-pro
 ```
 
-### Perplexity
- - authenticate by setting `df` in your environment (or override with `--llm-api-key`)
- - change [models]() using `--llm-model` (the default is ``)
+### [Perplexity](https://perplexity.ai)
+ - set `PERPLEXITYAI_API_KEY` in your environment (override with `--llm-api-key`)
+ - change [models](https://docs.perplexity.ai/docs/model-cards) using `--llm-model` (the default is `llama-2-70b-chat`)
  ```
---llm-provider google  --llm-model 
+--llm-provider perplexity  --llm-model codellama-34b-instruct
 ```
-### Replicate
- - authenticate by setting `df` in your environment (or override with `--llm-api-key`)
- - change [models]() using `--llm-model` (the default is ``)
+### [Replicate](https://replicate.com)
+ - set `REPLICATE_API_TOKEN` in your environment (override with `--llm-api-key`)
+ - change [models](https://replicate.com/explore) using `--llm-model` (the default is `mistralai/mixtral-8x7b-instruct-v0.1`)
  ```
---llm-provider replicate  --llm-model 
+--llm-provider replicate  --llm-model mistralai/mistral-7b-instruct-v0.2
 ```
-If your inference provider is not here, there's a good chance they run an OpenAI-compatible server somewhere _anyway_. Give this a try:
+
+
+If your inference provider is not here, there's a good chance they run an OpenAI API-compatible server somewhere anyway. Give this a try:
 ```
 --llm-provider openai  --llm-server URL  --llm-model NAME
 ```
@@ -161,32 +166,35 @@ Most of the time, all you need is the first couple of fields, and you can skip u
 ```
 --llm-config openai,,http://localhost:5000/v1,,temperature=1.6,top_p=0.9
 ```
+<img align="right" width="250px" style="padding:10px" src="docs/yodawg.jpg">
 
 The benefit of this format is that now you can submit a *list* of inference providers with multiple `--llm-config` arguments, and **RAG/TAG Tiger** will run your queries through *all* of them, allowing you to compare the responses.
 
-But nobody has time for that, so to complete the circle you can configure a **moderator** LLM using `--llm-config-mod`. The moderator will look at all the other responses, perform a short quality analysis, then consolidate everything into one final answer. It may need a bigger context window.
+But nobody has time for that, so to complete the circle you can configure a **moderator** LLM using `--llm-config-mod`. The moderator will look at all the other responses, perform a short quality analysis, then consolidate everything into one final answer. 
+
+_It does this as a RAG query_. I don't know if that's a good idea or not yet. The moderator may need a bigger context window. Use `--llm-mod-mode generation` to disable this meta-RAG and generate the final draft with a simple LLM query.
 
 ### LLM config examples
 
 | | Model | Params | Context| --llm-config |
 | --- | --- | --- | --- | --- |
-| **OpenAI** | GPT 3.5 | | 4k | `openai,gpt-3.5-turbo-instruct` |
+| **[OpenAI](https://platform.openai.com/docs/models)** | GPT 3.5 | | 4k | `openai,gpt-3.5-turbo-instruct` |
 | | | | 16k | `openai,gpt-3.5-turbo-16k` |
 | | GPT 4 | | 8k | `openai,gpt-4` |
 | | | | 32k | `openai,gpt-4-32k` |
 | | | | 128k | `openai,gpt-4-1106-preview` |
-| **Google** | PaLM | | 8k | `google,text-bison-001` |
+| **[Google](https://ai.google.dev/models)** | PaLM | | 8k | `google,text-bison-001` |
 | | Gemini | | 30k | `google,models/gemini-pro` |
-|  **Perplexity** | CodeLlama | 33B | 16k | `perplexity,codellama-34b-instruct` |
+|  **[Perplexity](https://perplexity.ai/discover)** | CodeLlama | 33B | 16k | `perplexity,codellama-34b-instruct` |
 | | Llama 2 | 70B | 4k | `perplexity,llama-2-70b-chat` |
-| **Replicate** | Mixtral | 8x 7B | 32k | `replicate,mistralai/mixtral-8x7b-instruct-v0.1` |
+| **[Replicate](https://replicate.com/explore)** | Mixtral | 8x 7B | 32k | `replicate,mistralai/mixtral-8x7b-instruct-v0.1` |
 | | Nous Hermes 2 | 34B | 4k | `replicate,kcaverly/nous-hermes-2-yi-34b-gguf` |
-| **HuggingFace** | Goliath | 120B | 4k | `huggingface,thebloke/goliath-120b-awq` |
+| **[HuggingFace](https://huggingface.co/spaces/HuggingFaceH4/open_llm_leaderboard)** | Goliath | 120B | 4k | `huggingface,thebloke/goliath-120b-awq` |
 | | BLOOM | 176B | 2k | `huggingface,thebloke/bloomchat-176b-v1-gptq` |
 | | Falcon | 180B | 2k | `huggingface,thebloke/falcon-180B-chat-awq` |
-| **tggui** | _(server)_ | | | `openai,,http://YOUR_SERVER:5000/v1` |
+| **[webui](https://github.com/oobabooga/text-generation-webui)** | _(server)_ | | | `openai,,http://YOUR_SERVER:5000/v1` |
 | | _(local)_ | | | `openai,,http://127.0.0.1:5000/v1` |
-| **llama.cpp** | _(server)_ | | | `openai,,http://YOUR_SERVER:8081` |
+| **[llama.cpp](https://github.com/ggerganov/llama.cpp)** | _(server)_ | | | `openai,,http://YOUR_SERVER:8081` |
 | | _(local)_ | | | `openai,,http://127.0.0.1:8081` |
 | | _(local file)_ | | | `llamacpp,YOUR_MODEL.gguf` |
 
