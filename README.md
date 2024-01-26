@@ -172,7 +172,7 @@ The benefit of this format is that now you can submit a *list* of inference prov
 
 But nobody has time for that, so to complete the circle you can configure a **moderator** LLM using `--llm-config-mod`. The moderator will look at all the other responses, perform a short quality analysis, then consolidate everything into one final answer. 
 
-_It does this as a RAG query_. I don't know if that's a good idea or not yet. The moderator may need a bigger context window. Use `--llm-mod-mode generation` to disable this meta-RAG and generate the final draft with a simple LLM query.
+_It does this as a RAG query_. I don't know if that's a good idea or not yet. The moderator may need a bigger context window. Use `--llm-mod-mode generation` to disable this meta-RAG and produce the final draft using a simple LLM query.
 
 ### LLM config examples
 

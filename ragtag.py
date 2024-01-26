@@ -71,6 +71,7 @@ arg("--llm-api-key",    help="API key for inference server (if needed)", metavar
 arg("--llm-param",      help="Inference parameter, like \"temperature=0.9\" etc", nargs="+", metavar="KVP")
 arg("--llm-config",     help="Condensed LLM config: provider,model,server,api-key,params...", action="append", metavar="CFG")
 arg("--llm-config-mod", help="Moderator LLM to consolidate the responses of multiple providers", metavar="CFG")
+arg("--llm-mod-mode",   help="Moderator query response mode", choices=llamaindex_query_modes, default="tree_summarize")
 arg("--llm-verbose",    help="enable extended/debug output from the LLM", action="store_true")
 arg("--torch-device",   help="Device override, like \"cpu\" or \"cuda:1\" (for second GPU)", metavar="DEVICE")
 arg("--context",        help="Command line context/system prompt", action="append", metavar="TEXT")
@@ -988,7 +989,7 @@ SUMMARY    - consolidate this information into a high-quality final response
 
 This is very important for my job! You have been selected for your advanced
 analytical ability and excellent communication skills. Follow these instructions
-exactly and generate a precise, lucid, and insightful answer.
+exactly and generate a precise, lucidly written, and insightful answer.
 
 The original query and all draft responses follow. Begin the first section
 of your response immediately, with no commentary.
@@ -1002,7 +1003,7 @@ if args.llm_config_mod:
             llm, _ = load_llm_config(args.llm_config_mod, set_service_context=True)
 
         query_engine_params["streaming"] = False
-        query_engine_params["response_mode"] = "tree_summarize"
+        query_engine_params["response_mode"] = args.llm_mod_mode
         query_engine = vector_index.as_query_engine(**query_engine_params)
 
         transcript_lines.append(f"\n\n# Summaries\n")
