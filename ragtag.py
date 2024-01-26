@@ -504,9 +504,6 @@ if len(loader_specs) > 0:
 from llama_index import SimpleDirectoryReader
 from llama_index.node_parser import SimpleNodeParser
 
-
-
-
 document_nodes = []
 
 def load_document_nodes(splitter, file_list, show_progress=False):

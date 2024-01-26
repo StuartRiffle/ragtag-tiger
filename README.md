@@ -1,20 +1,24 @@
 **UNDER DEVELOPMENT - DO NOT USE THIS FOR IMPORTANT THINGS**
 
+---
+
 # RAG/TAG Tiger
 
 <img align="right" width="200px" style="padding:10px" src="docs/tiger.jpg">
 
 **RAG/TAG Tiger** is a simple [LlamaIndex](https://github.com/run-llama/llama_index) wrapper that:
-- provides a command line interface for doing primitive RAG queries on local documents/code
+- provides a command line interface for doing primitive RAG queries on local ddsocuments/code
 - runs queries using an in-process LLM, a local inference server, or a commercial endpoint
 - loads/updates/stores vector indices to avoid redundant processing
 - auto-downloads custom file loaders from the [LlamaIndex hub](https://llamahub.ai) 
-- indexes documents inside archive files and email attachments
-- uses language-aware chunking for source code
-- consolidates RAG responses from multiple models with a "moderator" LLM that writes the final output
-- supports pseudo-interactive "chat" from the command line, using any chat/query response mode
+- indexes documents inside of archive files and email attachments
+- uses syntax-aware chunking for source code
+- consolidates multiple RAG responses using a "moderator" LLM that writes the final output
+- supports pseudo-interactive chat from the command line, switchable chat/query response modes
 
 It's mostly the same boilerplate/glue code you were going to have to write anyway, so if this saves you an afternoon of sifting through machine-generated LlamaIndex tutorials and arguing with Copilot, please feel free to buy me a coffee.
+
+<br>
 
 # Setup
 The steps are the same as other Python programs.
@@ -24,7 +28,7 @@ Details will vary by OS, but on [Debian]()/[Ubuntu]() you would use `apt` to ins
 
 ```
 sudo apt update -y
-sudo apt-get install -y build-essential cmake git python3 pip python3-venv
+sudo apt-get install -y build-essential cmake git python3 python3-venv pip
 ```
 On Windows you could use [WSL](https://learn.microsoft.com/en-us/windows/wsl/), or something native like [Chocolatey](https://chocolatey.org/install):
 ```
@@ -54,11 +58,13 @@ If that fails, go to step 4.
 
 ### 5) Sanity check
 ```
-python ragtag.py --version
+python ragtag.py --help
 ```
-If that does not print some kind of Python error message, we're in a good place. 
+If that does not print some kind of Python error message, you're in a good place. 
 
-If it wants more packages, please add them to requirements.txt and submit a pull request!
+If Python wants more packages, please add them to requirements.txt and submit a pull request!
+
+<br>
 
 # Usage
 
@@ -81,9 +87,67 @@ python ragtag.py --index-load my/index --query "Really though, why?"
 
 This is **still** slow, because the index can take a long time to load. It's just not as slow as re-indexing everything. Use `--verbose` to see actual timings.
 
-To minimize overhead, try to either submit all your queries in one run, or leave a window open with the program idling in "chat mode" for ad-hoc use. Be aware that there are multiple chat modes, and the default does not respond the same way as a query. Use the `/mode` command in chat to switch response types. 
+To minimize overhead, try to either submit all your queries in one run, or leave a window open with the program idling in "chat mode" for ad-hoc use. Be aware that there are multiple chat modes, and the default one does not respond the same way as a query. Use the `/mode` command in chat to switch response types. 
 
-For query-style responses in chat mode, type `/mode tree_summarize` at the chat prompt.
+For query-style RAG responses in chat mode, type `/mode tree_summarize` at the chat prompt.
+
+<br>
+
+# Options
+You can see a full list of options with `--help`
+```
+python ragtag.py --help
+```
+
+| Option                  | Value      | Description                                                       |
+|-------------------------|------------|-------------------------------------------------------------------|
+| **`--quiet`**           |            | Suppress all output except errors                                 |
+| **`--verbose`**         |            | Enable extended/debug output                                      |
+| **`--version`**         |            | Print the version number and exit                                 |
+| **Vector database**     |            |                                                                   |
+| **`--index-load`**      | *DIR*      | Load the vector index from a given path                           |
+| **`--index-store`**     | *DIR*      | Save the updated vector index to a given path                     |
+| **Document indexing**   |            |                                                                   |
+| **`--source`**          | *DIR*      | Folder of files to be indexed recursively                         |
+| **`--source-spec`**     | *SPEC*     | Index files matching a pathspec, like `**/*.cpp`                  |
+| **`--source-list`**     | *FILE*     | Text file with a list of filenames/pathspecs to index             |
+| **`--custom-loader`**   | *SPEC*     | Download from hub, spec format like `JPEGReader:jpg,jpeg`         |
+| **`--index-unknown`**   |            | Index files with unrecognized extensions as text                  |
+| **`--ignore-archives`** |            | Do not index files inside zip/tar/etc archives                    |
+| **`--ignore-types`**    | *EXT*      | Do not index these file extensions, even if supported             |
+| **`--size-limit`**      | *SIZE*     | Ignore huge text files unlikely to contain interesting content    |
+| **`--no-cache`**        |            | Do not use the local cache for loaders                            |
+| **Language model**      |            |                                                                   |
+| **`--llm-provider`**    | *NAME*     | Inference provider/interface                                      |
+| **`--llm-model`**       | *NAME*     | Model name/path/etc for provider                                  |
+| **`--llm-server`**      | *URL*      | Inference server URL (if needed)                                  |
+| **`--llm-api-key`**     | *KEY*      | API key for inference server (if needed)                          |
+| **`--llm-param`**       | *NAME=VAL* | Inference parameter, like `temperature=0.9` etc                   |
+| **`--llm-config`**      | *CONFIG*   | Condensed LLM config: provider,model,server,api-key,params...     |
+| **`--llm-config-mod`**  | *CONFIG*   | Moderator LLM to consolidate the responses of multiple providers  |
+| **`--llm-mod-mode`**    | *MODE*     | Moderator query response mode                                     |
+| **`--llm-verbose`**     |            | Enable extended/debug output from the LLM                         |
+| **`--torch-device`**    | *DEVICE*   | Device override, like `cpu` or `cuda:1` (for second GPU)          |
+| **`--context`**         | *TEXT*     | Command line context/system prompt                                |
+| **`--context-file`**    | *FILE*     | File containing a snippet of context                              |
+| **Query processing**    |            |                                                                   |
+| **`--query`**           | *TEXT*     | Command line query                                                |
+| **`--query-list`**      | *FILE*     | File containing short queries, one per line                       |
+| **`--query-file`**      | *FILE*     | File containing one long query                                    |
+| **`--query-log`**       | *FILE*     | Log queries and responses to a text file                          |
+| **`--query-log-json`**  | *FILE*     | Log queries and responses (plus some metadata) to a JSON file     |
+| **`--query-mode`**      | *MODE*     | Query response mode                                               |
+| **`--tag-queries`**     | *NAME*     | The name/header in the transcript for user queries                |
+| **`--tag-responses`**   | *NAME*     | The name/header in the transcript for engine responses            |
+| **Interactive chat**    |            |                                                                   |
+| **`--chat`**            |            | Enter chat after any query processing                             |
+| **`--chat-init`**       | *TEXT*     | Extra instructions/personality for the chat LLM                   |
+| **`--chat-init-file`**  | *FILE*     | File containing a snippet of chat LLM instructions                |
+| **`--chat-log`**        | *FILE*     | Append chat queries and responses to a text file                  |
+| **`--chat-mode`**       | *MODE*     | Chat response mode                                                |
+
+
+<br>
 
 # Local inference
 
@@ -111,6 +175,8 @@ Or, to use the built-in `llama.cpp` [library](https://pypi.org/project/llama-cpp
 ```
 --llm-provider llamacpp  --llm-model codellama-34b.Q4_K_M.gguf
 ```
+
+<br>
 
 # Commercial inference
 
@@ -141,16 +207,18 @@ If that's not a problem:
 ```
 ### [Replicate](https://replicate.com)
  - set `REPLICATE_API_TOKEN` in your environment (override with `--llm-api-key`)
- - change [models](https://replicate.com/explore) using `--llm-model` (the default is `mistralai/mixtral-8x7b-instruct-v0.1`)
+ - change [models](https://replicate.com/collections/language-models) using `--llm-model` (the default is `mistralai/mixtral-8x7b-instruct-v0.1`)
  ```
 --llm-provider replicate  --llm-model mistralai/mistral-7b-instruct-v0.2
 ```
 
 
-If your inference provider is not here, there's a good chance they run an OpenAI API-compatible server somewhere anyway. Give this a try:
+If your inference provider is not here, there's a good chance they run an OpenAI API-compatible server somewhere anyway. Try this:
 ```
 --llm-provider openai  --llm-server URL  --llm-model NAME
 ```
+
+<br>
 
 # RAG gauntlet
 
@@ -168,15 +236,15 @@ Most of the time, all you need is the first couple of fields, and you can skip u
 ```
 <img align="right" width="250px" style="padding:10px" src="docs/yodawg.jpg">
 
-The benefit of this format is that now you can submit a *list* of inference providers with multiple `--llm-config` arguments, and **RAG/TAG Tiger** will run your queries through *all* of them, allowing you to compare the responses.
+The point of this format is that now you can submit a *list* of inference providers with multiple `--llm-config` arguments, and **RAG/TAG Tiger** will run your queries through *all* of them, allowing you to compare the responses.
 
 But nobody has time for that, so to complete the circle you can configure a **moderator** LLM using `--llm-config-mod`. The moderator will look at all the other responses, perform a short quality analysis, then consolidate everything into one final answer. 
 
-_It does this as a RAG query_. I don't know if that's a good idea or not yet. The moderator may need a bigger context window. Use `--llm-mod-mode generation` to disable this meta-RAG and produce the final draft using a simple LLM query.
+It does this as a RAG query. I don't know if that's a good idea or not yet. The moderator may need a bigger context window, etc. Use `--llm-mod-mode generation` to disable this meta-RAG stuff and produce the final draft using a simple LLM query.
 
 ### LLM config examples
 
-| | Model | Params | Context| --llm-config |
+| Provider | Model | Params | Context| --llm-config |
 | --- | --- | --- | --- | --- |
 | **[OpenAI](https://platform.openai.com/docs/models)** | GPT 3.5 | | 4k | `openai,gpt-3.5-turbo-instruct` |
 | | | | 16k | `openai,gpt-3.5-turbo-16k` |
@@ -187,79 +255,20 @@ _It does this as a RAG query_. I don't know if that's a good idea or not yet. Th
 | | Gemini | | 30k | `google,models/gemini-pro` |
 |  **[Perplexity](https://perplexity.ai/discover)** | CodeLlama | 33B | 16k | `perplexity,codellama-34b-instruct` |
 | | Llama 2 | 70B | 4k | `perplexity,llama-2-70b-chat` |
-| **[Replicate](https://replicate.com/explore)** | Mixtral | 8x 7B | 32k | `replicate,mistralai/mixtral-8x7b-instruct-v0.1` |
+| **[Replicate](https://replicate.com/collections/language-models)** | Mixtral | 8x 7B | 32k | `replicate,mistralai/mixtral-8x7b-instruct-v0.1` |
 | | Nous Hermes 2 | 34B | 4k | `replicate,kcaverly/nous-hermes-2-yi-34b-gguf` |
-| **[HuggingFace](https://huggingface.co/spaces/HuggingFaceH4/open_llm_leaderboard)** | Goliath | 120B | 4k | `huggingface,thebloke/goliath-120b-awq` |
-| | BLOOM | 176B | 2k | `huggingface,thebloke/bloomchat-176b-v1-gptq` |
-| | Falcon | 180B | 2k | `huggingface,thebloke/falcon-180B-chat-awq` |
-| **[webui](https://github.com/oobabooga/text-generation-webui)** | _(server)_ | | | `openai,,http://YOUR_SERVER:5000/v1` |
-| | _(local)_ | | | `openai,,http://127.0.0.1:5000/v1` |
+| **[OpenAI API](https://platform.openai.com/docs/models)** | _(server)_| | |  `openai,,http://COMPATIBLE_API_SERVER` <br>Any OpenAI API-compatible service works like this |
+| **On-premesis**| | | | |
 | **[llama.cpp](https://github.com/ggerganov/llama.cpp)** | _(server)_ | | | `openai,,http://YOUR_SERVER:8081` |
 | | _(local)_ | | | `openai,,http://127.0.0.1:8081` |
 | | _(local file)_ | | | `llamacpp,YOUR_MODEL.gguf` |
+| **[webui](https://github.com/oobabooga/text-generation-webui)** | _(server)_ | | | `openai,,http://YOUR_SERVER:5000/v1` |
+| | _(local)_ | | | `openai,,http://127.0.0.1:5000/v1` |
+| **[HuggingFace](https://huggingface.co/spaces/HuggingFaceH4/open_llm_leaderboard)** | Goliath | 120B | 4k | `huggingface,thebloke/goliath-120b-awq` |
+| | BLOOM | 176B | 2k | `huggingface,thebloke/bloomchat-176b-v1-gptq` |
+| | Falcon | 180B | 2k | `huggingface,thebloke/falcon-180B-chat-awq` |
 
-
-# Options
-
-A list of options is available on the help page:
-```
-python ragtag.py --help
-```
-
-It looks like this:
-```
-Options:
-  -h, --help             Show this help message and exit
-  --quiet                Suppress all output except errors
-  --verbose              Enable extended/debug output
-  --version              Print the version number and exit
- 
-Vector database: 
-  --index-load PATH      Load the vector index from a given path
-  --index-store PATH     Save the updated vector index to a given path
- 
-Document indexing: 
-  --source FOLDER        Folder of files to be indexed recursively
-  --source-spec SPEC     Index files matching a pathspec, like "**/*.cpp"
-  --source-list FILE     Text file with a list of filenames/pathspecs to index
-  --custom-loader SPEC   Download from hub, i.e. "JPEGReader:jpg,jpeg"
-  --no-cache             Do not use the local cache for loaders
-  --ignore-unknown       Ignore files with unrecognized extensions
-  --index-archives       Index files inside .zip and other archives
- 
-Language model: 
-  --llm-provider NAME    { openai, anthropic, llamacpp, huggingface }
-  --llm-model NAME       Model name/path/etc for provider
-  --llm-server URL       Inference server URL (if needed)
-  --llm-api-key KEY      API key for inference server (if needed)
-  --llm-secret SECRET    Secret for inference server (if needed)
-  --llm-param KVP [KVP ...] Inference parameter, "temperature=0.9" etc
-  --llm-verbose          Enable extended/debug output from the LLM
-
-Settings:
-  --context TEXT         Command line context/system prompt
-  --context-file FILE    File containing a snippet of system prompt
-  --tag-queries NAME     The name/header in the transcript for user queries
-  --tag-responses NAME   The name/header in the transcript for engine responses
-  --torch-device DEVICE  Device override, like "cpu" or "cuda:1"
-
-Query processing:
-  --query TEXT           Command line query
-  --query-list FILE      File containing short queries, one per line
-  --query-file FILE      File containing one long query
-  --query-log FILE       Log queries and responses to a text file
-  --query-log-json FILE  Log queries and responses (plus some metadata) to JSON
-  --query-mode           Query response mode, default: tree_summarize
-                         { accumulate, compact, compact_accumulate, generation,
-                           no_text, refine, simple_summarize, tree_summarize }
-Interactive chat:
-  --chat                 Enter chat after any query processing
-  --chat-init TEXT       Extra instructions/personality for the chat LLM
-  --chat-init-file FILE  File containing a snippet of chat LLM instructions
-  --chat-log FILE        Append chat queries and responses to a text file
-  --chat-mode            Chat response mode, default: best
-                         { best, context, condense_question, simple, react, openai }
-```
+<br>
 
 # Workflow
 
@@ -293,8 +302,6 @@ A more flexible way to manage complex configuration is to factor out groups of a
     openai
 --llm-server      
     http://localhost:8081             
---llm-param       
-    temperature=0.9
 ```
 
 To use the response file, pull it in with `@` on the command line (the file extension doesn't matter). This has the same effect as typing all the arguments by hand:
@@ -303,6 +310,9 @@ python ragtag.py @debug_server.args  ...
 ```
 
 For casual/occasional use this may be overthinking things.
+
+<br>
+
 
 # FAQ
 
