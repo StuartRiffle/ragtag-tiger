@@ -91,61 +91,6 @@ To minimize overhead, try to either submit all your queries in one run, or leave
 
 For query-style RAG responses in chat mode, type `/mode tree_summarize` at the chat prompt.
 
-<br>
-
-# Options
-You can see a full list of options with `--help`
-```
-python ragtag.py --help
-```
-
-| Option                  | Value      | Description                                                       |
-|-------------------------|------------|-------------------------------------------------------------------|
-| **`--quiet`**           |            | Suppress all output except errors                                 |
-| **`--verbose`**         |            | Enable extended/debug output                                      |
-| **`--version`**         |            | Print the version number and exit                                 |
-| **Vector database**     |            |                                                                   |
-| **`--index-load`**      | *DIR*      | Load the vector index from a given path                           |
-| **`--index-store`**     | *DIR*      | Save the updated vector index to a given path                     |
-| **Document indexing**   |            |                                                                   |
-| **`--source`**          | *DIR*      | Folder of files to be indexed recursively                         |
-| **`--source-spec`**     | *SPEC*     | Index files matching a pathspec, like `**/*.cpp`                  |
-| **`--source-list`**     | *FILE*     | Text file with a list of filenames/pathspecs to index             |
-| **`--custom-loader`**   | *SPEC*     | Download from hub, spec format like `JPEGReader:jpg,jpeg`         |
-| **`--index-unknown`**   |            | Index files with unrecognized extensions as text                  |
-| **`--ignore-archives`** |            | Do not index files inside zip/tar/etc archives                    |
-| **`--ignore-types`**    | *EXT*      | Do not index these file extensions, even if supported             |
-| **`--size-limit`**      | *SIZE*     | Ignore huge text files unlikely to contain interesting content    |
-| **`--no-cache`**        |            | Do not use the local cache for loaders                            |
-| **Language model**      |            |                                                                   |
-| **`--llm-provider`**    | *NAME*     | Inference provider/interface                                      |
-| **`--llm-model`**       | *NAME*     | Model name/path/etc for provider                                  |
-| **`--llm-server`**      | *URL*      | Inference server URL (if needed)                                  |
-| **`--llm-api-key`**     | *KEY*      | API key for inference server (if needed)                          |
-| **`--llm-param`**       | *NAME=VAL* | Inference parameter, like `temperature=0.9` etc                   |
-| **`--llm-config`**      | *CONFIG*   | Condensed LLM config: provider,model,server,api-key,params...     |
-| **`--llm-config-mod`**  | *CONFIG*   | Moderator LLM to consolidate the responses of multiple providers  |
-| **`--llm-mod-mode`**    | *MODE*     | Moderator query response mode                                     |
-| **`--llm-verbose`**     |            | Enable extended/debug output from the LLM                         |
-| **`--torch-device`**    | *DEVICE*   | Device override, like `cpu` or `cuda:1` (for second GPU)          |
-| **`--context`**         | *TEXT*     | Command line context/system prompt                                |
-| **`--context-file`**    | *FILE*     | File containing a snippet of context                              |
-| **Query processing**    |            |                                                                   |
-| **`--query`**           | *TEXT*     | Command line query                                                |
-| **`--query-list`**      | *FILE*     | File containing short queries, one per line                       |
-| **`--query-file`**      | *FILE*     | File containing one long query                                    |
-| **`--query-log`**       | *FILE*     | Log queries and responses to a text file                          |
-| **`--query-log-json`**  | *FILE*     | Log queries and responses (plus some metadata) to a JSON file     |
-| **`--query-mode`**      | *MODE*     | Query response mode                                               |
-| **`--tag-queries`**     | *NAME*     | The name/header in the transcript for user queries                |
-| **`--tag-responses`**   | *NAME*     | The name/header in the transcript for engine responses            |
-| **Interactive chat**    |            |                                                                   |
-| **`--chat`**            |            | Enter chat after any query processing                             |
-| **`--chat-init`**       | *TEXT*     | Extra instructions/personality for the chat LLM                   |
-| **`--chat-init-file`**  | *FILE*     | File containing a snippet of chat LLM instructions                |
-| **`--chat-log`**        | *FILE*     | Append chat queries and responses to a text file                  |
-| **`--chat-mode`**       | *MODE*     | Chat response mode                                                |
-
 
 <br>
 
@@ -310,6 +255,61 @@ python ragtag.py @debug_server.args  ...
 ```
 
 For casual/occasional use this may be overthinking things.
+
+<br>
+
+# Options
+You can see a full list of options with `--help`
+```
+python ragtag.py --help
+```
+
+| Option                  | Value      | Description                                                       |
+|-------------------------|------------|-------------------------------------------------------------------|
+| **`--quiet`**           |            | Suppress all output except errors                                 |
+| **`--verbose`**         |            | Enable extended/debug output                                      |
+| **`--version`**         |            | Print the version number and exit                                 |
+| **Vector database**     |            |                                                                   |
+| **`--index-load`**      | *DIR*      | Load the vector index from a given path                           |
+| **`--index-store`**     | *DIR*      | Save the updated vector index to a given path                     |
+| **Document indexing**   |            |                                                                   |
+| **`--source`**          | *DIR*      | Folder of files to be indexed recursively                         |
+| **`--source-spec`**     | *SPEC*     | Index files matching a pathspec, like `**/*.cpp`                  |
+| **`--source-list`**     | *FILE*     | Text file with a list of filenames/pathspecs to index             |
+| **`--custom-loader`**   | *SPEC*     | Download from hub, spec format like `JPEGReader:jpg,jpeg`         |
+| **`--index-unknown`**   |            | Index files with unrecognized extensions as text                  |
+| **`--ignore-archives`** |            | Do not index files inside zip/tar/etc archives                    |
+| **`--ignore-types`**    | *EXT*      | Do not index these file extensions, even if supported             |
+| **`--size-limit`**      | *SIZE*     | Ignore huge text files unlikely to contain interesting content    |
+| **`--no-cache`**        |            | Do not use the local cache for loaders                            |
+| **Language model**      |            |                                                                   |
+| **`--llm-provider`**    | *NAME*     | Inference provider/interface                                      |
+| **`--llm-model`**       | *NAME*     | Model name/path/etc for provider                                  |
+| **`--llm-server`**      | *URL*      | Inference server URL (if needed)                                  |
+| **`--llm-api-key`**     | *KEY*      | API key for inference server (if needed)                          |
+| **`--llm-param`**       | *NAME=VAL* | Inference parameter, like `temperature=0.9` etc                   |
+| **`--llm-config`**      | *CONFIG*   | Condensed LLM config: provider,model,server,api-key,params...     |
+| **`--llm-config-mod`**  | *CONFIG*   | Moderator LLM to consolidate the responses of multiple providers  |
+| **`--llm-mod-mode`**    | *MODE*     | Moderator query response mode                                     |
+| **`--llm-verbose`**     |            | Enable extended/debug output from the LLM                         |
+| **`--torch-device`**    | *DEVICE*   | Device override, like `cpu` or `cuda:1` (for second GPU)          |
+| **`--context`**         | *TEXT*     | Command line context/system prompt                                |
+| **`--context-file`**    | *FILE*     | File containing a snippet of context                              |
+| **Query processing**    |            |                                                                   |
+| **`--query`**           | *TEXT*     | Command line query                                                |
+| **`--query-list`**      | *FILE*     | File containing short queries, one per line                       |
+| **`--query-file`**      | *FILE*     | File containing one long query                                    |
+| **`--query-log`**       | *FILE*     | Log queries and responses to a text file                          |
+| **`--query-log-json`**  | *FILE*     | Log queries and responses (plus some metadata) to a JSON file     |
+| **`--query-mode`**      | *MODE*     | Query response mode                                               |
+| **`--tag-queries`**     | *NAME*     | The name/header in the transcript for user queries                |
+| **`--tag-responses`**   | *NAME*     | The name/header in the transcript for engine responses            |
+| **Interactive chat**    |            |                                                                   |
+| **`--chat`**            |            | Enter chat after any query processing                             |
+| **`--chat-init`**       | *TEXT*     | Extra instructions/personality for the chat LLM                   |
+| **`--chat-init-file`**  | *FILE*     | File containing a snippet of chat LLM instructions                |
+| **`--chat-log`**        | *FILE*     | Append chat queries and responses to a text file                  |
+| **`--chat-mode`**       | *MODE*     | Chat response mode                                                |
 
 <br>
 
