@@ -309,9 +309,9 @@ For casual/occasional use this may be overthinking things, but response files ar
 
 ### Forward slashes in Windows paths
 
-I did not know this for the *longest time*: forward slashes work in Windows path names. For example, `d:/dev/foo` is a valid path literally anywhere (except for on the command line, which would be the most useful place, because `cmd.exe` requires quotes it uses slashes for option flags). 
+I did not know this for the longest time: forward slashes work in Windows path names. For example, `d:/dev/foo` is a valid path literally anywhere (except for on the command line, which would be the most useful place, because `cmd.exe` interprets slashes as option flags). 
 
-But the kernel honors slashes internally, so prefer forward slashes in configuration files, because that makes them portable.
+But that's just the command prompt. The kernel honors slashes internally, so prefer forward slashes in configuration files for the sake of portability.
 
 # Options
 You can also see a list of options with `--help`
@@ -372,7 +372,7 @@ ragtag --help
 # FAQ
 
 **Q:**&nbsp; What does the name mean? <br>
-**A:**&nbsp; The acronym "RAG" means Retrieval Augmented Generation. Instead of fine tuning a language model on your documents, you give it tools to search them for details.
+**A:**&nbsp; The acronym "RAG" means Retrieval Augmented Generation. Instead of fine tuning a language model on your documents, you give it tools to search them.
 
 **Q:**&nbsp; What about "TAG"? <br>
 **A:**&nbsp; That's a blanket term for tiger-augmented methods.
