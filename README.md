@@ -291,7 +291,7 @@ A more flexible way to manage complex config is to factor out groups of argument
 # debug_server.args - example response file
 # These comments are on their own lines, so they're GOOD
 
---llm-provider   ...but this trailing comment is INVALID
+--llm-provider  #...but this trailing comment is INVALID
 llamacpp         
 
 # Indentation is ignored...
@@ -372,7 +372,7 @@ ragtag --help
 # FAQ
 
 **Q:**&nbsp; What does the name mean? <br>
-**A:**&nbsp; The acronym "RAG" means Retrieval Augmented Generation. Instead of fine tuning a language model on your documents, you give it tools to search them for any details needed.
+**A:**&nbsp; The acronym "RAG" means Retrieval Augmented Generation. Instead of fine tuning a language model on your documents, you give it tools to search them for details.
 
 **Q:**&nbsp; What about "TAG"? <br>
 **A:**&nbsp; That's a blanket term for tiger-augmented methods.
