@@ -83,14 +83,13 @@ Then use that index to perform your queries:
 python ragtag.py --index-load my/index --query "Really though, why?"
 ```
 
-<img align="left" width="250px" style="padding:10px" src="docs/noidealol.jpg">
+<img align="right" width="250px" style="padding:15px" src="docs/noidealol.jpg">
 
-This is **still** slow, because the index can take a long time to load. It's just not as slow as re-indexing everything. Use `--verbose` to see actual timings.
+This is **still** slow, because the index can take a long time to load. It's just not as slow as re-indexing everything. Use `--verbose` to see the actual timings.
 
-To minimize overhead, try to either submit all your queries in one run, or leave a window open with the program idling in "chat mode" for ad-hoc use. Be aware that there are multiple chat modes, and the default one does not respond the same way as a query. Use the `/mode` command in chat to switch response types. 
+To minimize overhead, try to either submit all your queries in one run, or leave a window open with the program idling in chat mode for ad-hoc use. 
 
-For query-style RAG responses in chat mode, type `/mode tree_summarize` at the chat prompt.
-
+Be aware that there are multiple chat "modes", and the default one does not respond the same way as a batched query. Use the `/mode` command in chat to switch response types. For query-style responses in chat mode, type `/mode tree_summarize` at the prompt.
 
 <br>
 
@@ -116,7 +115,7 @@ If you run your own `llama.cpp` server, also run `examples/server/api_like_OAI.p
 --llm-provider openai  --llm-server http://YOUR_SERVER:8081
 ```
 
-Or, to use the built-in `llama.cpp` [library](https://pypi.org/project/llama-cpp-python/) locally (without manually starting a server), set the provider to "llamacpp" and supply a pre-downloaded model:
+Or, to use the built-in `llama.cpp` [library](https://pypi.org/project/llama-cpp-python/) locally (without manually starting a server), set the provider to "llamacpp" and feed it a pre-downloaded model:
 ```
 --llm-provider llamacpp  --llm-model codellama-34b.Q4_K_M.gguf
 ```
@@ -185,7 +184,7 @@ The point of this format is that now you can submit a *list* of inference provid
 
 But nobody has time for that, so to complete the circle you can configure a **moderator** LLM using `--llm-config-mod`. The moderator will look at all the other responses, perform a short quality analysis, then consolidate everything into one final answer. 
 
-It does this as a RAG query. I don't know if that's a good idea or not yet. The moderator may need a bigger context window, etc. Use `--llm-mod-mode generation` to disable this meta-RAG stuff and produce the final draft using a simple LLM query.
+It does this as another RAG query. I don't know if that's a good idea or not yet. The moderator may need a bigger context window, etc. Use `--llm-mod-mode generation` to disable this meta-RAG stuff and produce the final draft using a simple LLM query.
 
 ### LLM config examples
 
@@ -202,13 +201,13 @@ It does this as a RAG query. I don't know if that's a good idea or not yet. The 
 | | Llama 2 | 70B | 4k | `perplexity,llama-2-70b-chat` |
 | **[Replicate](https://replicate.com/collections/language-models)** | Mixtral | 8x 7B | 32k | `replicate,mistralai/mixtral-8x7b-instruct-v0.1` |
 | | Nous Hermes 2 | 34B | 4k | `replicate,kcaverly/nous-hermes-2-yi-34b-gguf` |
-| **[OpenAI API](https://platform.openai.com/docs/models)** | _(server)_| | |  `openai,,http://COMPATIBLE_API_SERVER` <br>Any OpenAI API-compatible service works like this |
-| **On-premesis**| | | | |
-| **[llama.cpp](https://github.com/ggerganov/llama.cpp)** | _(server)_ | | | `openai,,http://YOUR_SERVER:8081` |
-| | _(local)_ | | | `openai,,http://127.0.0.1:8081` |
-| | _(local file)_ | | | `llamacpp,YOUR_MODEL.gguf` |
-| **[webui](https://github.com/oobabooga/text-generation-webui)** | _(server)_ | | | `openai,,http://YOUR_SERVER:5000/v1` |
-| | _(local)_ | | | `openai,,http://127.0.0.1:5000/v1` |
+| **[OpenAI API](https://platform.openai.com/docs/models)** | _(external server)_| | |  `openai,,http://COMPATIBLE_API_SERVER` <br>Any OpenAI API-compatible service will work|
+| **Local**| | | | |
+| **[llama.cpp](https://github.com/ggerganov/llama.cpp)** | _(internal server)_ | | | `openai,,http://YOUR_SERVER:8081` |
+| | _(your PC)_ | | | `openai,,http://127.0.0.1:8081` |
+| | _(model file)_ | | | `llamacpp,YOUR_MODEL.gguf` |
+| **[webui](https://github.com/oobabooga/text-generation-webui)** | _(internal server)_ | | | `openai,,http://YOUR_SERVER:5000/v1` |
+| | _(your PC)_ | | | `openai,,http://127.0.0.1:5000/v1` |
 | **[HuggingFace](https://huggingface.co/spaces/HuggingFaceH4/open_llm_leaderboard)** | Goliath | 120B | 4k | `huggingface,thebloke/goliath-120b-awq` |
 | | BLOOM | 176B | 2k | `huggingface,thebloke/bloomchat-176b-v1-gptq` |
 | | Falcon | 180B | 2k | `huggingface,thebloke/falcon-180B-chat-awq` |
@@ -234,22 +233,23 @@ python ragtag.py                                        \
 
 You can also set standard arguments in an environment variable called `RAGTAG_FLAGS`. They will be added to the end of every command.
 
-A more flexible way to manage complex configuration is to factor out groups of arguments into response files, where...
+A more flexible way to manage complex configuration is to factor out groups of arguments into response files, which have a couple of extra rules:
 - **every argument must be on its own line**
-- blank lines, indentation, and trailing whitespace are ignored
-- internal whitespace is part of an argument, no quotes needed
+- whitespace that's not part of an argument is ignored
 - lines starting with # are considered comments and ignored
-- comments on the same line as arguments are NOT supported
 ```
 # debug_server.args - example response file
 
---llm-provider
-    openai
---llm-server      
-    http://localhost:8081             
+--llm-provider   
+    # This comment on on its own line is FINE
+    llamacpp   # This one beside an argument is INVALID
+
+# Indentation of arguments (or lack thereof) is ignored...
+  --llm-model
+D:\models\...but spaces inside arguments are honored without quotes.gguf
 ```
 
-To use the response file, pull it in with `@` on the command line (the file extension doesn't matter). This has the same effect as typing all the arguments by hand:
+To use the response file, pull it in with `@` on the command line (the file extension doesn't matter). This is equivalent to typing the same arguments by hand:
 ```
 python ragtag.py @debug_server.args  ...
 ```
