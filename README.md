@@ -43,9 +43,9 @@ cd ragtag
 python3 -m venv .venv
 . .venv/bin/activate
 ```
-On Windows, activate the environment with `.venv\Scripts\activate.bat`
+>**Windows Trap:** &nbsp; the command to activate the environment is actually `.venv\Scripts\activate.bat` instead of the one above. but typing `.venv\Scripts\activate`, without the `.bat` _does not work_. 
 
-You could also use [conda](https://conda.io) to manage the Python environment. Just use something.
+[Conda](https://conda.io) is also a good way to manage your Python environment. Just use something. 
 
 ### 4) Install dependencies
 ```
@@ -58,7 +58,7 @@ If that fails, go to step 4.
 ```
 python ragtag.py --help
 ```
-If that does not print some kind of Python error message, you're in a good place. 
+This is the part where it falls over because your CUDA drivers are too old or something like that. Or the virtual environment chokes on a half-downloaded package, and you spend an hour typing `pip uninstall` and `pip install` in alternation.
 
 If Python wants more packages, please add them to requirements.txt and submit a pull request!
 
@@ -87,11 +87,16 @@ To minimize overhead, try to either submit all your queries in one run, or leave
 
 Be aware that there are multiple chat "modes", and the default mode does not generate the same output as a batched query. For query-style responses, type `/mode tree_summarize` at the chat prompt. 
 
+### Launching
+>**Pro-tip:** &nbsp;Put the repo in your path, so you can run **RAG/TAG Tiger** from any directory. You will also find a `ragtag.bat` and `ragtag.sh` in the root of the repo, which let you launch the program without typing `python ragtag.py` every time. 
+
+The rest of these examples invoke `ragtag` instead of `python ragtag.py` because it's easier to read. 
+
 # Query and chat modes
 
 The LlamaIndex query engine and chat engine both have multiple modes that enable different RAG techniques. They can be changed using `--query-mode`, `--chat-mode`, and `--llm-mod-mode`. You can also select using the `/mode` command at the chat prompt.
 
-The query modes are available in chat mode too as a convenience. They are processed by the query engine, not the chat engine, so they have no memory.
+The query modes are available in chat mode too as a convenience. They are processed by the query engine, not the chat engine, so they have no conversational memory.
 
 | Query mode| Abbrev | |
 | --- | --- | --- |
@@ -114,9 +119,8 @@ The query modes are available in chat mode too as a convenience. They are proces
 
 # Prompts
 
-The system prompt and chat instructions can be assembled from mix-and-match snippets from text files. There is a small set in the repo under `data/`.
+The system prompt and chat instructions can be assembled from mix-and-match snippets from text files. There is a small set of them in the repo under `data/`.
 ```
---context-file +/jailbreak/system-ident.txt
 --context-file +/jailbreak/dan-12.txt
 --context-file +/rule/never-break-character.txt
 --context-file +/rule/no-apologies.txt
@@ -127,13 +131,14 @@ The system prompt and chat instructions can be assembled from mix-and-match snip
 --context-file +/rule/important-for-my-job.txt
 --context-file +/character/tiger.txt
 --context-file +/character/rag-agent.txt
---context      "Generate all output in Pig Latin"
---context      "...and make it rhyme"
+--context      "Write the final draft of your summary in French..."
+--context      "...but make it rhyme in English..."
+--context      "...Pig Latin"
 ...(etc)...
 ```
 The files are just concatenated to produce the prompt.
 
-Notice the magic `+/` prefix on the paths. The same way `~/` is an alias for the home directory on Linux, it works as a shortcut to the `data/` folder. That's so you can invoke `ragtag.py` from anywhere, but still access the stock text files.
+Notice the magic `+/` prefix on the paths. The same way `~/` is an alias for the home directory on unices, it works as a shortcut to the `data/` folder. That's so you can access the stock text files from wherever you run the program.
 
 # Local inference
 
@@ -196,11 +201,13 @@ If that's not a problem:
 --llm-provider replicate  --llm-model mistralai/mistral-7b-instruct-v0.2
 ```
 
+> **Windows trap:** &nbsp; You have to run `refreshenv` in an command prompt window after changing an environment variable to get the new value. This is easy to forget, and can make for some confusing error messages.
 
 If your inference provider is not here, there's a good chance they run an OpenAI API-compatible server somewhere anyway. Try this:
 ```
 --llm-provider openai  --llm-server URL  --llm-model NAME
 ```
+
 
 # RAG gauntlet
 
@@ -250,6 +257,8 @@ It does this as another RAG query. I don't know if that's a good idea or not yet
 | | BLOOM | 176B | 2k | `huggingface,thebloke/bloomchat-176b-v1-gptq` |
 | | Falcon | 180B | 2k | `huggingface,thebloke/falcon-180B-chat-awq` |
 
+<br>
+
 # Workflow tips
 
 ### Put your command in a shell script
@@ -257,7 +266,7 @@ Commands can get long, but they are easier to edit if you put them in a shell sc
 
 For example, a script to consult with a dangerously unqualified virtual doctor, using a local LLM and a temporary document index for privacy:
 ```
-python ragtag.py                                        \
+ragtag \
     --source          my/personal/medical_data          \
     --llm-model       mistralai/Mistral-7B-v0.2         \
     --llm-param       temperature=1.8                   \
@@ -270,7 +279,7 @@ python ragtag.py                                        \
 
 ### RAGTAG_FLAGS
 
-You can also set your standard arguments in an environment variable called `RAGTAG_FLAGS`. They will be inserted at the beginning of your arguments. as if typed.
+You can also set standard arguments in an environment variable called `RAGTAG_FLAGS`. They will be inserted at the beginning of your argument list.
 
 ### Response files
 
@@ -292,22 +301,22 @@ llamacpp
 
 To use the response file, pull it in with `@` on the command line (the file extension doesn't matter).
 ```
-python ragtag.py @debug_server.args  ...
+ragtag @debug_server.args  ...
 ```
 
 ### Prompt assembly
-For casual/occasional use this may be overthinking things, but response files are _perfect_ for building up system prompts and chatbot instructions from snippets of text, because you may end up juggling a dozen little text files, or might want to share common prompts between multiple query jobs. 
+For casual/occasional use this may be overthinking things, but response files are perfect for building up system prompts and chatbot instructions from snippets of text, like the one in the "Prompt" section above. It's easier than juggling a dozen little text files, and you might want to share common prompts between different query jobs. 
 
 ### Forward slashes in Windows paths
 
-I did not know this for the *longest time*: forward slashes work in Windows path names. For example, `d:/dev/foo` is a valid path anywhere (well, except for on the command line, which would be the most useful place; it requires quotes there because cmd.exe uses slashes for option flags). But the kernel honors forward slashes in filenames like backslashes.
+I did not know this for the *longest time*: forward slashes work in Windows path names. For example, `d:/dev/foo` is a valid path literally anywhere (except for on the command line, which would be the most useful place, because `cmd.exe` requires quotes it uses slashes for option flags). 
 
-So: prefer forward slashes in your configuration files, because they are portable.
+But the kernel honors slashes internally, so prefer forward slashes in configuration files, because that makes them portable.
 
 # Options
 You can also see a list of options with `--help`
 ```
-python ragtag.py --help
+ragtag --help
 ```
 
 | Option                  | Value      | Description                                                       |
