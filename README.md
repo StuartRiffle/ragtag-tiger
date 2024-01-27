@@ -22,13 +22,13 @@ It's mostly the same boilerplate/glue code you were going to have to write anywa
 The steps are the same as other Python programs.
 
 ### 1) Install development tools
-Details will vary by OS, but on [Debian]()/[Ubuntu]() you would use `apt` to install these packages:
+Details will vary by OS, but on Debian/Ubuntu you would use `apt` to install these packages:
 
 ```
 sudo apt update -y
 sudo apt-get install -y build-essential cmake git python3 python3-venv pip
 ```
-On Windows you could use [WSL](https://learn.microsoft.com/en-us/windows/wsl/), or something native like [Chocolatey](https://chocolatey.org/install):
+On Windows you can use [WSL](https://learn.microsoft.com/en-us/windows/wsl/), or something native like [Chocolatey](https://chocolatey.org/install):
 ```
 choco install /y python git cuda
 ```
@@ -45,7 +45,7 @@ python3 -m venv .venv
 ```
 On Windows, activate the environment with `.venv\Scripts\activate.bat`
 
-You can also use [conda](https://conda.io) to manage the Python environment.
+You could also use [conda](https://conda.io) to manage the Python environment. Just use something.
 
 ### 4) Install dependencies
 ```
@@ -89,9 +89,9 @@ Be aware that there are multiple chat "modes", and the default mode does not gen
 
 # Query and chat modes
 
-The LlamaIndex query engine and chat engine both have multiple modes that enable different RAG techniques. They can be changed using `--query-mode`, `--chat-mode`, and `--llm-mod-mode`. or using the `/mode` command at the chat prompt. Most have a shorter alias.
+The LlamaIndex query engine and chat engine both have multiple modes that enable different RAG techniques. They can be changed using `--query-mode`, `--chat-mode`, and `--llm-mod-mode`. You can also select using the `/mode` command at the chat prompt.
 
-These query modes are available in chat mode too as a convenience, but they don't keep maintain history (which is normal for queries). The opposite is _not true_ here: queries cannot use chat modes.
+The query modes are available in chat mode too as a convenience. They are processed by the query engine, not the chat engine, so they have no memory.
 
 | Query mode| Abbrev | |
 | --- | --- | --- |
@@ -112,6 +112,28 @@ These query modes are available in chat mode too as a convenience, but they don'
 | `openai`                  |``| OpenAI agent loop |
 | `best`                    |`agent`| Auto-select between OpenAI and React (default)|
 
+# Prompts
+
+The system prompt and chat instructions can be assembled from mix-and-match snippets from text files. There is a small set in the repo under `data/`.
+```
+--context-file +/jailbreak/system-ident.txt
+--context-file +/jailbreak/dan-12.txt
+--context-file +/rule/never-break-character.txt
+--context-file +/rule/no-apologies.txt
+--context-file +/rule/no-tutorials.txt
+--context-file +/rule/direct-answer-first.txt
+--context-file +/rule/subjects-to-avoid.txt
+--context-file +/rule/trigger-word-shh.txt
+--context-file +/rule/important-for-my-job.txt
+--context-file +/character/tiger.txt
+--context-file +/character/rag-agent.txt
+--context      "Generate all output in Pig Latin"
+--context      "...and make it rhyme"
+...(etc)...
+```
+The files are just concatenated to produce the prompt.
+
+Notice the magic `+/` prefix on the paths. The same way `~/` is an alias for the home directory on Linux, it works as a shortcut to the `data/` folder. That's so you can invoke `ragtag.py` from anywhere, but still access the stock text files.
 
 # Local inference
 
@@ -230,6 +252,7 @@ It does this as another RAG query. I don't know if that's a good idea or not yet
 
 # Workflow tips
 
+### Put your command in a shell script
 Commands can get long, but they are easier to edit if you put them in a shell script (or batch file), and split the parameters over multiple lines by ending them with `\` (or with `^` on Windows).
 
 For example, a script to consult with a dangerously unqualified virtual doctor, using a local LLM and a temporary document index for privacy:
@@ -245,33 +268,41 @@ python ragtag.py                                        \
     --chat
 ```
 
-You can also set standard arguments in an environment variable called `RAGTAG_FLAGS`. They will be added to the end of every command.
+### RAGTAG_FLAGS
 
-A more flexible way to manage complex configuration is to factor out groups of arguments into response files, which have a couple of extra rules:
+You can also set your standard arguments in an environment variable called `RAGTAG_FLAGS`. They will be inserted at the beginning of your arguments. as if typed.
+
+### Response files
+
+A more flexible way to manage complex config is to factor out groups of arguments into response files. They are just lists of arguments, but have a couple of extra rules:
 - **every argument must be on its own line**
 - whitespace that's not part of an argument is ignored
 - lines starting with # are considered comments and ignored
 ```
 # debug_server.args - example response file
-# These comments are on their own lines, so they're FINE
+# These comments are on their own lines, so they're GOOD
 
---llm-provider   
-llamacpp        # This trailing comment is INVALID  <---
+--llm-provider   ...but this trailing comment is INVALID
+llamacpp         
 
 # Indentation is ignored...
 --llm-model
     D:\models\...but no quotes are needed.gguf
 ```
 
-To use the response file, pull it in with `@` on the command line (the file extension doesn't matter). This is equivalent to typing the same arguments by hand:
+To use the response file, pull it in with `@` on the command line (the file extension doesn't matter).
 ```
 python ragtag.py @debug_server.args  ...
 ```
 
-For casual/occasional use this may be overthinking things.
+### Prompt assembly
+For casual/occasional use this may be overthinking things, but response files are _perfect_ for building up system prompts and chatbot instructions from snippets of text, because you may end up juggling a dozen little text files, or might want to share common prompts between multiple query jobs. 
 
+### Forward slashes in Windows paths
 
-<br>
+I did not know this for the *longest time*: forward slashes work in Windows path names. For example, `d:/dev/foo` is a valid path anywhere (well, except for on the command line, which would be the most useful place; it requires quotes there because cmd.exe uses slashes for option flags). But the kernel honors forward slashes in filenames like backslashes.
+
+So: prefer forward slashes in your configuration files, because they are portable.
 
 # Options
 You can also see a list of options with `--help`
