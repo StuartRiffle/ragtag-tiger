@@ -1,0 +1,18 @@
+simple
+    - chat with LLM, without making use of a knowledge base
+react
+    - use a ReAct agent loop with query engine tools
+openai: 
+    - use an OpenAI function calling agent loop
+best
+    -select between react and openapi based on the current LLM
+condense_question:
+  - condense conversation and latest user message to a standalone question
+context:
+  - retrieve text from the index using the user's message
+  - use the context in the system prompt to generate a response
+condense_plus_context:
+  - condense a conversation and latest user message to a standalone question
+  - build a context for the standalone question from a retriever
+  - then pass the context along with prompt and user message to LLM to generate a response
+  

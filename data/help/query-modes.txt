@@ -1,0 +1,29 @@
+accumulate
+    - synthesize a response for each text chunk
+    - combine them into a single response
+compact
+    - consolidate text chunks into larger chunks
+    - refine answers across them (faster than refine)
+    - (this is faster than refine)
+compact_accumulate
+    - consolidate text chunks into larger chunks
+    - accumulate answers for each of them
+    - combine them into a single response
+    - (this is faster than accumulate)
+generation
+    - ignore context, just use LLM to generate responses
+    - accumulate all responses into a single response
+no_text
+    - return the retrieved context nodes, without synthesizing a final response
+refine 
+    - use the first node, along with the query, to generate an initial answer
+    - pass this answer, the query, and the second node into a "refine prompt"
+    - process the remaining nodes and continue to refine the answer
+simple_summarize
+    - merge all text chunks into one, and make a LLM call
+    - this will fail if the merged text chunk exceeds the context window size
+tree_summarize
+    - generate a summary prompt seeded with the query
+    - build a tree index over the set of candidate nodes in a bottom-up fashion
+    - return the root node as the response
+

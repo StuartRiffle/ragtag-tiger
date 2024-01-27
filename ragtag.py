@@ -94,8 +94,10 @@ arg("--chat-init-file", help="File containing a snippet of chat LLM instructions
 arg("--chat-log",       help="Append chat queries and responses to a text file", metavar="FILE")
 arg("--chat-mode",      help="Chat response mode", choices=llamaindex_chat_modes, default="best")
 
-#import shlex
-#os.sys.argv += shlex.split(os.environ.get("RAGTAG_FLAGS", ""))
+import os, shlex
+ragtag_flags = shlex.split(os.environ.get("RAGTAG_FLAGS", ""))
+for flag in ragtag_flags:
+    os.sys.argv.insert(1, flag)
 
 args = parser.parse_args()
 
@@ -112,7 +114,7 @@ print("Waking up tiger...")
 # Default values etc, update these as needed
 #------------------------------------------------------------------------------
 
-import os, json, pathspec, tempfile, shutil, torch, hashlib, py7zr, humanfriendly, weakref
+import json, pathspec, tempfile, shutil, torch, hashlib, py7zr, humanfriendly, weakref
 import email, email.policy, email.parser, email.message
 from llama_index.text_splitter import CodeSplitter
 
@@ -598,6 +600,22 @@ for file in args.query_list or []:
 # Construct the system prompt
 #------------------------------------------------------------------------------
 
+def resolve_data_path_prefix(path):
+    # If path starts with +/ replace that with the data folder
+    if path.replace(os.path.dirsep, "/").startswith("+/"):
+        path = os.path.join(os.path.join(os.path.dirname(__file__), "data"), path[1:])
+    return path
+
+def load_stock_text(path):
+    # Load a file from the stock data folder
+    fixedpath = resolve_data_path_prefix(os.path.join('+', path))
+    data = None
+    try:
+        with open(fixedpath, "r", encoding="utf-8") as f:
+            data = f.read()
+    except Exception as e: 
+        log_error(f"failed loading \"{fixedpath}\": {e}", exit_code=1)
+
 system_prompt_lines = []
 
 if args.context:
@@ -934,62 +952,6 @@ for llm_config in llm_config_list:
 #------------------------------------------------------------------------------
 
 template_consolidate = """
-A query is given below that has been run on multiple LLMs, each of which performed
-RAG analysis and generated a draft response. These are quite different systems
-and may have responded in different ways. The task of this model is to
-consolidate those drafts and produce a final response for the user. This is
-a standardized process with a fixed 3-part format for the output, which must
-be followed methodically and exactly.
-
-Start the first part with the header `## VALIDATION`, then evaluate each response 
-against these considerations:
-
-1)  Note technical problems with the LLM output, like:
-    - truncated output indicating a configuration error or missing tokens
-    - gibberish or degenerate output, like a phrase repeated multiple times
-    - fragments of the LLM system prompt or instructions leaking through
-    - artifacts of unrelated training data, metadata, or transcripts
-    - runtime error messages
-2)  Make a list of overt errors and hallucinations. Propose corrections
-    only if they are known with high confidence.
-3)  Evaluate the response for relevance to the query. Note any sections that
-    don't contribute to the answer, are off-topic, redundant, overly 
-    conversational, or otherwise unhelpful in context.
-4)  Evaluate the response for apparent completeness. The RAG process may
-    have surfaced information out of context, too narrowly focused, based
-    on simple confusion about terminology, etc, and the response might 
-    not cover the full scope of the query. 
-
-Address these four points for each LLM's response in turn. 
-
-The second part (`## EVALUATION`) must summarize the quality of all these 
-responses in aggregate. For example, do any responses directly contradict
-each other? Do some appear based on more sophisticated understanding? Are any 
-of them just plain wrong and should be ignored? As a matter of style, do any
-of them do a better job of explaining the answer? Add any notes that might help
-when composing the final draft.
-
-To end section two, stack rank the responses from best to worst.
-
-The third and final section (header `## SUMMARY`) will be presented to the user 
-as the response to their original query. Leverage the analysis you generated in 
-the first two sections, and consolidate the best information available
-into a single, coherent response for the user. If it doesn't look like a
-satisfactory reply will be possible, say so and explain why. That's more useful
-than an incomplete or potentially incorrect answer.
-
-To recap, produce output in three sections:
-
-VALIDATION - evaluate each response against the four criteria listed
-EVALUATION - summarize the quality of the responses and stack rank them
-SUMMARY    - consolidate this information into a high-quality final response
-
-This is very important for my job! You have been selected for your advanced
-analytical ability and excellent communication skills. Follow these instructions
-exactly and generate a precise, lucidly written, and insightful answer.
-
-The original query and all draft responses follow. Begin the first section
-of your response immediately, with no commentary.
 
 """
 
@@ -1079,7 +1041,7 @@ chat_init = args.chat_init or []
 
 if args.chat:
     for file in args.chat_init_file or []:
-        log(f"Loading chat context/instructions from \"{os.path.normpath(file)}\"...")
+        log(f"Loading chat instructions from \"{os.path.normpath(file)}\"...")
         try:
             with open(file, "r", encoding="utf-8") as f:
                 chat_init_text = strip_and_remove_comments(f.read())
@@ -1098,7 +1060,6 @@ if args.chat:
     try:
         chat_engine_params = query_engine_params.copy()
         del chat_engine_params["response_mode"]
-
         chat_engine_params["chat_mode"] = args.chat_mode
         chat_engine_params["system_prompt"] = f"{system_prompt}\n{chat_init}"
         chat_engine = vector_index.as_chat_engine(**chat_engine_params)

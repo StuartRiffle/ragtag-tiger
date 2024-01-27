@@ -18,8 +18,6 @@
 
 It's mostly the same boilerplate/glue code you were going to have to write anyway, so if this saves you an afternoon of sifting through machine-generated LlamaIndex tutorials and arguing with Copilot, please feel free to buy me a coffee.
 
-<br>
-
 # Setup
 The steps are the same as other Python programs.
 
@@ -64,8 +62,6 @@ If that does not print some kind of Python error message, you're in a good place
 
 If Python wants more packages, please add them to requirements.txt and submit a pull request!
 
-<br>
-
 # Usage
 
 The simplest way to perform a RAG query would be:
@@ -89,9 +85,33 @@ This is **still** slow, because the index can take a long time to load. It's jus
 
 To minimize overhead, try to either submit all your queries in one run, or leave a window open with the program idling in chat mode for ad-hoc use. 
 
-Be aware that there are multiple chat "modes", and the default one does not respond the same way as a batched query. Use the `/mode` command in chat to switch response types. For query-style responses in chat mode, type `/mode tree_summarize` at the prompt.
+Be aware that there are multiple chat "modes", and the default mode does not generate the same output as a batched query. For query-style responses, type `/mode tree_summarize` at the chat prompt. 
 
-<br>
+# Query and chat modes
+
+The LlamaIndex query engine and chat engine both have multiple modes that enable different RAG techniques. They can be changed using `--query-mode`, `--chat-mode`, and `--llm-mod-mode`. or using the `/mode` command at the chat prompt. Most have a shorter alias.
+
+These query modes are available in chat mode too as a convenience, but they don't keep maintain history (which is normal for queries). The opposite is _not true_ here: queries cannot use chat modes.
+
+| Query mode| Abbrev | |
+| --- | --- | --- |
+| `accumulate`              |`acc`| Condense responses for each chunk |
+| `compact`                 |`com`|Combine chunks, then refine |
+| `compact_accumulate`      |`comacc`| Combine chunks, condense responses, consolidate  |
+| `generation`              |`bare`| Ignore context, no RAG, just call LLM to generate responses |
+| `no_text`                 |`nodes`| Return context nodes without generating a response |
+| `refine`                  |`ref`| First node generates response, others refine it in series |
+| `simple_summarize`        |`sum`| Merge all the chunks, no RAG, just call the LLM |
+| `tree_summarize`          |`tree`| Generate summary prompt, populate tree with nodes (default)|
+| **Chat mode** | |
+| `simple`                  |`blind`| RAG lookup disabled |
+| `condense_question`       |`con`| Condense conversation history and message |
+| `context`                 |`look`| Look up message in the index |
+| `condense_plus_context`   |`conlook`| Look up condensed history and message |
+| `react`                   |``| ReAct agent loop with query engine tools |
+| `openai`                  |``| OpenAI agent loop |
+| `best`                    |`agent`| Auto-select between OpenAI and React (default)|
+
 
 # Local inference
 
@@ -119,8 +139,6 @@ Or, to use the built-in `llama.cpp` [library](https://pypi.org/project/llama-cpp
 ```
 --llm-provider llamacpp  --llm-model codellama-34b.Q4_K_M.gguf
 ```
-
-<br>
 
 # Commercial inference
 
@@ -162,8 +180,6 @@ If your inference provider is not here, there's a good chance they run an OpenAI
 --llm-provider openai  --llm-server URL  --llm-model NAME
 ```
 
-<br>
-
 # RAG gauntlet
 
 There's another, more compact way to configure inference providers, which is `--llm-config`
@@ -180,11 +196,11 @@ Most of the time, all you need is the first couple of fields, and you can skip u
 ```
 <img align="right" width="250px" style="padding:10px" src="docs/yodawg.jpg">
 
-The point of this format is that now you can submit a *list* of inference providers with multiple `--llm-config` arguments, and **RAG/TAG Tiger** will run your queries through *all* of them, allowing you to compare the responses.
+The point of this horrible format is that now you can submit a list of inference providers using multiple `--llm-config` arguments, and **RAG/TAG Tiger** will run your queries through *all* of them, allowing you to compare the responses.
 
-But nobody has time for that, so to complete the circle you can configure a **moderator** LLM using `--llm-config-mod`. The moderator will look at all the other responses, perform a short quality analysis, then consolidate everything into one final answer. 
+But nobody has time for that, so to complete the circle you can then configure a **moderator** LLM using `--llm-config-mod`. The moderator will look at all the other responses, perform a short quality analysis, then consolidate everything into one final answer. 
 
-It does this as another RAG query. I don't know if that's a good idea or not yet. The moderator may need a bigger context window, etc. Use `--llm-mod-mode generation` to disable this meta-RAG stuff and produce the final draft using a simple LLM query.
+It does this as another RAG query. I don't know if that's a good idea or not yet. The moderator should be your smartest model, but it probably needs a larger context window, etc. Use `--llm-mod-mode generation` to disable this meta-RAG and produce the final draft using a simple LLM query.
 
 ### LLM config examples
 
@@ -212,9 +228,7 @@ It does this as another RAG query. I don't know if that's a good idea or not yet
 | | BLOOM | 176B | 2k | `huggingface,thebloke/bloomchat-176b-v1-gptq` |
 | | Falcon | 180B | 2k | `huggingface,thebloke/falcon-180B-chat-awq` |
 
-<br>
-
-# Workflow
+# Workflow tips
 
 Commands can get long, but they are easier to edit if you put them in a shell script (or batch file), and split the parameters over multiple lines by ending them with `\` (or with `^` on Windows).
 
@@ -239,14 +253,14 @@ A more flexible way to manage complex configuration is to factor out groups of a
 - lines starting with # are considered comments and ignored
 ```
 # debug_server.args - example response file
+# These comments are on their own lines, so they're FINE
 
 --llm-provider   
-    # This comment on on its own line is FINE
-    llamacpp   # This one beside an argument is INVALID
+llamacpp        # This trailing comment is INVALID  <---
 
-# Indentation of arguments (or lack thereof) is ignored...
-  --llm-model
-D:\models\...but spaces inside arguments are honored without quotes.gguf
+# Indentation is ignored...
+--llm-model
+    D:\models\...but no quotes are needed.gguf
 ```
 
 To use the response file, pull it in with `@` on the command line (the file extension doesn't matter). This is equivalent to typing the same arguments by hand:
@@ -256,10 +270,11 @@ python ragtag.py @debug_server.args  ...
 
 For casual/occasional use this may be overthinking things.
 
+
 <br>
 
 # Options
-You can see a full list of options with `--help`
+You can also see a list of options with `--help`
 ```
 python ragtag.py --help
 ```
