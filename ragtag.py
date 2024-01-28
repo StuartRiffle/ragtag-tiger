@@ -228,10 +228,28 @@ def resolve_data_path_prefix(path):
 def cleanpath(path):
     path = resolve_data_path_prefix(path)
     path = os.path.normpath(path)
-    path = os.path.realpath(path)
     path = os.path.abspath(path)
+    path = os.path.realpath(path)
     path = os.path.normcase(path)
     return path        
+
+def strip_and_remove_comments(text):
+    lines = text.splitlines()
+    lines = [line.strip() for line in lines if line.strip()]
+    lines = [line for line in lines if not line.startswith('#')]
+    return "\n".join(lines)
+
+def load_stock_text(path):
+    fixedpath = resolve_data_path_prefix(os.path.join('+', path))
+    data = None
+    try: 
+        with open(fixedpath, "r", encoding="utf-8") as f: 
+            data = f.read()
+    except Exception as e: 
+        log_error(f"failed loading \"{fixedpath}\": {e}")
+    return data
+
+
 
 #------------------------------------------------------------------------------
 # A scope timer for verbose mode
@@ -262,23 +280,14 @@ log_verbose(f"\t...at your service ({time_since(start_time)})")
        
 search_specs = []
 
-def strip_and_remove_comments(text):
-    lines = text.splitlines()
-    lines = [line.strip() for line in lines if line.strip()]
-    lines = [line for line in lines if not line.startswith('#')]
-    return "\n".join(lines)
-
 for folder in args.source or []:
     spec = os.path.join(folder, "**/*")
-    log_verbose(f"Including \"{cleanpath(spec)}\"...")
     search_specs.append(spec)
 
 for spec in args.source_spec or []:
-    log_verbose(f"Including \"{cleanpath(spec)}\"...")
     search_specs.append(spec)
 
 for file in args.source_list or []:
-    log_verbose(f"Including files from name/spec list in \"{cleanpath(file)}\"...")
     try:
         with open(file, "r", encoding="utf-8") as f:
             specs = strip_and_remove_comments(f.read())
@@ -614,20 +623,6 @@ for file in args.query_list or []:
 #------------------------------------------------------------------------------
 # Construct the system prompt
 #------------------------------------------------------------------------------
-
-
-
-def load_stock_text(path):
-    # Load a file from the stock data folder
-    fixedpath = resolve_data_path_prefix(os.path.join('+', path))
-    data = None
-    try:
-        with open(fixedpath, "r", encoding="utf-8") as f:
-            data = f.read()
-    except Exception as e: 
-        log_error(f"failed loading \"{fixedpath}\": {e}")
-
-
 
 system_prompt_lines = []
 
@@ -966,9 +961,9 @@ for llm_config in llm_config_list:
 # Consolidate responses after querying multiple models
 #------------------------------------------------------------------------------
 
-template_consolidate = """
-
-"""
+template_consolidate = load_stock_text("template/consolidate.txt") or ""
+template_query = load_stock_text("template/query.txt") or ""
+template_response = load_stock_text("template/response.txt") or ""
 
 if args.llm_config_mod:
     log(f"Generating final answers...")
@@ -1241,3 +1236,11 @@ if temp_folder:
     clean_up_temporary_files()
 
 log_verbose(f"\nTiger out, peace ({time_since(start_time)})")
+
+
+
+
+
+def get_requirements(path: str):
+    return [l.strip() for l in open(path)]
+
