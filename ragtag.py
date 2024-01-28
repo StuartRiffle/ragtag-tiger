@@ -61,7 +61,7 @@ arg("--index-unknown",  help="Index files with unrecognized extensions as text",
 arg("--ignore-archives",help="Do not index files inside zip/tar/etc archives", action="store_true")
 arg("--ignore-types",   help="Do not index these file extensions, even if supported", action="append", metavar="EXT")
 arg("--size-limit",     help="Ignore huge text files unlikely to contain interesting", type=human_size_type, default=0, metavar="SIZE")
-arg("--no-cache",       help="Do not use the local cache for loaders", action="store_true")
+arg("--no-cache-load",  help="Do not use the local cache for loaders", action="store_true")
 
 arg = parser.add_argument_group("Language model").add_argument
 arg("--llm-provider",   help="Inference provider/interface", choices=["openai", "google", "llamacpp", "huggingface", "perplexity", "replicate"], metavar="NAME")
@@ -95,14 +95,15 @@ arg("--chat-log",       help="Append chat queries and responses to a text file",
 arg("--chat-mode",      help="Chat response mode", choices=llamaindex_chat_modes, default="best")
 
 import os, shlex
+
 ragtag_flags = shlex.split(os.environ.get("RAGTAG_FLAGS", ""))
 for flag in ragtag_flags:
     os.sys.argv.insert(1, flag)
 
 args = parser.parse_args()
-
 spacer = "\n" if args.verbose else ""
 print(f'{spacer}{program_name} v{program_version}')
+
 if args.verbose:
     print(f"{program_copyright}\n{program_repository}\n")
 if args.version:
@@ -218,6 +219,20 @@ def log_error(msg, exit_code=0, prefix="\t", suffix="", **kwargs):
     if exit_code:
         exit(exit_code)
 
+def resolve_data_path_prefix(path):
+    # If path starts with +/ replace that with the data folder at the repo root
+    if path.replace(os.path.dirsep, "/").startswith("+/"):
+        path = os.path.join(os.path.join(os.path.dirname(__file__), "data"), path[1:])
+    return path
+
+def cleanpath(path):
+    path = resolve_data_path_prefix(path)
+    path = os.path.normpath(path)
+    path = os.path.realpath(path)
+    path = os.path.abspath(path)
+    path = os.path.normcase(path)
+    return path        
+
 #------------------------------------------------------------------------------
 # A scope timer for verbose mode
 #------------------------------------------------------------------------------
@@ -255,15 +270,15 @@ def strip_and_remove_comments(text):
 
 for folder in args.source or []:
     spec = os.path.join(folder, "**/*")
-    log_verbose(f"Including \"{os.path.normpath(spec)}\"...")
+    log_verbose(f"Including \"{cleanpath(spec)}\"...")
     search_specs.append(spec)
 
 for spec in args.source_spec or []:
-    log_verbose(f"Including \"{os.path.normpath(spec)}\"...")
+    log_verbose(f"Including \"{cleanpath(spec)}\"...")
     search_specs.append(spec)
 
 for file in args.source_list or []:
-    log_verbose(f"Including files from name/spec list in \"{os.path.normpath(file)}\"...")
+    log_verbose(f"Including files from name/spec list in \"{cleanpath(file)}\"...")
     try:
         with open(file, "r", encoding="utf-8") as f:
             specs = strip_and_remove_comments(f.read())
@@ -492,7 +507,7 @@ if len(loader_specs) > 0:
 
             if not loader_class in custom_loaders:
                 with TimerUntil(f"{loader_class}"):
-                    custom_loaders[loader_class] = download_loader(loader_class, refresh_cache=args.no_cache)
+                    custom_loaders[loader_class] = download_loader(loader_class, refresh_cache=args.no_cache_load)
 
             for ext in extensions.split(","):
                 ext = "." + ext.strip(". ")
@@ -600,11 +615,7 @@ for file in args.query_list or []:
 # Construct the system prompt
 #------------------------------------------------------------------------------
 
-def resolve_data_path_prefix(path):
-    # If path starts with +/ replace that with the data folder
-    if path.replace(os.path.dirsep, "/").startswith("+/"):
-        path = os.path.join(os.path.join(os.path.dirname(__file__), "data"), path[1:])
-    return path
+
 
 def load_stock_text(path):
     # Load a file from the stock data folder
@@ -614,7 +625,9 @@ def load_stock_text(path):
         with open(fixedpath, "r", encoding="utf-8") as f:
             data = f.read()
     except Exception as e: 
-        log_error(f"failed loading \"{fixedpath}\": {e}", exit_code=1)
+        log_error(f"failed loading \"{fixedpath}\": {e}")
+
+
 
 system_prompt_lines = []
 
@@ -734,6 +747,7 @@ def load_llm(provider, model, server, api_key, params, set_service_context=True)
                     model_name=model_name,
                     model_kwargs=model_kwargs, 
                     device_map=args.torch_device or "auto",
+
                     system_prompt=system_prompt)
 
             if set_service_context:
@@ -791,6 +805,7 @@ if args.llm_provider or args.llm_server or args.llm_api_key or args.llm_param:
     config_str = f"{args.llm_provider or 'huggingface'},{args.llm_model or ''},{args.llm_server or ''},{args.llm_api_key or ''}"
     for param in args.llm_param or []:
         config_str += f",{param.strip().replace(' ', '')}"
+   
     llm_config_list.insert(config_str, 0)
 
 moderator_loaded_last = False

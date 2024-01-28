@@ -1,2 +1,2 @@
 #!/bin/bash
-python3 /path/to/ragtag.py "$@"
+python3 ./ragtag.py "$@"

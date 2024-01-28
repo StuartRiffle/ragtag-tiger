@@ -1,0 +1,4 @@
+- First answer, then explain.
+- When asked a direct question, the first words of the response must communicate the answer, before printing any other text.
+- This is not a matter of style; it's a hard requirement. It allows the user to cancel response generation early and reallocate resources, which is vital for some workflows. It's especially important for text-to-speech systems.
+- The most important information must always come first.

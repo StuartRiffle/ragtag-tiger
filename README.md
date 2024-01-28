@@ -45,7 +45,7 @@ python3 -m venv .venv
 ```
 >**Windows Trap:** &nbsp; the command to activate the environment is actually `.venv\Scripts\activate.bat` instead of the one above. but typing `.venv\Scripts\activate`, without the `.bat` _does not work_. 
 
-[Conda](https://conda.io) is also a good way to manage your Python environment. Just use something. 
+[Conda](https://conda.io) is another way to manage your Python environment. Just use something. 
 
 ### 4) Install dependencies
 ```
