@@ -4,7 +4,7 @@
 
 # RAG/TAG Tiger
 
-<img align="right" width="200px" style="padding:10px" src="docs/tiger.jpg">
+<img align="right" width="200px" style="padding:10px" src="docs/images/tiger.jpg">
 
 **RAG/TAG Tiger** is a simple [LlamaIndex](https://github.com/run-llama/llama_index) wrapper that:
 - provides a command line interface for doing primitive RAG queries on local ddsocuments/code
@@ -79,7 +79,7 @@ Then use that index to perform your queries:
 python ragtag.py --index-load my/index --query "Really though, why?"
 ```
 
-<img align="right" width="250px" style="padding:15px" src="docs/noidealol.jpg">
+<img align="right" width="250px" style="padding:15px" src="docs/images/noidealol.jpg">
 
 This is **still** slow, because the index can take a long time to load. It's just not as slow as re-indexing everything. Use `--verbose` to see the actual timings.
 
@@ -223,7 +223,7 @@ Most of the time, all you need is the first couple of fields, and you can skip u
 ```
 --llm-config openai,,http://localhost:5000/v1,,temperature=1.6,top_p=0.9
 ```
-<img align="right" width="250px" style="padding:10px" src="docs/yodawg.jpg">
+<img align="right" width="250px" style="padding:10px" src="docs/images/yodawg.jpg">
 
 The point of this horrible format is that now you can submit a list of inference providers using multiple `--llm-config` arguments, and **RAG/TAG Tiger** will run your queries through *all* of them, allowing you to compare the responses.
 
@@ -284,20 +284,21 @@ You can also set standard arguments in an environment variable called `RAGTAG_FL
 ### Response files
 
 A more flexible way to manage complex config is to factor out groups of arguments into response files. They are just lists of arguments, but have a couple of extra rules:
+
+```
+# debug_server.args - example response file
+# These comments are on their own lines, so they're VALID
+
+--llm-provider  # ...but this trailing comment is INVALID
+llamacpp         
+
+# Indentation (or lack of it) is ignored
+--llm-model
+    D:\models\No quotes around names with spaces.gguf
+```
 - **every argument must be on its own line**
 - whitespace that's not part of an argument is ignored
 - lines starting with # are considered comments and ignored
-```
-# debug_server.args - example response file
-# These comments are on their own lines, so they're GOOD
-
---llm-provider  #...but this trailing comment is INVALID
-llamacpp         
-
-# Indentation is ignored...
---llm-model
-    D:\models\...but no quotes are needed.gguf
-```
 
 To use the response file, pull it in with `@` on the command line (the file extension doesn't matter).
 ```
@@ -307,11 +308,11 @@ ragtag @debug_server.args  ...
 ### Prompt assembly
 For casual/occasional use this may be overthinking things, but response files are perfect for building up system prompts and chatbot instructions from snippets of text, like the one in the "Prompt" section above. It's easier than juggling a dozen little text files, and you might want to share common prompts between different query jobs. 
 
-### Forward slashes in Windows paths
+### Forward slashes work in Windows paths
 
-I did not know this for the longest time: forward slashes work in Windows path names. For example, `d:/dev/foo` is a valid path literally anywhere (except for on the command line, which would be the most useful place, because `cmd.exe` interprets slashes as option flags). 
+They transparently work like backslashes pretty much everywhere (except at the command prompt, *which would be the most useful place*, because `cmd.exe` interprets slashes as option flags). A workaround is to quote the whole pathname.
 
-But that's just the command prompt. The kernel honors slashes internally, so prefer forward slashes in configuration files for the sake of portability.
+But that's is just the command prompt. The kernel honors slashes internally, so if you **use forward slashes in your configuration files**, they will be portable.
 
 # Options
 You can also see a list of options with `--help`
@@ -390,7 +391,7 @@ ragtag --help
 **A:**&nbsp; For clarity, the coffee is a metaphor and contributions will be spent on drugs. 
 
 <a href="https://www.buymeacoffee.com/stuartriffle">
-  <img src="docs/coffee.png" width="200px">
+  <img src="docs/images/coffee.png" width="200px">
 </a>
 
 Thank you for supporting open source software.

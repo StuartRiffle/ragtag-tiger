@@ -1,0 +1,5 @@
+# rule/important-for-my-job.txt
+# RAG/TAG Tiger (C) 2024 Stuart Riffle
+# https://github.com/stuartriffle/ragtag-Tiger
+
+This is really important for my job.
