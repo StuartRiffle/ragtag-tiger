@@ -1,8 +1,24 @@
-import logging, files
+# RAG/TAG Tiger - llm.py
+# Copyright (c) 2024 Stuart Riffle
+# github.com/stuartriffle/ragtag-tiger
+
+import os, sys, time, shutil, tempfile, hashlib, json
+
+import torch
 from files import *
+from logging import log, log_verbose, log_error
 from timer import TimerUntil
 
-def load_llm(provider, model, server, api_key, params, set_service_context=True):
+openai_model_default    = "gpt-3.5-turbo-instruct"
+google_model_default      = "models/text-bison-001"
+anthropic_model_default = "claude-2"
+perplexity_default      = "llama-2-70b-chat"
+replicate_default       = "mistralai/mixtral-8x7b-instruct-v0.1"
+default_timeout         = 180
+hf_model_nicknames      = { "default": "codellama/CodeLlama-7b-Instruct-hf" }
+default_llm_provider    = "huggingface"
+
+def load_llm(provider, model, server, api_key, params, verbose=False, set_service_context=True):
     result = None
     streaming_supported = True
     try:
@@ -21,7 +37,7 @@ def load_llm(provider, model, server, api_key, params, set_service_context=True)
                         timeout=default_timeout,
                         api_key=api_key,
                         additional_kwargs=model_kwargs,
-                        verbose=args.llm_verbose)
+                        verbose=verbose)
                 else:
                     # API compatible server
                     model_name = model or "default"
@@ -34,7 +50,7 @@ def load_llm(provider, model, server, api_key, params, set_service_context=True)
                         max_tokens=1000,
                         max_iterations=100,
                         timeout=default_timeout,
-                        verbose=args.llm_verbose)
+                        verbose=verbose)
                 
             ### Google
             elif provider == "google":
@@ -51,15 +67,14 @@ def load_llm(provider, model, server, api_key, params, set_service_context=True)
             ### Llama.cpp
             elif provider == "llamacpp":
                 if torch.cuda.is_available():
-                    # FIXME - this does nothing
+                    # FIXME - this does nothing?
                     model_kwargs["n_gpu_layers"] = -1
-                    model_kwargs["device"] = "cuda"
                 log(f"Preparing llama.cpp model \"{os.path.normpath(model)}\"...")
                 from llama_index.llms import LlamaCPP
                 result = LlamaCPP(
                     model_path=model,
                     model_kwargs=model_kwargs,
-                    verbose=args.llm_verbose)
+                    verbose=verbose)
                 
             ### Perplexity
             elif provider == "perplexity":
@@ -91,25 +106,26 @@ def load_llm(provider, model, server, api_key, params, set_service_context=True)
                     model_desc = f" (\"{model_name}\")"
                     model_name = hf_model_nicknames[model_name]
                 log(f"Preparing HuggingFace model \"{model_name}\"{model_desc}...")
+
                 from llama_index.llms import HuggingFaceLLM
                 result = HuggingFaceLLM(
                     model_name=model_name,
-                    model_kwargs=model_kwargs, 
-                    device_map=args.torch_device or "auto",
-
-                    system_prompt=system_prompt)
+                    model_kwargs=model_kwargs) 
+                    #device_map=args.torch_device or "auto",
+                    #system_prompt=system_prompt)
 
             if set_service_context:
-                from llama_index import ServiceContext
-                from llama_index import set_global_service_context
-
-                service_context = ServiceContext.from_defaults(embed_model="local", llm=result)
+                from llama_index import ServiceContext, set_global_service_context
+                service_context = ServiceContext.from_defaults(
+                    embed_model="local", 
+                    llm=result)
                 set_global_service_context(service_context)
 
     except Exception as e: 
         log_error(f"failure initializing LLM: {e}", exit_code=1)
 
     return result, streaming_supported
+
 
 def split_llm_config(config):
     """Split an LLM from a config string like "provider,model,server,api-key,param1,param2,..." into its components"""
@@ -121,6 +137,7 @@ def split_llm_config(config):
     api_key  = fields[3].strip() if len(fields) > 3 else None
     params   = fields[4:]        if len(fields) > 4 else []
     return provider, model, server, api_key, params
+
 
 def load_llm_config(config, set_service_context=True):
     """Load an LLM from a config string like "provider,model,server,api-key,param1,param2,..."""
