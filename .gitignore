@@ -4,5 +4,6 @@ ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
 
+.idea/
 .venv/
 .vscode/

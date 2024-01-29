@@ -1,9 +1,11 @@
 # RAG/TAG Tiger
 # Copyright (c) 2024 Stuart Riffle
 
-import gc
 import time
 start_time = time.time()
+
+from util.timer import TimerUntil, time_since
+
 
 program_name            = "RAG/TAG Tiger"
 program_version         = "0.1.0"
@@ -121,7 +123,7 @@ from llama_index.text_splitter import CodeSplitter
 
 built_in_loaders = set([
     # SimpleDirectoryReader supports these out-of-the-box
-    '.pdf', '.csv', '.md', '.mbox', '.ipynb', 
+    '.pdf', '.csv', '.md', '.mbox', '.ipynb',
     '.docx', '.epub', '.hwp', '.ppt', '.pptm', '.pptx',
     '.jpeg', '.jpg', '.png', '.mp3', '.mp4', # ?
 ])
@@ -136,42 +138,42 @@ available_hub_loaders = {
 
 source_code_splitters = [
     # Source code files get syntax-aware chunking
-    ([".c", ".h"],      CodeSplitter(language="cpp")),            
-    ([".cl"],           CodeSplitter(language="commonlisp")),
-    ([".cpp", ".hpp"],  CodeSplitter(language="cpp")),
-    ([".cxx", ".hxx"],  CodeSplitter(language="cpp")),
-    ([".cs"],           CodeSplitter(language="c_sharp")),
-    ([".css"],          CodeSplitter(language="css")),
-    ([".dockerfile"],   CodeSplitter(language="dockerfile")),
-    ([".dot"],          CodeSplitter(language="dot")),
-    ([".el", ".emacs"], CodeSplitter(language="elisp")),
-    ([".elm"],          CodeSplitter(language="elm")),
-    ([".ex", ".exs"],   CodeSplitter(language="elixir")),
-    ([".f", ".f90"],    CodeSplitter(language="fortran")),
-    ([".go"],           CodeSplitter(language="go")),
-    ([".hs"],           CodeSplitter(language="haskell")),
-    ([".html", ".htm"], CodeSplitter(language="html")),
-    ([".inc", ".inl"],  CodeSplitter(language="cpp")),
-    ([".java"],         CodeSplitter(language="java")),
-    ([".jl"],           CodeSplitter(language="julia")),
-    ([".js"],           CodeSplitter(language="javascript")),
-    ([".kt", ".kts"],   CodeSplitter(language="kotlin")),
-    ([".lisp", ".lsp"], CodeSplitter(language="commonlisp")),
-    ([".lua"],          CodeSplitter(language="lua")),
-    ([".m"],            CodeSplitter(language="objc")),
-    ([".ml", ".mli"],   CodeSplitter(language="ocaml")),
-    ([".php"],          CodeSplitter(language="php")),
-    ([".pl"],           CodeSplitter(language="perl")),
-    ([".py"],           CodeSplitter(language="python")),
-    ([".r"],            CodeSplitter(language="r")),
-    ([".rb"],           CodeSplitter(language="ruby")),
-    ([".rs"],           CodeSplitter(language="rust")),
-    ([".scala"],        CodeSplitter(language="scala")),
-    ([".sh"],           CodeSplitter(language="bash")),
-    ([".sql"],          CodeSplitter(language="sql")),
-    ([".sqlite"],       CodeSplitter(language="sqlite")),
-    ([".ts"],           CodeSplitter(language="typescript")),
-    ([".yaml", ".yml"], CodeSplitter(language="yaml")),
+    ([".c", ".h"],          CodeSplitter(language="cpp")),            
+    ([".cl"],               CodeSplitter(language="commonlisp")),
+    ([".cpp", ".hpp"],      CodeSplitter(language="cpp")),
+    ([".cxx", ".hxx"],      CodeSplitter(language="cpp")),
+    ([".cs"],               CodeSplitter(language="c_sharp")),
+    ([".css"],              CodeSplitter(language="css")),
+    ([".dockerfile"],       CodeSplitter(language="dockerfile")),
+    ([".dot"],              CodeSplitter(language="dot")),
+    ([".el", ".emacs"],     CodeSplitter(language="elisp")),
+    ([".elm"],              CodeSplitter(language="elm")),
+    ([".ex", ".exs"],       CodeSplitter(language="elixir")),
+    ([".f", ".f90"],        CodeSplitter(language="fortran")),
+    ([".go"],               CodeSplitter(language="go")),
+    ([".hs"],               CodeSplitter(language="haskell")),
+    ([".html", ".htm"],     CodeSplitter(language="html")),
+    ([".inc", ".inl"],      CodeSplitter(language="cpp")),
+    ([".java"],             CodeSplitter(language="java")),
+    ([".jl"],               CodeSplitter(language="julia")),
+    ([".js"],               CodeSplitter(language="javascript")),
+    ([".kt", ".kts"],       CodeSplitter(language="kotlin")),
+    ([".lisp", ".lsp"],     CodeSplitter(language="commonlisp")),
+    ([".lua"],              CodeSplitter(language="lua")),
+    ([".m"],                CodeSplitter(language="objc")),
+    ([".ml", ".mli"],       CodeSplitter(language="ocaml")),
+    ([".php"],              CodeSplitter(language="php")),
+    ([".pl"],               CodeSplitter(language="perl")),
+    ([".py"],               CodeSplitter(language="python")),
+    ([".r"],                CodeSplitter(language="r")),
+    ([".rb"],               CodeSplitter(language="ruby")),
+    ([".rs"],               CodeSplitter(language="rust")),
+    ([".scala"],            CodeSplitter(language="scala")),
+    ([".sh"],               CodeSplitter(language="bash")),
+    ([".sql"],              CodeSplitter(language="sql")),
+    ([".sqlite"],           CodeSplitter(language="sqlite")),
+    ([".ts"],               CodeSplitter(language="typescript")),
+    ([".yaml", ".yml"],     CodeSplitter(language="yaml")),
 ]
 
 mime_file_types = set([
@@ -179,15 +181,15 @@ mime_file_types = set([
     ".eml", ".msg",
 
     # Special case: sometimes .doc files are actually MIME, not old binary Word documents
-    ".doc", 
+    ".doc",
 ])
 
-shutil.register_unpack_format('7zip', ['.7z'], py7zr.unpack_7zarchive)        
+shutil.register_unpack_format('7zip', ['.7z'], py7zr.unpack_7zarchive)
 archive_file_types = set([
     # Unpack these archive formats so we can index their contents too
     ".zip", ".7z", ".tar", ".gz", ".tgz", ".bz2", ".tbz2", ".xz", ".txz", 
 
-    # FIXME - common but currently unsupported
+    # FIXME - these common but unsupported here
     # ".rar", ".lzma", ".lz", ".lz4", ".zst", 
 ])
 
@@ -195,59 +197,11 @@ chunk_as_text = set([
     # Plain text files, no special handling 
     ".txt", ".TXT", ".rtf", ".log", ".asc", ".ini", ".cfg", 
 
-    # FIXME - use a proper splitter/loader for these when one becomes available
+    # FIXME - use a proper splitter/loader for these 
     ".hlsl", ".hlsli", ".fxh", ".glsl", ".glsli", ".shader",
     ".asm", ".s",
     ".xml",
 ])
-
-#------------------------------------------------------------------------------
-# Misc loggery
-#------------------------------------------------------------------------------
-
-def log(msg, **kwargs):
-    if not args.quiet:
-       print(msg, **kwargs)
-
-def log_verbose(msg, **kwargs):
-    if args.verbose:
-        log(msg, **kwargs)
-
-def log_error(msg, exit_code=0, prefix="\t", suffix="", **kwargs):
-    error_desc = "FATAL " if exit_code else ""
-    log(f"{prefix}{error_desc}ERROR: {msg}{suffix}", **kwargs)
-    if exit_code:
-        exit(exit_code)
-
-def resolve_data_path_prefix(path):
-    # If path starts with +/ replace that with the data folder at the repo root
-    if path.replace(os.path.dirsep, "/").startswith("+/"):
-        path = os.path.join(os.path.join(os.path.dirname(__file__), "data"), path[1:])
-    return path
-
-def cleanpath(path):
-    path = resolve_data_path_prefix(path)
-    path = os.path.normpath(path)
-    path = os.path.abspath(path)
-    path = os.path.realpath(path)
-    path = os.path.normcase(path)
-    return path        
-
-def strip_and_remove_comments(text):
-    lines = text.splitlines()
-    lines = [line.strip() for line in lines if line.strip()]
-    lines = [line for line in lines if not line.startswith('#')]
-    return "\n".join(lines)
-
-def load_stock_text(path):
-    fixedpath = resolve_data_path_prefix(os.path.join('+', path))
-    data = None
-    try: 
-        with open(fixedpath, "r", encoding="utf-8") as f: 
-            data = f.read()
-    except Exception as e: 
-        log_error(f"failed loading \"{fixedpath}\": {e}")
-    return data
 
 
 
@@ -255,27 +209,18 @@ def load_stock_text(path):
 # A scope timer for verbose mode
 #------------------------------------------------------------------------------
 
-def time_since(before):
-    return f"{time.time() - before:.3f} sec"
-
-class TimerUntil:
-    def __init__(self, msg, prefix="\t...", suffix="", **kwargs):
-        self.msg = msg
-        self.prefix = prefix
-        self.suffix = suffix
-
-    def __enter__(self):
-        self.start_time = time.time()
-        return self
-    
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        if not exc_type:
-            log_verbose(f"{self.prefix}{self.msg} ({time_since(self.start_time)}{self.suffix})")
 
 log_verbose(f"\t...at your service ({time_since(start_time)})")
 
+
 #------------------------------------------------------------------------------
-# Gather all the file specs we'll have to search when indexing
+# Support for searching inside container types like file archives and MIME
+#------------------------------------------------------------------------------
+
+
+
+#------------------------------------------------------------------------------
+# Gather the search specs (like "foo/bar/**/*.cpp")
 #------------------------------------------------------------------------------
        
 search_specs = []
@@ -292,108 +237,79 @@ for file in args.source_list or []:
         with open(file, "r", encoding="utf-8") as f:
             specs = strip_and_remove_comments(f.read())
             search_specs.extend(specs)
+    except Exception as e:
+        log_error(e)
+
+#------------------------------------------------------------------------------
+# Gather the user queries
+#------------------------------------------------------------------------------
+
+queries = args.query or []
+
+for file in args.query_file or []:
+    log(f"Loading query from \"{file}\"...")
+    try:
+        with open(file, "r", encoding="utf-8") as f:
+            query_text = strip_and_remove_comments(f.read())
+            queries.append(query_text)
+    except Exception as e: log_error(e)
+
+for file in args.query_list or []:
+    log(f"Loading single-line queries from \"{file}\"...")
+    try:
+        with open(file, "r", encoding="utf-8") as f:
+            short_queries = strip_and_remove_comments(f.read()).splitlines()
+            queries.extend(short_queries)
     except Exception as e: log_error(e)
 
 #------------------------------------------------------------------------------
-# Support for searching inside container types like file archives and MIME
+# Construct the system prompt
 #------------------------------------------------------------------------------
 
-def unpack_temp_container(container_file, temp_folder):
-    """Unpack a container file into a temporary folder"""
-    true_name = os.path.normcase(os.path.normpath(os.path.abspath(container_file)))
-    name_hash = hashlib.md5(true_name.encode()).hexdigest()
-    output_folder = os.path.join(temp_folder, os.path.basename(container_file) + f"-{name_hash}.temp")
-    unpacked_files = []
+system_prompt_lines = []
 
+if args.context:
+    log(f"Adding system prompt from the command line...")
+    for snippet in args.context:
+        system_prompt_lines.append(snippet)
+
+for file in args.context_file or []:
+    log(f"Adding system prompt from \"{file}\"...")
     try:
-        os.makedirs(output_folder)
-        container_type = os.path.splitext(container_file)[1]
-        if container_type in archive_file_types:
-            shutil.unpack_archive(container_file, output_folder)
+        with open(file, "r", encoding="utf-8") as f:
+            snippet = strip_and_remove_comments(f.read())
+            system_prompt_lines.extend(snippet.splitlines())
+    except Exception as e: log_error(e)
 
-        elif container_type in mime_file_types:
-            file_bytes = open(container_file, "rb").read()
-            looks_like_binary = any(b < 32 or b > 127 for b in file_bytes)
-            tricksy_binary_doc_file = looks_like_binary and container_type == ".doc"
-            if not tricksy_binary_doc_file:
-                msg = email.message_from_bytes(file_bytes, policy=email.policy.default)
-                part_counter = 0
+system_prompt = "\n".join(system_prompt_lines).strip()
 
-                for part in msg.walk():
-                    filename_prefix = f"part-{part_counter:03d}"
-                    part_counter += 1
-                    part_type = part.get_content_type()
-                    part_content = part.get_content()
-                    part_maintype = part.get_content_maintype()
+if len(system_prompt.strip()) > 0:
+    log_verbose(f"System prompt:\n{system_prompt}")
 
-                    if part_maintype == "text":
-                        part_encoding = part.get_content_charset() or "utf-8"
-                        part_text = part_content.decode(part_encoding, errors="ignore")
-                        part_content = part_text.encode("utf-8", errors="ignore")
-                        if part_type == "text/html":
-                            output_filename = filename_prefix + ".html"
-                        else:
-                            output_filename = filename_prefix + ".txt"
-                        
-                    elif part_type == "application/octet-stream" or part_maintype == "image":
-                        output_filename = f"{filename_prefix}-{part.get_filename()}"
-                    else:
-                        log_verbose(f"\tignoring unrecognized MIME part of type \"{part_type}\" in \"{os.path.normpath(container_file)}\"")
-                        continue
 
-                    file_path = os.path.join(output_folder, output_filename)
-                    with open(file_path, "wb") as f:
-                        f.write(part_content)
+#------------------------------------------------------------------------------
+# Load chat bot instructions
+#------------------------------------------------------------------------------
 
-        unpacked_files = [os.path.join(output_folder, f) for f in os.listdir(output_folder)]
+chat_init = args.chat_init or []
 
-    except Exception as e: 
-        log_error(f"failure unpacking \"{os.path.normpath(container_file)}\" into \"{os.path.normpath(output_folder)}\": {e}")
+if args.chat:
+    for file in args.chat_init_file or []:
+        log(f"Loading chat instructions from \"{os.path.normpath(file)}\"...")
         try:
-            log_verbose(f"\tremoving \"{os.path.normpath(output_folder)}\"...")
-            shutil.rmtree(output_folder)
-        except: pass
+            with open(file, "r", encoding="utf-8") as f:
+                chat_init_text = strip_and_remove_comments(f.read())
+                chat_init.append(chat_init_text)
+        except Exception as e: log_error(e)
 
-    return unpacked_files
+    chat_init_text = "\n".join(chat_init)
+    if len(chat_init_text.strip()) > 0:
+        log_verbose(f"Chat bot instructions:\n{chat_init_text}")
 
 #------------------------------------------------------------------------------
 # Find files matching the search specs
 #------------------------------------------------------------------------------
 
-def split_root_from_spec(spec):
-    """Split off the root path from the wildcard part if possible"""
-    for pos in range(len(spec)):
-        if spec[pos] == "*" or spec[pos] == "?":
-            sep_pos = spec.rfind(os.path.sep, 0, pos)
-            if sep_pos >= 0:
-                return spec[:sep_pos + 1], spec[sep_pos + 1:]
-    return "", spec
-
-def match_files_to_index(search_spec):
-    """Find files matching a wildcard spec"""
-    all_matches = []
-    try:
-        if os.path.isfile(search_spec):
-            all_matches.append(search_spec)
-        else:
-            file_spec_root, file_spec = split_root_from_spec(search_spec)
-            file_spec_pattern = file_spec.replace(os.path.sep, '/') # required by pathspec
-            relative_pathspec = pathspec.PathSpec.from_lines('gitwildmatch', [file_spec_pattern])
-
-            matches = relative_pathspec.match_tree(file_spec_root)
-            matches = [os.path.join(file_spec_root, match) for match in matches]
-
-            log_verbose(f"\t{len(matches)} files match \"{os.path.normpath(file_spec)}\" from \"{os.path.normpath(file_spec_root)}\"")
-            all_matches.extend(matches)
-
-    except Exception as e: log_error(e)
-    return all_matches
-
-def separate_files_by_extension(file_list, extensions):
-    """Separate out files with certain extensions"""
-    matching_files = set([f for f in file_list if os.path.splitext(f)[1].lower() in extensions])
-    non_matching_files = set([f for f in file_list if not f in matching_files])
-    return matching_files, non_matching_files
 
 files_to_index = []
 temp_folder = None
@@ -442,7 +358,7 @@ if len(search_specs) > 0:
             # Unpack nested containers
             files_to_check = all_unpacked_files
 
-files_to_index = [os.path.abspath(os.path.normpath(f)) for f in files_to_index]
+files_to_index = [cleanpath(f) for f in files_to_index]
 files_to_index = sorted(set(files_to_index))
 
 #------------------------------------------------------------------------------
@@ -572,77 +488,13 @@ if len(files_to_index) > 0:
 # Clean up temporary files (or try to, anyway)
 #------------------------------------------------------------------------------
 
-def clean_up_temporary_files():
-    if temp_folder and os.file.exists(temp_folder):
-        info = f" \"{temp_folder}\"" if args.verbose else ""
-        log(f"Removing temporary folder{info}...")
-        time_before = time.time()
-        for reattempt_after_delay in [0, 2, 5, 10]:
-            if reattempt_after_delay:
-                log_verbose(f"\t...retrying in {reattempt_after_delay} seconds")
-                time.sleep(reattempt_after_delay)
-            try:
-                shutil.rmtree(temp_folder)
-                temp_folder = None
-                break
-            except Exception as e: 
-                # Errors are expected sometimes if the OS has files open
-                log_verbose(f"\tignoring error: {e}")
-        if temp_folder:
-            log_error(f"couldn't remove temporary folder \"{temp_folder}\"")
-        else:
-            log_verbose(f"\t...success ({time_since(time_before)})")
 
 if temp_folder:
-    clean_up_temporary_files()
+    clean_up_temporary_files(temp_folder)
 if temp_folder:
     log_verbose(f"\t(will try again before exiting)")
 
-#------------------------------------------------------------------------------
-# Collect the user queries
-#------------------------------------------------------------------------------
 
-queries = args.query or []
-
-for file in args.query_file or []:
-    log(f"Loading query from \"{file}\"...")
-    try:
-        with open(file, "r", encoding="utf-8") as f:
-            query_text = strip_and_remove_comments(f.read())
-            queries.append(query_text)
-    except Exception as e: log_error(e)
-
-for file in args.query_list or []:
-    log(f"Loading single-line queries from \"{file}\"...")
-    try:
-        with open(file, "r", encoding="utf-8") as f:
-            short_queries = strip_and_remove_comments(f.read()).splitlines()
-            queries.extend(short_queries)
-    except Exception as e: log_error(e)
-
-#------------------------------------------------------------------------------
-# Construct the system prompt
-#------------------------------------------------------------------------------
-
-system_prompt_lines = []
-
-if args.context:
-    log(f"Adding system prompt from the command line...")
-    for snippet in args.context:
-        system_prompt_lines.append(snippet)
-
-for file in args.context_file or []:
-    log(f"Adding system prompt from \"{file}\"...")
-    try:
-        with open(file, "r", encoding="utf-8") as f:
-            snippet = strip_and_remove_comments(f.read())
-            system_prompt_lines.extend(snippet.splitlines())
-    except Exception as e: log_error(e)
-
-system_prompt = "\n".join(system_prompt_lines).strip()
-
-if len(system_prompt.strip()) > 0:
-    log_verbose(f"System prompt:\n{system_prompt}")
 
 #------------------------------------------------------------------------------
 # Process the queries on all given LLM configurations in turn
@@ -711,7 +563,7 @@ def load_llm(provider, model, server, api_key, params, set_service_context=True)
             elif provider == "perplexity":
                 api_key = api_key or os.environ.get("PERPLEXITYAI_API_KEY", "")
                 model_name = model or perplexity_default
-                log(f"Preparing Perplexity model \"{os.path.normpath(model_name)}\"...")
+                log(f"Preparing Perplexity model \"{model_name}\"...")
                 from llama_index.llms import Perplexity
                 result = Perplexity(
                     api_key=api_key,
@@ -722,7 +574,7 @@ def load_llm(provider, model, server, api_key, params, set_service_context=True)
             elif provider == "replicate":
                 api_key = api_key or os.environ.get("REPLICATE_API_TOKEN", "")
                 model_name = model or replicate_default
-                log(f"Preparing Replicate model \"{os.path.normpath(model_name)}\"...")
+                log(f"Preparing Replicate model \"model_name)\"...")
                 from llama_index.llms import Replicate
                 result = Replicate(
                     model=model_name,
@@ -768,7 +620,6 @@ def split_llm_config(config):
     params   = fields[4:]        if len(fields) > 4 else []
     return provider, model, server, api_key, params
 
-
 def load_llm_config(config, set_service_context=True):
     """Load an LLM from a config string like "provider,model,server,api-key,param1,param2,..."""
     provider, model, server, api_key, params = split_llm_config(config)
@@ -778,13 +629,14 @@ llm = None
 vector_index = None
 service_context = None
 query_engine = None
+transcript_lines = []
+llm_config_list = args.llm_config or []
+
 query_engine_params = {
     "response_mode":    args.query_mode,
     "system_prompt":    system_prompt,
     "service_context":  service_context,
 }
-
-transcript_lines = []
 json_log = {
     "comment": "",
     "id": "",
@@ -792,8 +644,6 @@ json_log = {
     "context": system_prompt,
     "queries": [],
 }
-
-llm_config_list = args.llm_config or []
 
 if args.llm_provider or args.llm_server or args.llm_api_key or args.llm_param:
     # Build a configuration string out of the individual options
@@ -806,18 +656,12 @@ if args.llm_provider or args.llm_server or args.llm_api_key or args.llm_param:
 moderator_loaded_last = False
 if args.llm_config_mod:
     if args.llm_config_mod in llm_config_list:
-        # If the moderator goes last, we can generate summaries without reloading the LLM
+        # If the moderator goes last, it can generate summaries without reloading
         llm_config_list.remove(args.llm_config_mod)
         llm_config_list.append(args.llm_config_mod)
         moderator_loaded_last = True
 
 for llm_config in llm_config_list:
-
-    # FIXME any way to release VRAM used by the LLM from the previous iteration?
-    if llm:
-        llm = None
-        gc.collect()
-
     llm, streaming_supported = load_llm_config(llm_config)
     curr_provider, curr_model, curr_server, _, curr_params = split_llm_config(llm_config)
 
@@ -962,12 +806,12 @@ for llm_config in llm_config_list:
 #------------------------------------------------------------------------------
 
 template_consolidate = load_stock_text("template/consolidate.txt") or ""
-template_query = load_stock_text("template/query.txt") or ""
-template_response = load_stock_text("template/response.txt") or ""
+template_query       = load_stock_text("template/consolidate-query.txt") or ""
+template_response    = load_stock_text("template/consolidate-response.txt") or ""
 
 if args.llm_config_mod:
     log(f"Generating final answers...")
-    with TimerUntil("complete"):
+    with TimerUntil("complete"): 
         if not moderator_loaded_last:
             llm, _ = load_llm_config(args.llm_config_mod, set_service_context=True)
 
@@ -1043,24 +887,6 @@ if args.query_log_json:
             f.write(raw_text)
     except Exception as e: log_error(e)
 
-#------------------------------------------------------------------------------
-# Load chat bot instructions
-#------------------------------------------------------------------------------
-
-chat_init = args.chat_init or []
-
-if args.chat:
-    for file in args.chat_init_file or []:
-        log(f"Loading chat instructions from \"{os.path.normpath(file)}\"...")
-        try:
-            with open(file, "r", encoding="utf-8") as f:
-                chat_init_text = strip_and_remove_comments(f.read())
-                chat_init.append(chat_init_text)
-        except Exception as e: log_error(e)
-
-    chat_init_text = "\n".join(chat_init)
-    if len(chat_init_text.strip()) > 0:
-        log_verbose(f"Chat bot instructions:\n{chat_init_text}")
 
 #------------------------------------------------------------------------------
 # Initialize chat engine
@@ -1115,70 +941,29 @@ if args.chat:
 
             if command == "mode":
                 if message in llamaindex_chat_modes:
-                    command, message = "chat", message
+                    curr_engine = chat_engine
+                    if message in llamaindex_chat_modes:
+                        chat_engine.set_chat_mode(message)
+                    else:
+                        log(f"Valid chat modes are: {'' if args.verbose else llamaindex_chat_modes}")
+                        if args.verbose:
+                            log_stock_text("help/chat_modes.txt")
+                    log(f"Chat response mode is \"{message}\"")
                 elif message in llamaindex_query_modes:
                     command, message = "query", message
+                    curr_engine = query_engine
+                    if message in llamaindex_query_modes:
+                        query_engine.set_response_mode(message)
+                    else:
+                        log(f"Valid query modes are: {llamaindex_query_modes}")
+                        if args.verbose:
+                            log_stock_text("help/query_modes.txt")
+                    log(f"Query response mode is \"{message}\"")                
                 else:
                     log(f"Chat modes:  {llamaindex_chat_modes}")
                     log(f"Query modes: {llamaindex_query_modes}")
                     continue
 
-            if command == "chat":
-                curr_engine = chat_engine
-                if message in llamaindex_chat_modes:
-                    chat_engine.set_chat_mode(message)
-                else:
-                    log(f"Valid chat modes are: {'' if args.verbose else llamaindex_chat_modes}")
-                    log_verbose("\tsimple:  chat with LLM, without making use of a knowledge base")
-                    log_verbose("\treact:   use a ReAct agent loop with query engine tools")
-                    log_verbose("\topenai:  use an OpenAI function calling agent loop")
-                    log_verbose("\tbest:    select between react and openapi based on the current LLM")
-                    log_verbose("\tcondense_question:")
-                    log_verbose("\t  - condense conversation and latest user message to a standalone question")
-                    log_verbose("\tcontext:")
-                    log_verbose("\t  - retrieve text from the index using the user's message")
-                    log_verbose("\t  - use the context in the system prompt to generate a response")
-                    log_verbose("\tcondense_plus_context: ")
-                    log_verbose("\t  - condense a conversation and latest user message to a standalone question")
-                    log_verbose("\t  - build a context for the standalone question from a retriever")
-                    log_verbose("\t  - then pass the context along with prompt and user message to LLM to generate a response")
-                log(f"Chat response mode is \"{message}\"")
-
-            elif command == "query":
-                curr_engine = query_engine
-                if message in llamaindex_query_modes:
-                    query_engine.set_response_mode(message)
-                else:
-                    log(f"Valid query modes are: {llamaindex_query_modes}")
-                    log_verbose("\taccumulate:")
-                    log_verbose("\t  - synthesize a response for each text chunk")
-                    log_verbose("\t  - combine them into a single response")
-                    log_verbose("\tcompact:")
-                    log_verbose("\t  - consolidate text chunks into larger chunks")
-                    log_verbose("\t  - refine answers across them (faster than refine)")
-                    log_verbose("\t  - (this is faster than refine)")
-                    log_verbose("\tcompact_accumulate:")
-                    log_verbose("\t  - consolidate text chunks into larger chunks")
-                    log_verbose("\t  - accumulate answers for each of them")
-                    log_verbose("\t  - combine them into a single response")
-                    log_verbose("\t  - (this is faster than accumulate)")
-                    log_verbose("\tgeneration: ")
-                    log_verbose("\t  - ignore context, just use LLM to generate responses")
-                    log_verbose("\t  - accumulate all responses into a single response")
-                    log_verbose("\tno_text: ")
-                    log_verbose("\t  - return the retrieved context nodes, without synthesizing a final response")
-                    log_verbose("\trefine: ")
-                    log_verbose("\t  - use the first node, along with the query, to generate an initial answer")
-                    log_verbose("\t  - pass this answer, the query, and the second node into a \"refine prompt\"")
-                    log_verbose("\t  - process the remaining nodes and continue to refine the answer")
-                    log_verbose("\tsimple_summarize: ")
-                    log_verbose("\t  - merge all text chunks into one, and make a LLM call")
-                    log_verbose("\t  - this will fail if the merged text chunk exceeds the context window size")
-                    log_verbose("\ttree_summarize: ")
-                    log_verbose("\t  - generate a summary prompt seeded with the query")
-                    log_verbose("\t  - build a tree index over the set of candidate nodes in a bottom-up fashion")
-                    log_verbose("\t  - return the root node as the response")
-                log(f"Query response mode is \"{message}\"")
 
             elif command == "clear":
                 chat_engine.reset()
@@ -1186,6 +971,29 @@ if args.chat:
             elif command == "verbose":
                 args.verbose = (not message or message == "on")
                 log(f"Verbose mode is {'on' if args.verbose else 'off'}")
+
+            #elif command == "index":
+            # mode index exit verbose /help
+            # /provider /model /server /api-key /param 
+            # /cliche craz
+            # /clear /verbose /help
+            # /log /response 
+            # /device
+            # /chat context    
+            
+            elif command in exit_commands:
+                break
+                
+            elif command == "clear":
+            elif command == "clear":
+            elif command == "clear":
+            elif command == "clear":
+            elif command == "clear":
+            elif command == "clear":
+                chat_engine.reset()
+
+
+            
 
             else:
                 log(f"Commands: chat, query, mode, clear, verbose")
@@ -1240,7 +1048,9 @@ log_verbose(f"\nTiger out, peace ({time_since(start_time)})")
 
 
 
+def main():
 
-def get_requirements(path: str):
-    return [l.strip() for l in open(path)]
+
+if __name__ == "__main__":
+    main()
 

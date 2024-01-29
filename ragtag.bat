@@ -1,2 +1,2 @@
 @echo off
-python3 %~dp0\ragtag.py %*
+python %~dp0\ragtag.py %*

@@ -66,4 +66,5 @@ The original query and all draft responses follow. Begin the first section
 of your response immediately, with no commentary.
 
 {{query}}
+
 {{responses}}
