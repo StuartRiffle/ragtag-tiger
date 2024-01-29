@@ -1,4 +1,4 @@
-# rule/always-answer-first.txt
+# rule/answer-then-explain.txt
 # RAG/TAG Tiger (C) 2024 Stuart Riffle
 # https://github.com/stuartriffle/ragtag-Tiger
 

@@ -1,11 +1,20 @@
 
-from util.timer import
+import os, email, hashlib
+import shutil
+from files import archive_file_types, mime_file_types
+
+
+from logging import log, log_verbose, log_error
+from files import cleanpath
+
 
 def unpack_mime(file_bytes, output_folder, container_file, container_type):
-    looks_like_binary = any(b < 32 or b > 127 for b in file_bytes)
-    tricksy_binary_doc_file = looks_like_binary and container_type == ".doc"
-    if tricksy_binary_doc_file:
-        return
+
+    if container_type == ".doc":
+        looks_like_binary = any(b < 32 or b > 127 for b in file_bytes)
+        if looks_like_binary:
+            # Unsupported old MS Word doc
+            return
 
     msg = email.message_from_bytes(file_bytes, policy=email.policy.default)
 
@@ -21,6 +30,7 @@ def unpack_mime(file_bytes, output_folder, container_file, container_type):
             part_encoding = part.get_content_charset() or "utf-8"
             part_text = part_content.decode(part_encoding, errors="ignore")
             part_content = part_text.encode("utf-8", errors="ignore")
+
             if part_type == "text/html":
                 output_filename = filename_prefix + ".html"
             else:
@@ -37,6 +47,7 @@ def unpack_mime(file_bytes, output_folder, container_file, container_type):
 
 def unpack_temp_container(container_file, temp_folder):
     """Unpack a container file into a temporary folder"""
+
     true_name = cleanpath(container_file)
     name_hash = hashlib.md5(true_name.encode()).hexdigest()
     output_folder = os.path.join(temp_folder, os.path.basename(container_file) + f"-{name_hash}.temp")

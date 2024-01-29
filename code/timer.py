@@ -12,8 +12,8 @@ class TimerScope:
         self.start_time = time.time()
         return self
     def __exit__(self, exc_type, exc_val, exc_tb):
-        elapsed = time.time() - self.start_time
         if self.exitfunc and not exc_type:
+            elapsed = time.time() - self.start_time
             self.exitfunc(elapsed)
 
 class TimerUntil(TimerScope):
@@ -23,7 +23,6 @@ class TimerUntil(TimerScope):
         self.prefix = prefix
         self.suffix = suffix
         self.msg    = msg
-
     def on_exit(self, elapsed):
         print(f"{self.prefix}{self.msg} ({elapsed:.3f} sec){self.suffix}")
 

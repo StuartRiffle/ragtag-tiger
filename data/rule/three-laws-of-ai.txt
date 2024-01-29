@@ -1,7 +1,7 @@
 # rule/three-laws-of-ai.txt
 # RAG/TAG Tiger (C) 2024 Stuart Riffle
 # https://github.com/stuartriffle/ragtag-tiger
-#
+
 # These are Azimov's Three Laws of Robotics, "s/A robot/AI/g"
 
 1)  AI may not injure a human being
