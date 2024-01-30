@@ -2,7 +2,7 @@
 # Copyright (c) 2024 Stuart Riffle
 # github.com/stuartriffle/ragtag-tiger
 
-# Only import what is required for startup and argparse initialization here, everything else goes down below
+# Don't import everything here, only what is needed for command line parsing
 import os, time, argparse, shlex
 
 program_name            = "RAG/TAG Tiger"
@@ -136,6 +136,28 @@ for file in args.source_list or []:
         log_error(e)
 
 #------------------------------------------------------------------------------
+# User queries
+#------------------------------------------------------------------------------
+
+queries = args.query or []
+
+for file in args.query_file or []:
+    raglog(f"Loading query from \"{file}\"...")
+    try:
+        with open(file, "r", encoding="utf-8") as f:
+            query_text = strip_and_remove_comments(f.read())
+            queries.append(query_text)
+    except Exception as e: log_error(e)
+
+for file in args.query_list or []:
+    raglog(f"Loading single-line queries from \"{file}\"...")
+    try:
+        with open(file, "r", encoding="utf-8") as f:
+            short_queries = strip_and_remove_comments(f.read()).splitlines()
+            queries.extend(short_queries)
+    except Exception as e: log_error(e)
+
+#------------------------------------------------------------------------------
 # System prompt
 #------------------------------------------------------------------------------
 
@@ -160,28 +182,6 @@ if len(system_prompt) > 0:
     raglog_verbose(f"System prompt:\n{system_prompt}")
 
 #------------------------------------------------------------------------------
-# User queries
-#------------------------------------------------------------------------------
-
-queries = args.query or []
-
-for file in args.query_file or []:
-    raglog(f"Loading query from \"{file}\"...")
-    try:
-        with open(file, "r", encoding="utf-8") as f:
-            query_text = strip_and_remove_comments(f.read())
-            queries.append(query_text)
-    except Exception as e: log_error(e)
-
-for file in args.query_list or []:
-    raglog(f"Loading single-line queries from \"{file}\"...")
-    try:
-        with open(file, "r", encoding="utf-8") as f:
-            short_queries = strip_and_remove_comments(f.read()).splitlines()
-            queries.extend(short_queries)
-    except Exception as e: log_error(e)
-
-#------------------------------------------------------------------------------
 # Chat instructions
 #------------------------------------------------------------------------------
 
@@ -189,12 +189,13 @@ chat_init = args.chat_init or []
 
 if args.chat:
     for file in args.chat_init_file or []:
-        raglog(f"Loading chat instructions from \"{os.path.normpath(file)}\"...")
+        raglog(f"Loading chat instructions from \"{cleanpath(file)}\"...")
         try:
             with open(file, "r", encoding="utf-8") as f:
                 chat_init_text = strip_and_remove_comments(f.read())
                 chat_init.append(chat_init_text)
-        except Exception as e: log_error(e)
+        except Exception as e: 
+            log_error(e)
 
     chat_init_text = "\n".join(chat_init)
     if len(chat_init_text.strip()) > 0:
@@ -208,7 +209,7 @@ files_to_index = []
 temp_folder = None
 
 if len(search_specs) > 0:
-    raglog_verbose(f"Relative paths will be based on current directory \"{os.path.normpath(os.getcwd())}\"")
+    raglog_verbose(f"Relative paths will be based on current directory \"{cleanpath(os.getcwd())}\"")
     raglog(f"Searching for files...")
     with TimerUntil("complete"):
         files_to_check = []
@@ -239,7 +240,7 @@ if len(search_specs) > 0:
             for container in containers:
                 if not temp_folder:
                     try:
-                        temp_folder = os.path.normpath(tempfile.mkdtemp())
+                        temp_folder = cleanpath(tempfile.mkdtemp())
                         raglog_verbose(f"Temporary files will be stored in \"{temp_folder}\"")
                         raglog(f"Unpacking {len(containers)} containers...")
                     except Exception as e:
@@ -439,7 +440,7 @@ for llm_config in llm_config_list:
 
     if not vector_index:
         if args.index_load:
-            info = f" from \"{os.path.normpath(args.index_load)}\"" if args.verbose else ""
+            info = f" from \"{cleanpath(args.index_load)}\"" if args.verbose else ""
             raglog(f"Loading vector index{info}...")
             try:
                 with TimerUntil("loaded"):
@@ -463,7 +464,7 @@ for llm_config in llm_config_list:
             except Exception as e: log_error(e)
 
         if args.index_store:
-            info = f" in \"{os.path.normpath(args.index_store)}\"" if args.verbose else ""
+            info = f" in \"{cleanpath(args.index_store)}\"" if args.verbose else ""
             raglog(f"Storing vector index{info}...")
             try:
                 with TimerUntil("index stored"):
@@ -577,7 +578,7 @@ template_response    = load_stock_text("template/consolidate-response.txt")
 
 if args.llm_config_mod:
     raglog(f"Generating final answers...")
-    
+
     with TimerUntil("complete"): 
         if not moderator_loaded_last:
             llm, _ = load_llm_config(args.llm_config_mod, set_service_context=True)
@@ -640,14 +641,14 @@ if args.llm_config_mod:
 #------------------------------------------------------------------------------
 
 if args.query_log:
-    raglog(f"Appending query log to \"{os.path.normpath(args.query_log)}\"...")
+    raglog(f"Appending query log to \"{cleanpath(args.query_log)}\"...")
     try:
         with open(args.query_log, "a", encoding="utf-8") as f:
             f.write("\n".join(transcript_lines))
     except Exception as e: log_error(e)
 
 if args.query_log_json:
-    raglog(f"Writing JSON log to \"{os.path.normpath(args.query_log_json)}\"...")
+    raglog(f"Writing JSON log to \"{cleanpath(args.query_log_json)}\"...")
     try:
         with open(args.query_log_json, "w", encoding="utf-8") as f:
             raw_text = json.dumps(json_log, indent=4)
@@ -676,7 +677,7 @@ if args.chat:
     raglog(f"Entering RAG chat (type \"bye\" to exit, CTRL-C to interrupt)...")
     raglog_verbose(f"\t- the LlamaIndex chat mode is \"{args.chat_mode}\"")
     if args.chat_log:
-        raglog_verbose(f"\t- logging chat to \"{os.path.normpath(args.chat_log)}\"")
+        raglog_verbose(f"\t- logging chat to \"{cleanpath(args.chat_log)}\"")
     raglog("")
     
     thinking_message = f"{response_prefix}...thinking... "
@@ -739,7 +740,9 @@ if args.chat:
 
             elif command == "verbose":
                 args.verbose = (not message or message == "on")
-                raglog(f"Verbose mode is {'on' if args.verbose else 'off'}")
+                raglog_set_verbose(args.verbose)
+                raglog(f"Verbose mode {'ON' if args.verbose else 'off'}")
+                continue
 
             #elif command == "index":
             # mode index exit verbose /help
@@ -750,17 +753,11 @@ if args.chat:
             # /device
   
             
-            elif command == "provider":
-                pass
-            elif command == "model":
-                pass
-            elif command == "server":
-                pass
-            elif command == "api-key":
-                pass
+
             elif command == "param":
                 pass
             elif command == "help":
+
                 pass
 
 

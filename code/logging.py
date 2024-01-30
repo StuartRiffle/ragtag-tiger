@@ -13,13 +13,6 @@ raglog_color_themes = {
         "debug": "grey",
         "verbose": "cyan",
     },
-    "ice": {
-        "error": "red",
-        "warning": "yellow",
-        "info": "white",
-        "debug": "grey",
-        "verbose": "cyan",
-    },
 }
 
 def raglog_set_verbosity(verbose):
@@ -31,12 +24,14 @@ def raglog(msg, color=None, **kwargs):
     else:
         print(msg, **kwargs)
 
+def raglog_style_to_color_string(style):
+    if raglog_in_color and raglog_curr_theme in raglog_color_themes:
+        if style in raglog_color_themes[raglog_curr_theme]:
+            return raglog_color_themes[raglog_curr_theme][style]
+    return None
+
 def raglog_in_style(msg, style=None, **kwargs):
-    color = None
-    if raglog_in_color:
-        if raglog_curr_theme in raglog_color_themes:
-            if style in raglog_color_themes[raglog_curr_theme]:
-                color = raglog_color_themes[raglog_curr_theme][style]
+    color = raglog_style_to_color_string(style)
     raglog(msg, color, **kwargs)
 
 def raglog_verbose(msg, color=None, **kwargs):

@@ -1,6 +1,5 @@
 # RAG/TAG Tiger - extensions.py
 # Copyright (c) 2024 Stuart Riffle
-# github.com/stuartriffle/ragtag-tiger
 
 built_in_loaders = set([
     # SimpleDirectoryReader supports these out-of-the-box

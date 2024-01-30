@@ -9,9 +9,10 @@ from logging import raglog, raglog_verbose, raglog_error
 shutil.register_unpack_format('7zip', ['.7z'], py7zr.unpack_7zarchive)
 
 def unpack_mime(file_bytes, output_folder, container_file, container_type):
+    """Unpack MIME container file parts into a folder"""
 
     if container_type == ".doc" and any(b < 32 or b > 127 for b in file_bytes):
-        # Old MS Word binary document
+        # Nice try, ancient MS Word binary file
         return
 
     msg = email.message_from_bytes(file_bytes, policy=email.policy.default)

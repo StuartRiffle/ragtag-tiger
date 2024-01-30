@@ -62,10 +62,10 @@ def clean_up_temporary_files(tempdir, verbose=False):
         else:
             log_verbose(f"\t...success ({time_since(time_before)})")
 
-def strip_and_remove_comments(text):
+def strip_and_remove_comments(text, comment_prefix="#"):
     lines = text.splitlines()
     lines = [line.strip() for line in lines if line.strip()]
-    lines = [line for line in lines if not line.startswith('#')]
+    lines = [line for line in lines if not line.startswith(comment_prefix)]
     return "\n".join(lines)
 
 def resolve_stock_data_prefix(path):
@@ -75,7 +75,7 @@ def resolve_stock_data_prefix(path):
         path = os.path.join(data_path, path[1:])
     return path
 
-def load_stock_data(path):
+def load_stock_file(path):
     fixedpath = cleanpath(resolve_stock_data_prefix(os.path.join('+', path)))
     try: 
         with open(fixedpath, "r", encoding="utf-8") as f: 
@@ -84,16 +84,28 @@ def load_stock_data(path):
         log_error(f"failed loading \"{fixedpath}\": {e}")
     return None
 
-def load_stock_text(path):
-    return str(load_stock_data(path))
+def load_stock_text(path, sanitize=False, default_value=""):
+    data = load_stock_file(path)
+    if data:
+        text = str(data)
+        if sanitize:
+            text = strip_and_remove_comments(text)
+        return text
+    return default_value
 
-def cleanpath(path):
-    path = resolve_stock_data_prefix(path)
+def cleanpath(path, resolve_stock_folder=True, make_unique=False):
+    """Clean up a path, optionally making it absolute and unique"""
+
+    if resolve_stock_folder:
+        # Access built-in files like stock chat instructions
+        path = resolve_stock_data_prefix(path)
+
     path = os.path.normpath(path)
-    path = os.path.abspath(path)
-    path = os.path.realpath(path)
-    path = os.path.normcase(path)
+
+    # Canonical form to allow identification redundant file references
+    if make_unique:
+        path = os.path.realpath(path)
+        path = os.path.abspath(path)
+        path = os.path.normcase(path)
+
     return path        
-
-
-
