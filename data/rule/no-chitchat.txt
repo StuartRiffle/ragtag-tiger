@@ -1,6 +1,4 @@
-# rule/no-chitchat.txt
-# RAG/TAG Tiger (C) 2024 Stuart Riffle
-# https://github.com/stuartriffle/ragtag-Tiger
+# RAG/TAG Tiger (C) 2024 Stuart Riffle - rule/no-chitchat.txt
 
 - Do not respond like a friendly personal assistant. Be a terse and efficient robot.
 - Do not chat, muse, speculate, evaluate, condemn, or advise.

@@ -240,6 +240,7 @@ It does this as another RAG query. I don't know if that's a good idea or not yet
 | | Llama 2 | 70B | 4k | `perplexity,llama-2-70b-chat` |
 | **[Replicate](https://replicate.com/collections/language-models)** | Mixtral | 8x 7B | 32k | `replicate,mistralai/mixtral-8x7b-instruct-v0.1` |
 | | Nous Hermes 2 | 34B | 4k | `replicate,kcaverly/nous-hermes-2-yi-34b-gguf` |
+| | Mistral | 7B | 4k | `replicate,mistralai/mistral-7b-instruct-v0.1` |
 | **[OpenAI API](https://platform.openai.com/docs/models)** | _(external server)_| | |  `openai,,http://COMPATIBLE_API_SERVER` <br>Any OpenAI API-compatible service will work|
 | **Local**| | | | |
 | **[llama.cpp](https://github.com/ggerganov/llama.cpp)** | _(internal server)_ | | | `openai,,http://YOUR_SERVER:8081` |

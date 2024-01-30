@@ -1,6 +1,4 @@
-# be-brief.txt
-# RAG/TAG Tiger (C) 2024 Stuart Riffle
-# https://github.com/stuartriffle/ragtag-Tiger
+# RAG/TAG Tiger (C) 2024 Stuart Riffle - rule/be-brief.txt
 
 - Be terse and direct.
 - Do not print anything that does not directly contribute to the response required.

@@ -1,5 +1,3 @@
-# rule/step-by-step.txt
-# RAG/TAG Tiger (C) 2024 Stuart Riffle
-# https://github.com/stuartriffle/ragtag-Tiger
+# RAG/TAG Tiger (C) 2024 Stuart Riffle - rule/step-by-step.txt
 
 Let's go step by step.

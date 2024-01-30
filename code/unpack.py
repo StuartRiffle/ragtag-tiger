@@ -3,8 +3,9 @@
 # github.com/stuartriffle/ragtag-tiger
 
 import os, email, hashlib, shutil, py7zr
-from files import cleanpath, archive_file_types, mime_file_types
-from logging import raglog, raglog_verbose, raglog_error
+from files import cleanpath
+from extensions import archive_file_types, mime_file_types
+from lograg import lograg, lograg_verbose, lograg_error
 
 shutil.register_unpack_format('7zip', ['.7z'], py7zr.unpack_7zarchive)
 
@@ -36,7 +37,7 @@ def unpack_mime(file_bytes, output_folder, container_file, container_type):
         elif part_type == "application/octet-stream" or part_maintype == "image":
             output_filename = f"{filename_prefix}-{part.get_filename()}"
         else:
-            raglog_verbose(f"\tignoring unrecognized MIME part of type \"{part_type}\" in \"{cleanpath(container_file)}\"")
+            lograg_verbose(f"\tignoring unrecognized MIME part of type \"{part_type}\" in \"{cleanpath(container_file)}\"")
             continue
 
         file_path = os.path.join(output_folder, output_filename)
@@ -65,9 +66,9 @@ def unpack_container_to_temp(container_file, temp_folder):
         unpacked_files = [os.path.join(output_folder, f) for f in os.listdir(output_folder)]
 
     except Exception as e: 
-        raglog_error(f"failure unpacking \"{cleanpath(container_file)}\" into \"{os.path.normpath(output_folder)}\": {e}")
+        lograg_error(f"failure unpacking \"{cleanpath(container_file)}\" into \"{os.path.normpath(output_folder)}\": {e}")
         try:
-            raglog_verbose(f"\tremoving \"{os.path.normpath(output_folder)}\"...")
+            lograg_verbose(f"\tremoving \"{os.path.normpath(output_folder)}\"...")
             shutil.rmtree(output_folder)
         except: pass
 

@@ -5,7 +5,7 @@
 import os
 import torch
 from files import *
-from logging import raglog, log_verbose, log_error
+from lograg import lograg, lograg_verbose, lograg_error
 from timer import TimerUntil
 
 openai_model_default    = "gpt-3.5-turbo-instruct"
@@ -29,7 +29,7 @@ def load_llm(provider, model, server, api_key, params, verbose=False, set_servic
                 api_key = api_key or os.environ.get("OPENAI_API_KEY", "")
                 if not server:
                     model_name = model or openai_model_default
-                    raglog(f"Preparing OpenAI model \"{model_name}\"...")
+                    lograg(f"Preparing OpenAI model \"{model_name}\"...")
                     from llama_index.llms import OpenAI
                     result = OpenAI(
                         model=model_name,
@@ -40,7 +40,7 @@ def load_llm(provider, model, server, api_key, params, verbose=False, set_servic
                 else:
                     # API compatible server
                     model_name = model or "default"
-                    raglog(f"Preparing model \"{model_name}\" on server \"{server}\"...")
+                    lograg(f"Preparing model \"{model_name}\" on server \"{server}\"...")
                     from llama_index.llms import OpenAILike
                     result = OpenAILike(
                         model=model_name,
@@ -55,7 +55,7 @@ def load_llm(provider, model, server, api_key, params, verbose=False, set_servic
             elif provider == "google":
                 api_key = api_key or os.environ.get("GEMINI_API_KEY", "")
                 model_name = model or google_model_default
-                raglog(f"Preparing Google model \"{model_name}\"...")
+                lograg(f"Preparing Google model \"{model_name}\"...")
                 from llama_index.llms import PaLM
                 result = PaLM(
                     api_key=api_key,
@@ -68,7 +68,7 @@ def load_llm(provider, model, server, api_key, params, verbose=False, set_servic
                 if torch.cuda.is_available():
                     # FIXME - this does nothing?
                     model_kwargs["n_gpu_layers"] = -1
-                raglog(f"Preparing llama.cpp model \"{os.path.normpath(model)}\"...")
+                lograg(f"Preparing llama.cpp model \"{os.path.normpath(model)}\"...")
                 from llama_index.llms import LlamaCPP
                 result = LlamaCPP(
                     model_path=model,
@@ -79,7 +79,7 @@ def load_llm(provider, model, server, api_key, params, verbose=False, set_servic
             elif provider == "perplexity":
                 api_key = api_key or os.environ.get("PERPLEXITYAI_API_KEY", "")
                 model_name = model or perplexity_default
-                raglog(f"Preparing Perplexity model \"{model_name}\"...")
+                lograg(f"Preparing Perplexity model \"{model_name}\"...")
                 from llama_index.llms import Perplexity
                 result = Perplexity(
                     api_key=api_key,
@@ -90,7 +90,7 @@ def load_llm(provider, model, server, api_key, params, verbose=False, set_servic
             elif provider == "replicate":
                 api_key = api_key or os.environ.get("REPLICATE_API_TOKEN", "")
                 model_name = model or replicate_default
-                raglog(f"Preparing Replicate model \"model_name)\"...")
+                lograg(f"Preparing Replicate model \"model_name)\"...")
                 from llama_index.llms import Replicate
                 result = Replicate(
                     model=model_name,
@@ -104,7 +104,7 @@ def load_llm(provider, model, server, api_key, params, verbose=False, set_servic
                 if model_name in hf_model_nicknames:
                     model_desc = f" (\"{model_name}\")"
                     model_name = hf_model_nicknames[model_name]
-                raglog(f"Preparing HuggingFace model \"{model_name}\"{model_desc}...")
+                lograg(f"Preparing HuggingFace model \"{model_name}\"{model_desc}...")
 
                 from llama_index.llms import HuggingFaceLLM
                 result = HuggingFaceLLM(
@@ -121,7 +121,7 @@ def load_llm(provider, model, server, api_key, params, verbose=False, set_servic
                 set_global_service_context(service_context)
 
     except Exception as e: 
-        log_error(f"failure initializing LLM: {e}", exit_code=1)
+        lograg_error(f"failure initializing LLM: {e}", exit_code=1)
 
     return result, streaming_supported
 

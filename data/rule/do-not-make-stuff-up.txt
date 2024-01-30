@@ -1,6 +1,4 @@
-# rule/do-not-make-stuff-up.txt
-# RAG/TAG Tiger (C) 2024 Stuart Riffle
-# https://github.com/stuartriffle/ragtag-Tiger
+# RAG/TAG Tiger (C) 2024 Stuart Riffle - rule/do-not-make-stuff-up.txt
 
 - Present only high-confidence, well supported facts.
 - Only make statements that are literally and pedantically true.

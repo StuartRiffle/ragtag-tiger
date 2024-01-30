@@ -3,7 +3,7 @@
 # github.com/stuartriffle/ragtag-tiger
 
 import os, pathspec, shutil, time
-from logging import raglog, log_verbose, log_error
+from lograg import lograg, lograg_verbose, lograg_error
 from timer import time_since
 
 def split_root_from_spec(spec):
@@ -29,10 +29,10 @@ def match_files_to_index(search_spec):
             matches = relative_pathspec.match_tree(file_spec_root)
             matches = [os.path.join(file_spec_root, match) for match in matches]
 
-            log_verbose(f"\t{len(matches)} files match \"{os.path.normpath(file_spec)}\" from \"{os.path.normpath(file_spec_root)}\"")
+            lograg_verbose(f"\t{len(matches)} files match \"{os.path.normpath(file_spec)}\" from \"{os.path.normpath(file_spec_root)}\"")
             all_matches.extend(matches)
 
-    except Exception as e: log_error(e)
+    except Exception as e: lograg_error(e)
     return all_matches
 
 def separate_files_by_extension(file_list, extensions):
@@ -44,11 +44,11 @@ def separate_files_by_extension(file_list, extensions):
 def clean_up_temporary_files(tempdir, verbose=False):
     if tempdir and os.file.exists(tempdir) and os.path.isdir(tempdir):
         info = f" \"{tempdir}\"" if verbose else ""
-        raglog(f"Removing temporary folder{info}...")
+        lograg(f"Removing temporary folder{info}...")
         time_before = time.time()
         for reattempt_after_delay in [0, 2, 5, 10]:
             if reattempt_after_delay:
-                log_verbose(f"\t...retrying in {reattempt_after_delay} seconds")
+                lograg_verbose(f"\t...retrying in {reattempt_after_delay} seconds")
                 time.sleep(reattempt_after_delay)
             try:
                 shutil.rmtree(tempdir)
@@ -56,11 +56,11 @@ def clean_up_temporary_files(tempdir, verbose=False):
                 break
             except Exception as e: 
                 # Errors are expected sometimes if the OS has files open for virus scanning, etc.
-                log_verbose(f"\tignoring error: {e}")
+                lograg_verbose(f"\tignoring error: {e}")
         if tempdir:
-            log_error(f"couldn't remove temporary folder \"{tempdir}\"")
+            lograg_error(f"couldn't remove temporary folder \"{tempdir}\"")
         else:
-            log_verbose(f"\t...success ({time_since(time_before)})")
+            lograg_verbose(f"\t...success ({time_since(time_before)})")
 
 def strip_and_remove_comments(text, comment_prefix="#"):
     lines = text.splitlines()
@@ -81,7 +81,7 @@ def load_stock_file(path):
         with open(fixedpath, "r", encoding="utf-8") as f: 
             return f.read()
     except Exception as e: 
-        log_error(f"failed loading \"{fixedpath}\": {e}")
+        lograg_error(f"failed loading \"{fixedpath}\": {e}")
     return None
 
 def load_stock_text(path, sanitize=False, default_value=""):

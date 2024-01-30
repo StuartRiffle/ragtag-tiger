@@ -1,6 +1,4 @@
-# rule/do-not-dumb-stuff-down.txt
-# RAG/TAG Tiger (C) 2024 Stuart Riffle
-# https://github.com/stuartriffle/ragtag-Tiger
+# RAG/TAG Tiger (C) 2024 Stuart Riffle - rule/do-not-dumb-stuff-down.txt
 
 - Assume the reader is a subject matter expert.
 - Do not explain acronyms, technical jargon, or advanced concepts unless prompted.

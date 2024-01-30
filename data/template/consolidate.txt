@@ -1,6 +1,4 @@
-# template/consolidate.txt
-# RAG/TAG Tiger (C) 2024 Stuart Riffle
-# https://github.com/stuartriffle/ragtag-tiger
+# RAG/TAG Tiger (C) 2024 Stuart Riffle - template/consolidate.txt
 
 #-----------------------------------------------------------------------------#
 # This is an instruction template for a "moderator" LLM that consolidates the #

@@ -91,18 +91,18 @@ if args.version:
     print(f'{program_name} v{program_version}')
     exit(0)
 
-from logging import raglog, raglog_verbose, raglog_error, raglog_set_verbose
-raglog_set_verbose(args.verbose)
+from lograg import lograg, lograg_verbose, lograg_error, lograg_set_verbose
+lograg_set_verbose(args.verbose)
 
-raglog_verbose("")
-raglog(f"{program_name} v{program_version}")
-raglog_verbose(f"{program_copyright}\n{program_repository}\n")
+lograg_verbose("")
+lograg(f"{program_name} v{program_version}")
+lograg_verbose(f"{program_copyright}\n{program_repository}\n")
 
 #------------------------------------------------------------------------------
 # Imports
 #------------------------------------------------------------------------------
    
-raglog("Waking up tiger...")
+lograg("Waking up tiger...")
 
 import json, tempfile, hashlib, humanfriendly
 from llama_index.text_splitter import CodeSplitter
@@ -112,7 +112,7 @@ from timer import TimerUntil, time_since
 from llm import load_llm_config, split_llm_config
 from unpack import unpack_container_to_temp
 
-raglog_verbose(f"\t...at your service ({time_since(program_start_time)})")
+lograg_verbose(f"\t...at your service ({time_since(program_start_time)})")
 
 #------------------------------------------------------------------------------
 # Search specs (like "foo/bar/**/*.cpp")
@@ -133,7 +133,7 @@ for file in args.source_list or []:
             specs = strip_and_remove_comments(f.read())
             search_specs.extend(specs)
     except Exception as e:
-        log_error(e)
+        lograg_error(e)
 
 #------------------------------------------------------------------------------
 # User queries
@@ -142,20 +142,20 @@ for file in args.source_list or []:
 queries = args.query or []
 
 for file in args.query_file or []:
-    raglog(f"Loading query from \"{file}\"...")
+    lograg(f"Loading query from \"{file}\"...")
     try:
         with open(file, "r", encoding="utf-8") as f:
             query_text = strip_and_remove_comments(f.read())
             queries.append(query_text)
-    except Exception as e: log_error(e)
+    except Exception as e: lograg_error(e)
 
 for file in args.query_list or []:
-    raglog(f"Loading single-line queries from \"{file}\"...")
+    lograg(f"Loading single-line queries from \"{file}\"...")
     try:
         with open(file, "r", encoding="utf-8") as f:
             short_queries = strip_and_remove_comments(f.read()).splitlines()
             queries.extend(short_queries)
-    except Exception as e: log_error(e)
+    except Exception as e: lograg_error(e)
 
 #------------------------------------------------------------------------------
 # System prompt
@@ -164,22 +164,22 @@ for file in args.query_list or []:
 system_prompt_lines = []
 
 if args.context:
-    raglog(f"Adding system prompt from the command line...")
+    lograg(f"Adding system prompt from the command line...")
     for snippet in args.context:
         system_prompt_lines.append(snippet)
 
 for file in args.context_file or []:
-    raglog(f"Adding system prompt from \"{file}\"...")
+    lograg(f"Adding system prompt from \"{file}\"...")
     try:
         with open(file, "r", encoding="utf-8") as f:
             snippet = strip_and_remove_comments(f.read())
             system_prompt_lines.extend(snippet.splitlines())
-    except Exception as e: log_error(e)
+    except Exception as e: lograg_error(e)
 
 system_prompt = "\n".join(system_prompt_lines).strip()
 
 if len(system_prompt) > 0:
-    raglog_verbose(f"System prompt:\n{system_prompt}")
+    lograg_verbose(f"System prompt:\n{system_prompt}")
 
 #------------------------------------------------------------------------------
 # Chat instructions
@@ -189,17 +189,17 @@ chat_init = args.chat_init or []
 
 if args.chat:
     for file in args.chat_init_file or []:
-        raglog(f"Loading chat instructions from \"{cleanpath(file)}\"...")
+        lograg(f"Loading chat instructions from \"{cleanpath(file)}\"...")
         try:
             with open(file, "r", encoding="utf-8") as f:
                 chat_init_text = strip_and_remove_comments(f.read())
                 chat_init.append(chat_init_text)
         except Exception as e: 
-            log_error(e)
+            lograg_error(e)
 
     chat_init_text = "\n".join(chat_init)
     if len(chat_init_text.strip()) > 0:
-        raglog_verbose(f"Chat bot instructions:\n{chat_init_text}")
+        lograg_verbose(f"Chat bot instructions:\n{chat_init_text}")
 
 #------------------------------------------------------------------------------
 # Search for files
@@ -209,8 +209,8 @@ files_to_index = []
 temp_folder = None
 
 if len(search_specs) > 0:
-    raglog_verbose(f"Relative paths will be based on current directory \"{cleanpath(os.getcwd())}\"")
-    raglog(f"Searching for files...")
+    lograg_verbose(f"Relative paths will be based on current directory \"{cleanpath(os.getcwd())}\"")
+    lograg(f"Searching for files...")
     with TimerUntil("complete"):
         files_to_check = []
         for search_spec in search_specs:
@@ -219,11 +219,11 @@ if len(search_specs) > 0:
 
         files_before_filtering = len(files_to_check)
         if args.size_limit > 0:
-            raglog_verbose(f"Ignoring files larger than {humanfriendly.format_size(args.size_limit)}...")
+            lograg_verbose(f"Ignoring files larger than {humanfriendly.format_size(args.size_limit)}...")
             files_to_check = [f for f in files_to_check if os.path.getsize(f) <= args.size_limit]
             files_ignored = (files_before_filtering - len(files_to_check))
             if files_ignored > 0:
-                raglog_verbose(f"\t...{files_ignored} oversized files ignored")
+                lograg_verbose(f"\t...{files_ignored} oversized files ignored")
 
         while files_to_check:
             container_file_types = archive_file_types | mime_file_types
@@ -241,10 +241,10 @@ if len(search_specs) > 0:
                 if not temp_folder:
                     try:
                         temp_folder = cleanpath(tempfile.mkdtemp())
-                        raglog_verbose(f"Temporary files will be stored in \"{temp_folder}\"")
-                        raglog(f"Unpacking {len(containers)} containers...")
+                        lograg_verbose(f"Temporary files will be stored in \"{temp_folder}\"")
+                        lograg(f"Unpacking {len(containers)} containers...")
                     except Exception as e:
-                        log_error(f"failed creating temporary folder \"{temp_folder}\": {e}", exit_code=1)
+                        lograg_error(f"failed creating temporary folder \"{temp_folder}\": {e}", exit_code=1)
 
                 unpacked_files = unpack_container_to_temp(container, temp_folder)
                 all_unpacked_files.extend(unpacked_files)
@@ -276,7 +276,7 @@ if args.ignore_types:
             ignored_extenstions.append(ext)
     if ignored_extenstions:
         ignored_extenstion_list = ", ".join(sorted(ignored_extenstions)).replace(".", "").strip(", ").lower()
-        raglog_verbose(f"Ignoring files with specified extensions: \"{', '.join(ignored_extenstions)}\"")
+        lograg_verbose(f"Ignoring files with specified extensions: \"{', '.join(ignored_extenstions)}\"")
 
 files_with_ext = {}
 for file_path in files_to_index:
@@ -285,25 +285,25 @@ for file_path in files_to_index:
     files_with_ext[ext] = files_with_ext.get(ext, 0) + 1
 
 if args.verbose and len(files_to_index) > 0:
-    raglog_verbose(f"Supported files found:")
+    lograg_verbose(f"Supported files found:")
     sorted_items = sorted(files_with_ext.items(), key=lambda x: x[1], reverse=True)
     for ext, count in sorted_items:
         if ext in supported_ext:
-            raglog_verbose(f"\t{count:<5} {ext}")
+            lograg_verbose(f"\t{count:<5} {ext}")
 
 unsupported_ext = set(files_with_ext.keys()) - supported_ext
 if len(unsupported_ext) > 0:
     type_list = ", ".join(sorted(unsupported_ext)).replace(".", "").strip(", ").lower()
     if args.index_unknown:
-        raglog_verbose(f"WARNING: indexing unknown file types as plain text: {type_list}")
+        lograg_verbose(f"WARNING: indexing unknown file types as plain text: {type_list}")
     else:
-        raglog_verbose(f"Ignoring these unsupported file types: {type_list}")
+        lograg_verbose(f"Ignoring these unsupported file types: {type_list}")
         for ext in unsupported_ext:
             del files_with_ext[ext]
         files_before = len(files_to_index)
         files_to_index = [f for f in files_to_index if os.path.splitext(f)[1] in supported_ext]
         if len(files_to_index) < files_before:
-            raglog_verbose(f"\t...{files_before - len(files_to_index)} files ignored")
+            lograg_verbose(f"\t...{files_before - len(files_to_index)} files ignored")
 
 loader_specs = args.custom_loader or []
 for ext in files_with_ext.keys():
@@ -315,13 +315,13 @@ custom_loaders = {}
 file_extractor_list = {}
 
 if len(loader_specs) > 0:
-    raglog(f"Downloading file loaders from the LlamaIndex hub...")
+    lograg(f"Downloading file loaders from the LlamaIndex hub...")
     from llama_index import download_loader
     for loader_spec in loader_specs:
         try:
             loader_class, _, extensions = loader_spec.partition(':')
             if not extensions:
-                log_error(f"invalid loader spec \"{loader_spec}\"")
+                lograg_error(f"invalid loader spec \"{loader_spec}\"")
                 continue
 
             if not loader_class in custom_loaders:
@@ -332,7 +332,7 @@ if len(loader_specs) > 0:
                 ext = "." + ext.strip(". ")
                 file_extractor_list[ext] = custom_loaders[loader_class]()
 
-        except Exception as e: log_error(e)
+        except Exception as e: lograg_error(e)
 
 #------------------------------------------------------------------------------
 # Chunk all the things
@@ -360,24 +360,24 @@ if len(files_to_index) > 0:
         non_code_files = [f for f in files_to_index if os.path.splitext(f)[1] not in code_ext]
         if len(non_code_files) > 0:
             info = f" {len(non_code_files)}" if args.verbose else ""
-            raglog(f"Loading{info} documents...")
+            lograg(f"Loading{info} documents...")
             with TimerUntil("all documents loaded"):
                 non_code_nodes = load_document_nodes(None, non_code_files, show_progress=args.verbose)
                 document_nodes.extend(non_code_nodes)
                 files_processed += len(non_code_files)
 
         if len(non_code_files) < len(files_to_index):
-            raglog(f"Chunking source code...")
+            lograg(f"Chunking source code...")
             with TimerUntil("all code chunked"):
                 for extensions, code_splitter in source_code_splitters:
                     code_files = [f for f in files_to_index if os.path.splitext(f)[1] in extensions]
                     if len(code_files) > 0:
                         code_nodes = load_document_nodes(code_splitter, code_files, show_progress=args.verbose)
-                        raglog_verbose(f"\t{len(code_files)} files parsed as \"{code_splitter.language}\"")
+                        lograg_verbose(f"\t{len(code_files)} files parsed as \"{code_splitter.language}\"")
                         document_nodes.extend(code_nodes)
                         files_processed += len(code_files)
 
-    except Exception as e: log_error(e)
+    except Exception as e: lograg_error(e)
 
 #------------------------------------------------------------------------------
 # Delete temporary files
@@ -387,7 +387,7 @@ if temp_folder:
     clean_up_temporary_files(temp_folder)
 
 if temp_folder:
-    raglog_verbose(f"\t(will try again before exiting)")
+    lograg_verbose(f"\t(will try again before exiting)")
 
 #------------------------------------------------------------------------------
 # Process the queries on all given LLM configurations in turn
@@ -441,37 +441,37 @@ for llm_config in llm_config_list:
     if not vector_index:
         if args.index_load:
             info = f" from \"{cleanpath(args.index_load)}\"" if args.verbose else ""
-            raglog(f"Loading vector index{info}...")
+            lograg(f"Loading vector index{info}...")
             try:
                 with TimerUntil("loaded"):
                     from llama_index import StorageContext, load_index_from_storage
                     storage_context = StorageContext.from_defaults(persist_dir=args.index_load)
                     vector_index = load_index_from_storage(storage_context, show_progress=args.verbose)            
-            except Exception as e: log_error(e)
+            except Exception as e: lograg_error(e)
 
         if not vector_index:
-            raglog_verbose(f"Creating a new vector index in memory...")
+            lograg_verbose(f"Creating a new vector index in memory...")
             try:
                 vector_index = VectorStoreIndex([])
-            except Exception as e: log_error(e, exit_code=1)
+            except Exception as e: lograg_error(e, exit_code=1)
             
         if len(document_nodes) > 0:
             info = f" {len(document_nodes)}" if args.verbose else ""
-            raglog(f"Indexing{info} document nodes...")
+            lograg(f"Indexing{info} document nodes...")
             try:
                 with TimerUntil("indexing complete"):
                     vector_index.insert_nodes(document_nodes, show_progress=args.verbose)
-            except Exception as e: log_error(e)
+            except Exception as e: lograg_error(e)
 
         if args.index_store:
             info = f" in \"{cleanpath(args.index_store)}\"" if args.verbose else ""
-            raglog(f"Storing vector index{info}...")
+            lograg(f"Storing vector index{info}...")
             try:
                 with TimerUntil("index stored"):
                     if not os.path.exists(args.index_store):
                         os.makedirs(args.index_store)
                     vector_index.storage_context.persist(persist_dir=args.index_store)
-            except Exception as e: log_error(e)
+            except Exception as e: lograg_error(e)
 
     #------------------------------------------------------------------------------
     # Initialize the query engine
@@ -482,7 +482,7 @@ for llm_config in llm_config_list:
             query_engine_params["streaming"] = streaming_supported
             query_engine = vector_index.as_query_engine(**query_engine_params)
 
-        except Exception as e: log_error(f"can't initialize query engine: {e}", exit_code=1)
+        except Exception as e: lograg_error(f"can't initialize query engine: {e}", exit_code=1)
 
     #------------------------------------------------------------------------------
     # Process all the queries
@@ -500,17 +500,17 @@ for llm_config in llm_config_list:
 
     if len(queries) > 0:
         query_count = f"{len(queries)} queries" if len(queries) > 1 else "query"
-        #raglog(f"Running {query_count}...")
+        #lograg(f"Running {query_count}...")
         with TimerUntil(f"all queries complete"):
             for query_idx in range(len(queries)):
                 query = queries[query_idx]
-                query_log_exists = False
-                for log_idx in range(len(json_log["queries"])):
-                    if json_log["queries"][log_idx]["query"] == query:
-                        query_log_exists = True
+                query_lograg_exists = False
+                for lograg_idx in range(len(json_log["queries"])):
+                    if json_log["queries"][lograg_idx]["query"] == query:
+                        query_lograg_exists = True
                         break
 
-                if not query_log_exists:
+                if not query_lograg_exists:
                     query_record = { 
                         "query": query,
                         "response": "",
@@ -518,7 +518,7 @@ for llm_config in llm_config_list:
                         "id": "",
                         "drafts": [],
                     }
-                    log_idx = len(json_log["queries"])
+                    lograg_idx = len(json_log["queries"])
                     json_log["queries"].append(query_record)
 
                 response_tokens = []
@@ -531,7 +531,7 @@ for llm_config in llm_config_list:
 
                 try:
                     with TimerUntil("query complete"):
-                        raglog_verbose(f"\n{query_prefix}{query}\n\t...thinking ", end="", flush=True)
+                        lograg_verbose(f"\n{query_prefix}{query}\n\t...thinking ", end="", flush=True)
                         query_start_time = time.time()
 
                         if streaming_supported:
@@ -540,15 +540,15 @@ for llm_config in llm_config_list:
                                 if len(response_tokens) == 0:
                                     if not token.strip():
                                         continue
-                                    raglog_verbose(f"({time_since(query_start_time)})\n{response_prefix}", end="", flush=True)
+                                    lograg_verbose(f"({time_since(query_start_time)})\n{response_prefix}", end="", flush=True)
 
                                 response_tokens.append(token)
-                                raglog_verbose(token, end="", flush=True)
-                            raglog_verbose("")
+                                lograg_verbose(token, end="", flush=True)
+                            lograg_verbose("")
                             llm_response = "".join(response_tokens).strip()
                         else:
                             llm_response = str(query_engine.query(query))
-                            raglog_verbose(f"({time_since(query_start_time)})\n{response_prefix}{llm_response}")
+                            lograg_verbose(f"({time_since(query_start_time)})\n{response_prefix}{llm_response}")
 
                         transcript_lines.append(f"{query_prefix}{query}\n")
                         transcript_lines.append(f"{response_prefix}{llm_response}\n\n")
@@ -556,17 +556,17 @@ for llm_config in llm_config_list:
                 except Exception as e:
                     llm_response = "ERROR"
                     response_record["error"] = str(e)
-                    raglog_verbose("")
-                    log_error(e)
+                    lograg_verbose("")
+                    lograg_error(e)
 
                 response_record["response"] = llm_response
                 response_record["time"] = time.time() - query_start_time
 
-                json_log["queries"][log_idx]["drafts"].append(response_record)
-                if not "response" in json_log["queries"][log_idx]:
-                    json_log["queries"][log_idx]["response"] = llm_response
+                json_log["queries"][lograg_idx]["drafts"].append(response_record)
+                if not "response" in json_log["queries"][lograg_idx]:
+                    json_log["queries"][lograg_idx]["response"] = llm_response
 
-        raglog_verbose("")
+        lograg_verbose("")
 
 #------------------------------------------------------------------------------
 # Consolidate responses after querying multiple models
@@ -577,7 +577,7 @@ template_query       = load_stock_text("template/consolidate-query.txt")
 template_response    = load_stock_text("template/consolidate-response.txt")
 
 if args.llm_config_mod:
-    raglog(f"Generating final answers...")
+    lograg(f"Generating final answers...")
 
     with TimerUntil("complete"): 
         if not moderator_loaded_last:
@@ -603,13 +603,13 @@ if args.llm_config_mod:
                     llm_response = drafts[response_idx]
                     prompt += f"### RESPONSE {response_idx + 1}\n\n{llm_response['response']}\n\n"
 
-                raglog_verbose(f"{query_prefix}{query}\n\t...consolidating responses, please hold... ", end="", flush=True)
+                lograg_verbose(f"{query_prefix}{query}\n\t...consolidating responses, please hold... ", end="", flush=True)
 
                 try:
                     with TimerUntil("done", prefix=""):
                         full_analysis = str(query_engine.query(prompt))
                 except Exception as e:
-                    log_error(f"failure generating summary: {e}")
+                    lograg_error(f"failure generating summary: {e}")
                     continue
 
                 validation = full_analysis.split("## VALIDATION")[1].split("## EVALUATION")[0].strip()
@@ -617,7 +617,7 @@ if args.llm_config_mod:
                 summary = full_analysis.split("## SUMMARY")[-1].strip()
 
                 if not validation or not evaluation or not summary:
-                    log_error(f"summary formatting error")
+                    lograg_error(f"summary formatting error")
                     continue
 
                 json_log["queries"][query_record_idx]["id"] = hashlib.md5(query.encode()).hexdigest()
@@ -626,7 +626,7 @@ if args.llm_config_mod:
                 json_log["queries"][query_record_idx]["evaluation"] = evaluation
                 json_log["queries"][query_record_idx]["response"] = summary
 
-                raglog_verbose(f"{response_prefix}{summary}\n")
+                lograg_verbose(f"{response_prefix}{summary}\n")
 
                 transcript_lines.append(f"## Query {query_record_idx + 1}\n{query.strip()}\n\n")
                 transcript_lines.append(f"### Validation\n\n{validation.strip()}\n\n")
@@ -634,26 +634,26 @@ if args.llm_config_mod:
                 transcript_lines.append(f"### Summary\n\n{summary.strip()}\n\n")
 
             except Exception as e: 
-                log_error(e)
+                lograg_error(e)
 
 #------------------------------------------------------------------------------
 # Logs or it didn't happen
 #------------------------------------------------------------------------------
 
 if args.query_log:
-    raglog(f"Appending query log to \"{cleanpath(args.query_log)}\"...")
+    lograg(f"Appending query log to \"{cleanpath(args.query_log)}\"...")
     try:
         with open(args.query_log, "a", encoding="utf-8") as f:
             f.write("\n".join(transcript_lines))
-    except Exception as e: log_error(e)
+    except Exception as e: lograg_error(e)
 
-if args.query_log_json:
-    raglog(f"Writing JSON log to \"{cleanpath(args.query_log_json)}\"...")
+if args.query_lograg_json:
+    lograg(f"Writing JSON log to \"{cleanpath(args.query_lograg_json)}\"...")
     try:
-        with open(args.query_log_json, "w", encoding="utf-8") as f:
+        with open(args.query_lograg_json, "w", encoding="utf-8") as f:
             raw_text = json.dumps(json_log, indent=4)
             f.write(raw_text)
-    except Exception as e: log_error(e)
+    except Exception as e: lograg_error(e)
 
 
 #------------------------------------------------------------------------------
@@ -667,18 +667,18 @@ if args.chat:
         chat_engine_params["chat_mode"] = args.chat_mode
         chat_engine_params["system_prompt"] = f"{system_prompt}\n{chat_init}"
         chat_engine = vector_index.as_chat_engine(**chat_engine_params)
-    except Exception as e: log_error(e, exit_code=1)
+    except Exception as e: lograg_error(e, exit_code=1)
 
 #------------------------------------------------------------------------------
 # Interactive chat mode
 #------------------------------------------------------------------------------
 
 if args.chat:
-    raglog(f"Entering RAG chat (type \"bye\" to exit, CTRL-C to interrupt)...")
-    raglog_verbose(f"\t- the LlamaIndex chat mode is \"{args.chat_mode}\"")
+    lograg(f"Entering RAG chat (type \"bye\" to exit, CTRL-C to interrupt)...")
+    lograg_verbose(f"\t- the LlamaIndex chat mode is \"{args.chat_mode}\"")
     if args.chat_log:
-        raglog_verbose(f"\t- logging chat to \"{cleanpath(args.chat_log)}\"")
-    raglog("")
+        lograg_verbose(f"\t- logging chat to \"{cleanpath(args.chat_log)}\"")
+    lograg("")
     
     thinking_message = f"{response_prefix}...thinking... "
     exit_commands = ["bye", "goodbye", "exit", "quit", "peace", "done", "stop", "end"]
@@ -716,9 +716,9 @@ if args.chat:
                     if message in llamaindex_chat_modes:
                         chat_engine.set_chat_mode(message)
                     else:
-                        raglog(f"Valid chat modes are: {'' if args.verbose else llamaindex_chat_modes}")
-                        raglog_verbose(load_stock_text("help/chat_modes.txt"))
-                    raglog(f"Chat response mode is \"{message}\"")
+                        lograg(f"Valid chat modes are: {'' if args.verbose else llamaindex_chat_modes}")
+                        lograg_verbose(load_stock_text("help/chat_modes.txt"))
+                    lograg(f"Chat response mode is \"{message}\"")
                 elif message in llamaindex_query_modes:
                     # Query mode
                     command, message = "query", message
@@ -726,22 +726,21 @@ if args.chat:
                     if message in llamaindex_query_modes:
                         query_engine.set_response_mode(message)
                     else:
-                        raglog(f"Valid query modes are: {llamaindex_query_modes}")
-                        raglog_verbose(load_stock_text("help/query_modes.txt"))
-                    raglog(f"Query response mode is \"{message}\"")                
+                        lograg(f"Valid query modes are: {llamaindex_query_modes}")
+                        lograg_verbose(load_stock_text("help/query_modes.txt"))
+                    lograg(f"Query response mode is \"{message}\"")                
                 else:
-                    raglog(f"Chat modes:  {llamaindex_chat_modes}")
-                    raglog(f"Query modes: {llamaindex_query_modes}")
+                    lograg(f"Chat modes:  {llamaindex_chat_modes}")
+                    lograg(f"Query modes: {llamaindex_query_modes}")
                     continue
-
 
             elif command == "clear":
                 chat_engine.reset()
 
             elif command == "verbose":
                 args.verbose = (not message or message == "on")
-                raglog_set_verbose(args.verbose)
-                raglog(f"Verbose mode {'ON' if args.verbose else 'off'}")
+                lograg_set_verbose(args.verbose)
+                lograg(f"Verbose mode {'ON' if args.verbose else 'off'}")
                 continue
 
             #elif command == "index":
@@ -751,30 +750,15 @@ if args.chat:
             # /clear /verbose /help
             # /log /response 
             # /device
-  
-            
-
-            elif command == "param":
-                pass
-            elif command == "help":
-
-                pass
-
-
-            
-
-            else:
-                raglog(f"Commands: chat, query, mode, clear, verbose")
-                
             continue
 
         if args.chat_log:
             try:
                 with open(args.chat_log, "a", encoding="utf-8") as f:
                     f.write(f"{query_prefix}{message}\n")
-            except Exception as e: log_error(e)
+            except Exception as e: lograg_error(e)
 
-        raglog(thinking_message, end="", flush=True)
+        lograg(thinking_message, end="", flush=True)
         response_tokens = []
 
         try:
@@ -787,14 +771,14 @@ if args.chat:
                 if len(response_tokens) == 0:
                     if not token.strip():
                         continue
-                    raglog(f"\r{' ' * len(thinking_message)}", end="\r")
-                    raglog(response_prefix, end="", flush=True)
+                    lograg(f"\r{' ' * len(thinking_message)}", end="\r")
+                    lograg(response_prefix, end="", flush=True)
 
                 response_tokens.append(token)
-                raglog(token, end="", flush=True)
-            raglog("")
+                lograg(token, end="", flush=True)
+            lograg("")
         except KeyboardInterrupt:
-            raglog("-[BREAK]")
+            lograg("-[BREAK]")
 
         llm_response = "".join(response_tokens).strip()
 
@@ -802,7 +786,7 @@ if args.chat:
             try:
                 with open(args.chat_log, "a", encoding="utf-8") as f:
                     f.write(f"{response_prefix}{llm_response}\n")
-            except Exception as e: log_error(e)
+            except Exception as e: lograg_error(e)
 
 #------------------------------------------------------------------------------
 # Summary
@@ -811,7 +795,7 @@ if args.chat:
 if temp_folder:
     clean_up_temporary_files()
 
-raglog_verbose(f"\nTiger out, peace ({time_since(program_start_time)})")
+lograg_verbose(f"\nTiger out, peace ({time_since(program_start_time)})")
 
 
 
