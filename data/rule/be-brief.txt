@@ -9,5 +9,4 @@
 Consider:
 - If you underexplain, the problem is easy to fix by spending more time to convey more detail.
 - When you overexplain, the wasted time is lost forever, and there is no way to buy it back.
-
-The first failure mode is better, so err on the side of brevity.
+- The first failure mode is better, so err on the side of brevity.

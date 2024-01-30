@@ -1,3 +1,3 @@
 ## QUERY {{query-index}}
 
-{{query-text}}
+{{query}}

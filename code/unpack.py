@@ -1,24 +1,22 @@
+# RAG/TAG Tiger - unpack.py
+# Copyright (c) 2024 Stuart Riffle
+# github.com/stuartriffle/ragtag-tiger
 
-import os, email, hashlib
-import shutil
-from files import archive_file_types, mime_file_types
+import os, email, hashlib, shutil, py7zr
+from files import cleanpath, archive_file_types, mime_file_types
+from logging import raglog, raglog_verbose, raglog_error
 
-
-from logging import log, log_verbose, log_error
-from files import cleanpath
-
+shutil.register_unpack_format('7zip', ['.7z'], py7zr.unpack_7zarchive)
 
 def unpack_mime(file_bytes, output_folder, container_file, container_type):
 
-    if container_type == ".doc":
-        looks_like_binary = any(b < 32 or b > 127 for b in file_bytes)
-        if looks_like_binary:
-            # Unsupported old MS Word doc
-            return
+    if container_type == ".doc" and any(b < 32 or b > 127 for b in file_bytes):
+        # Old MS Word binary document
+        return
 
     msg = email.message_from_bytes(file_bytes, policy=email.policy.default)
-
     part_counter = 0
+
     for part in msg.walk():
         filename_prefix = f"part-{part_counter:03d}"
         part_counter += 1
@@ -30,7 +28,6 @@ def unpack_mime(file_bytes, output_folder, container_file, container_type):
             part_encoding = part.get_content_charset() or "utf-8"
             part_text = part_content.decode(part_encoding, errors="ignore")
             part_content = part_text.encode("utf-8", errors="ignore")
-
             if part_type == "text/html":
                 output_filename = filename_prefix + ".html"
             else:
@@ -38,14 +35,14 @@ def unpack_mime(file_bytes, output_folder, container_file, container_type):
         elif part_type == "application/octet-stream" or part_maintype == "image":
             output_filename = f"{filename_prefix}-{part.get_filename()}"
         else:
-            log_verbose(f"\tignoring unrecognized MIME part of type \"{part_type}\" in \"{cleanpath(container_file)}\"")
+            raglog_verbose(f"\tignoring unrecognized MIME part of type \"{part_type}\" in \"{cleanpath(container_file)}\"")
             continue
 
         file_path = os.path.join(output_folder, output_filename)
         with open(file_path, "wb") as f:
             f.write(part_content)
 
-def unpack_temp_container(container_file, temp_folder):
+def unpack_container_to_temp(container_file, temp_folder):
     """Unpack a container file into a temporary folder"""
 
     true_name = cleanpath(container_file)
@@ -59,6 +56,7 @@ def unpack_temp_container(container_file, temp_folder):
 
         if container_type in archive_file_types:
             shutil.unpack_archive(container_file, output_folder)
+
         elif container_type in mime_file_types:
             file_bytes = open(container_file, "rb").read()
             unpack_mime(file_bytes, output_folder, container_type)
@@ -66,10 +64,13 @@ def unpack_temp_container(container_file, temp_folder):
         unpacked_files = [os.path.join(output_folder, f) for f in os.listdir(output_folder)]
 
     except Exception as e: 
-        log_error(f"failure unpacking \"{cleanpath(container_file)}\" into \"{os.path.normpath(output_folder)}\": {e}")
+        raglog_error(f"failure unpacking \"{cleanpath(container_file)}\" into \"{os.path.normpath(output_folder)}\": {e}")
         try:
-            log_verbose(f"\tremoving \"{os.path.normpath(output_folder)}\"...")
+            raglog_verbose(f"\tremoving \"{os.path.normpath(output_folder)}\"...")
             shutil.rmtree(output_folder)
         except: pass
 
     return unpacked_files
+
+
+

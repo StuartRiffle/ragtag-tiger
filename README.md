@@ -122,16 +122,12 @@ The query modes are available in chat mode too as a convenience. They are proces
 The system prompt and chat instructions can be assembled from mix-and-match snippets from text files. There is a small set of them in the repo under `data/`.
 ```
 --context-file  +/jailbreak/dan-12.txt
---context-file  +/rule/never-break-character.txt
 --context-file  +/rule/no-apologies.txt
---context-file  +/rule/no-tutorials.txt
 --context-file  +/rule/direct-answer-first.txt
---context-file  +/rule/subjects-to-avoid.txt
---context-file  +/rule/trigger-word-shh.txt
---context-file  +/rule/important-for-my-job.txt
 --context-file  +/character/tiger.txt
---context-file  +/character/rag-agent.txt
---context       "Write the final draft of your summary in French"
+--context-file  +/rule/never-break-character.txt
+--context-file  +/rule/important-for-my-job.txt
+--context       "Generate all output in French Pig Latin"
 ...(etc)...
 ```
 The files are just concatenated to produce the prompt.

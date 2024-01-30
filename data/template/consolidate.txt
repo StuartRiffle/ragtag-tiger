@@ -2,11 +2,11 @@
 # RAG/TAG Tiger (C) 2024 Stuart Riffle
 # https://github.com/stuartriffle/ragtag-tiger
 
-#-----------------------------------------------------------------------------
-# This is an instruction template for a "moderator" LLM that consolidates the
-# output of other models into a single response. The text of the original
-# query and all of the draft responses will be appended at runtime.
-#-----------------------------------------------------------------------------
+#-----------------------------------------------------------------------------#
+# This is an instruction template for a "moderator" LLM that consolidates the #
+# output of other models into a single response. The text of the original     #
+# query and all of the draft responses will be appended at runtime.           #
+#-----------------------------------------------------------------------------#
 
 A query is given below that has been run on multiple LLMs, each of which performed
 RAG analysis and generated a draft response. These are quite different systems

@@ -2,15 +2,14 @@
 # Copyright (c) 2024 Stuart Riffle
 # github.com/stuartriffle/ragtag-tiger
 
-import os, sys, time, shutil, tempfile, hashlib, json
-
+import os
 import torch
 from files import *
-from logging import log, log_verbose, log_error
+from logging import raglog, log_verbose, log_error
 from timer import TimerUntil
 
 openai_model_default    = "gpt-3.5-turbo-instruct"
-google_model_default      = "models/text-bison-001"
+google_model_default    = "models/text-bison-001"
 anthropic_model_default = "claude-2"
 perplexity_default      = "llama-2-70b-chat"
 replicate_default       = "mistralai/mixtral-8x7b-instruct-v0.1"
@@ -30,7 +29,7 @@ def load_llm(provider, model, server, api_key, params, verbose=False, set_servic
                 api_key = api_key or os.environ.get("OPENAI_API_KEY", "")
                 if not server:
                     model_name = model or openai_model_default
-                    log(f"Preparing OpenAI model \"{model_name}\"...")
+                    raglog(f"Preparing OpenAI model \"{model_name}\"...")
                     from llama_index.llms import OpenAI
                     result = OpenAI(
                         model=model_name,
@@ -41,7 +40,7 @@ def load_llm(provider, model, server, api_key, params, verbose=False, set_servic
                 else:
                     # API compatible server
                     model_name = model or "default"
-                    log(f"Preparing model \"{model_name}\" on server \"{server}\"...")
+                    raglog(f"Preparing model \"{model_name}\" on server \"{server}\"...")
                     from llama_index.llms import OpenAILike
                     result = OpenAILike(
                         model=model_name,
@@ -56,7 +55,7 @@ def load_llm(provider, model, server, api_key, params, verbose=False, set_servic
             elif provider == "google":
                 api_key = api_key or os.environ.get("GEMINI_API_KEY", "")
                 model_name = model or google_model_default
-                log(f"Preparing Google model \"{model_name}\"...")
+                raglog(f"Preparing Google model \"{model_name}\"...")
                 from llama_index.llms import PaLM
                 result = PaLM(
                     api_key=api_key,
@@ -69,7 +68,7 @@ def load_llm(provider, model, server, api_key, params, verbose=False, set_servic
                 if torch.cuda.is_available():
                     # FIXME - this does nothing?
                     model_kwargs["n_gpu_layers"] = -1
-                log(f"Preparing llama.cpp model \"{os.path.normpath(model)}\"...")
+                raglog(f"Preparing llama.cpp model \"{os.path.normpath(model)}\"...")
                 from llama_index.llms import LlamaCPP
                 result = LlamaCPP(
                     model_path=model,
@@ -80,7 +79,7 @@ def load_llm(provider, model, server, api_key, params, verbose=False, set_servic
             elif provider == "perplexity":
                 api_key = api_key or os.environ.get("PERPLEXITYAI_API_KEY", "")
                 model_name = model or perplexity_default
-                log(f"Preparing Perplexity model \"{model_name}\"...")
+                raglog(f"Preparing Perplexity model \"{model_name}\"...")
                 from llama_index.llms import Perplexity
                 result = Perplexity(
                     api_key=api_key,
@@ -91,7 +90,7 @@ def load_llm(provider, model, server, api_key, params, verbose=False, set_servic
             elif provider == "replicate":
                 api_key = api_key or os.environ.get("REPLICATE_API_TOKEN", "")
                 model_name = model or replicate_default
-                log(f"Preparing Replicate model \"model_name)\"...")
+                raglog(f"Preparing Replicate model \"model_name)\"...")
                 from llama_index.llms import Replicate
                 result = Replicate(
                     model=model_name,
@@ -105,7 +104,7 @@ def load_llm(provider, model, server, api_key, params, verbose=False, set_servic
                 if model_name in hf_model_nicknames:
                     model_desc = f" (\"{model_name}\")"
                     model_name = hf_model_nicknames[model_name]
-                log(f"Preparing HuggingFace model \"{model_name}\"{model_desc}...")
+                raglog(f"Preparing HuggingFace model \"{model_name}\"{model_desc}...")
 
                 from llama_index.llms import HuggingFaceLLM
                 result = HuggingFaceLLM(

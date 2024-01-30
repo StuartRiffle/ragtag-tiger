@@ -1,10 +1,11 @@
+# RAG/TAG Tiger - timer.py
+# Copyright (c) 2024 Stuart Riffle
+# github.com/stuartriffle/ragtag-tiger
+
 import time
 
-def time_since(before):
-    return f"{time.time() - before:.3f} sec"
-
 class TimerScope:
-    """A C++ style timer for a block of code"""
+    """An object that measures the time spent inside a scope"""
     def __init__(self, exitfunc=None, **kwargs):
         super().__init__(**kwargs) 
         self.exitfunc = exitfunc
@@ -25,4 +26,7 @@ class TimerUntil(TimerScope):
         self.msg    = msg
     def on_exit(self, elapsed):
         print(f"{self.prefix}{self.msg} ({elapsed:.3f} sec){self.suffix}")
+
+def time_since(before):
+    return f"{time.time() - before:.3f} sec"
 
