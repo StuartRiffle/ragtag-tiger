@@ -107,5 +107,6 @@ def cleanpath(path, resolve_stock_folder=True, make_unique=False):
         path = os.path.realpath(path)
         path = os.path.abspath(path)
         path = os.path.normcase(path)
+        path = os.path.normpath(path)
 
     return path        
