@@ -107,7 +107,7 @@ from files import *
 from extensions import *
 from lograg import *
 from timer import TimerUntil, time_since
-from llm import load_llm_config, split_llm_config, set_global_service_context_for_llm
+from llm import load_llm_config, split_llm_config
 from unpack import unpack_container_to_temp
 
 verbose_enabled = args.verbose
@@ -348,7 +348,7 @@ if len(loader_specs) > 0:
 # Chunk all the things
 #------------------------------------------------------------------------------
         
-from llama_index import SimpleDirectoryReader
+from llama_index import SimpleDirectoryReader, VectorStoreIndex
 from llama_index.node_parser import SimpleNodeParser
 
 document_nodes = []
@@ -492,10 +492,10 @@ response_prefix = f"### {tag_responses}\n" if tag_responses else ""
 
 if queries and llm_config_list:
     for llm_config in llm_config_list:
-        llm, streaming_supported = load_llm_config(llm_config)
+        llm, streaming_supported, service_context = load_llm_config(llm_config)
         curr_provider, curr_model, curr_server, _, curr_params = split_llm_config(llm_config)
-
         vector_index = lazy_load_vector_index(vector_index)
+       
         try:
             query_engine_params["streaming"] = streaming_supported
             query_engine = vector_index.as_query_engine(**query_engine_params)
@@ -593,7 +593,7 @@ if args.llm_config_mod and queries:
 
     with TimerUntil("complete"): 
         if not moderator_loaded_last:
-            llm, _ = load_llm_config(args.llm_config_mod, set_service_context=True)
+            llm, _, _ = load_llm_config(args.llm_config_mod, set_service_context=True)
         if not vector_index:
             vector_index = lazy_load_vector_index(vector_index)
 
@@ -691,31 +691,68 @@ if args.chat:
     curr_chat_mode_desc = args.chat_mode or "best"
     curr_query_mode_desc = args.query_mode or "tree_summarize"
 
-    vector_index = lazy_load_vector_index(vector_index)
-    llm, streaming_supported = load_llm_config(chat_llm_config, set_service_context=False)
-    curr_provider, curr_model, curr_server, _, curr_params = split_llm_config(chat_llm_config)
-    service_context = set_global_service_context_for_llm(llm)
-
-    lograg(f"Entering RAG chat (type \"bye\" to exit, CTRL-C to interrupt)...")
-    lograg_verbose(f"\t- the LlamaIndex chat mode is \"{args.chat_mode}\"")
-    if args.chat_log:
-        lograg_verbose(f"\t- logging chat to \"{cleanpath(args.chat_log)}\"")
-    lograg("")
+    show_lazy_banner = True
     
+    force_reload_llm = False
     thinking_message = f"...thinking... "
     exit_commands = ["bye", "goodbye", "exit", "quit", "peace", "done", "stop", "end"]
 
     while True:
-        chat_or_query = "chat" if is_chat_mode else "query"
-        curr_interactive_mode = curr_chat_mode_desc if is_chat_mode else curr_query_mode_desc
-
         try:
+            if force_reload_llm or not llm or not vector_index or not chat_engine or not query_engine:
+                from llama_index import set_global_service_context
+
+                service_context = None
+                query_engine = None
+                chat_engine = None
+
+                #import gc
+                #gc.collect()
+
+
+                curr_provider, curr_model, curr_server, _, curr_params = split_llm_config(chat_llm_config)
+                llm, streaming_supported, service_context = load_llm_config(chat_llm_config, set_service_context=False)
+
+                # FIXME: forcing reload
+                vector_index = lazy_load_vector_index(None)
+                
+                chat_params = {
+                    "chat_mode": curr_chat_mode_desc,
+                    "service_context": service_context,
+                    "streaming": streaming_supported,
+                    "system_prompt": f"{system_prompt}\n{chat_init}",
+                }
+
+                query_params = {
+                    "response_mode": curr_query_mode_desc,
+                    "service_context": service_context,
+                    "streaming": streaming_supported,
+                    "system_prompt": system_prompt,
+                }
+
+                chat_engine = vector_index.as_chat_engine(**chat_params)
+                query_engine = vector_index.as_query_engine(**query_params)
+
+                if show_lazy_banner:
+                    lograg(f"Entering RAG chat (type \"bye\" to exit, CTRL-C to interrupt)...")
+                    lograg_verbose(f"\t- the LlamaIndex chat mode is \"{curr_chat_mode_desc}\"")
+                    if args.chat_log:
+                        lograg_verbose(f"\t- logging chat to \"{cleanpath(args.chat_log)}\"")
+                    show_lazy_banner = False
+
+                force_reload_llm = False
+
+            chat_or_query = "chat" if is_chat_mode else "query"
+            curr_interactive_mode = curr_chat_mode_desc if is_chat_mode else curr_query_mode_desc
+            chat_mode_print_style = "chat-mode" if is_chat_mode else "query-mode"
+
             if lograg_is_color():
+                lograg("")
                 lograg_in_style(f" {curr_provider} ", style="chat-provider", end="")
                 lograg_in_style(" ", style="chat-message", end="")
                 lograg_in_style(f" {curr_model} ", style="chat-model", end="")
                 lograg_in_style(" ", style="chat-message", end="")
-                lograg_in_style(f" {curr_interactive_mode} ", style="chat-mode", end="")
+                lograg_in_style(f" {curr_interactive_mode} ", style=chat_mode_print_style, end="")
                 lograg_in_style(">", style="chat-prompt", end="")
                 lograg_in_style(" ", style="chat-message", end="")
             else:
@@ -742,10 +779,12 @@ if args.chat:
                     curr_chat_mode_desc = message
                     chat_engine = None
                     lograg(f"Chat response mode is \"{message}\"")
+                    continue
                 elif message in llamaindex_query_modes:
                     is_chat_mode = False
                     curr_query_mode_desc = message
                     query_engine = None
+                    continue
                     lograg(f"Query response mode is \"{message}\"")
                 else:
                     lograg(f"Chat modes:  {llamaindex_chat_modes}")
@@ -772,29 +811,13 @@ if args.chat:
         response_tokens = []
 
         try:
-            if not chat_engine:
-                chat_params = {
-                    "chat_mode": curr_chat_mode_desc,
-                    "service_context": service_context,
-                    "streaming": streaming_supported,
-                    "system_prompt": f"{system_prompt}\n{chat_init}",
-                }
-                chat_engine = vector_index.as_chat_engine(**chat_params)
-
-            if not query_engine:
-                query_params = {
-                    "response_mode": curr_query_mode_desc,
-                    "service_context": service_context,
-                    "streaming": streaming_supported,
-                    "system_prompt": system_prompt,
-                }
-                query_engine = vector_index.as_query_engine(**query_params)
 
             if streaming_supported:
                 if is_chat_mode:
                     streaming_response = chat_engine.stream_chat(message)
                 else:
                     streaming_response = query_engine.query(message)
+
                 for token in streaming_response.response_gen:
                     if len(response_tokens) == 0:
                         if not token.strip():
@@ -808,6 +831,7 @@ if args.chat:
                     response_text = str(chat_engine.query(message))
                 else:
                     response_text = str(query_engine.query(query))
+
                 response_tokens = [response_text]
                 lograg_in_style(response_text, style="chat-response", end="", flush=True)
 
