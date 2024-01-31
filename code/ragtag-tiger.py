@@ -9,12 +9,58 @@ program_name            = "RAG/TAG Tiger"
 program_version         = "0.1.0"
 program_license         = "MIT"
 program_copyright       = "(c) 2024 Stuart Riffle"
-program_description     = "Update and query a LlamaIndex vector index"
-program_repository      = "github.com/stuartriffle/ragtag-tiger"
+program_description     = "Create/update a vector index to perform RAG/TAG queries"
+program_repository      = "https://github.com/stuartriffle/ragtag-tiger"
 program_start_time      = time.time()
 
-llamaindex_chat_modes   = ["best", "context", "condense_question", "simple", "react", "openai"]
-llamaindex_query_modes  = ["accumulate", "compact", "compact_accumulate", "generation", "no_text", "refine", "simple_summarize", "tree_summarize"]
+llamaindex_chat_modes   = ["best",  "condense_question", "context", "condense_plus_context", "simple",  "react", "openai"]
+llamaindex_query_modes  = ["compact", "accumulate", "compact_accumulate", "generation", "no_text", "refine", "simple_summarize", "tree_summarize"]
+
+llamaindex_alias_to_mode = {
+    "agent":     "best",
+    "con":       "condense_question",
+    "look":      "context",
+    "conlook":   "condense_plus_context",
+    "simple":    "simple",
+    "react":     "react",
+    "openai":    "openai",
+    "com":       "compact",
+    "acc":       "accumulate",
+    "comacc":    "compact_accumulate",
+    "blind":     "generation",
+    "raw":       "no_text",
+    "ref":       "refine",
+    "sum":       "simple_summarize",
+    "tree":      "tree_summarize",
+}
+
+llamaindex_mode_to_alias = {}
+for alias, mode in llamaindex_alias_to_mode.items():
+    llamaindex_mode_to_alias[mode] = alias
+
+llamaindex_alias_set = set(llamaindex_alias_to_mode.keys())
+llamaindex_truename_set = set(llamaindex_mode_to_alias.keys())
+
+def chat_query_mode_is_valid(mode):
+    return mode in llamaindex_query_modes or mode in llamaindex_alias_set
+
+def chat_query_mode_alias(mode):
+    if mode in llamaindex_alias_set:
+        return mode
+    if mode in llamaindex_mode_to_alias:
+        return llamaindex_mode_to_alias[mode]
+    return None
+
+def chat_query_mode_truename(mode):
+    if mode in llamaindex_truename_set:
+        return mode
+    if mode in llamaindex_alias_to_mode:
+        return llamaindex_alias_to_mode[mode]
+    return None
+
+
+
+
 
 class ResponseFileArgumentParser(argparse.ArgumentParser):
     """Ignore comments and whitespace in response files"""
@@ -132,9 +178,10 @@ from unpack import unpack_container_to_temp
 lograg_verbose(f"\t...at your service ({time_since(program_start_time)})")
 
 #------------------------------------------------------------------------------
-# Search specs (like "foo/bar/**/*.cpp")
+# Assemble the inputs
 #------------------------------------------------------------------------------
-    
+
+# Search specs (like "foo/bar/**/*.cpp")
 search_specs = []
 
 for folder in args.source or []:
@@ -145,39 +192,23 @@ for spec in args.source_spec or []:
     search_specs.append(spec)
 
 for file in args.source_list or []:
-    try:
-        with open(file, "r", encoding="utf-8") as f:
-            specs = strip_and_remove_comments(f.read())
-            search_specs.extend(specs)
-    except Exception as e:
-        lograg_error(e)
+    specs = load_and_strip_text(file)
+    search_specs.extend(specs)
 
-#------------------------------------------------------------------------------
 # User queries
-#------------------------------------------------------------------------------
-
 queries = args.query or []
 
 for file in args.query_file or []:
     lograg(f"Loading query from \"{file}\"...")
-    try:
-        with open(file, "r", encoding="utf-8") as f:
-            query_text = strip_and_remove_comments(f.read())
-            queries.append(query_text)
-    except Exception as e: lograg_error(e)
+    query_text = load_and_strip_text(file)
+    queries.append(query_text)
 
 for file in args.query_list or []:
     lograg(f"Loading single-line queries from \"{file}\"...")
-    try:
-        with open(file, "r", encoding="utf-8") as f:
-            short_queries = strip_and_remove_comments(f.read()).splitlines()
-            queries.extend(short_queries)
-    except Exception as e: lograg_error(e)
+    short_queries = load_and_strip_text(file)
+    queries.extend(short_queries.splitlines())
 
-#------------------------------------------------------------------------------
 # System prompt
-#------------------------------------------------------------------------------
-
 system_prompt_lines = []
 
 if args.context:
@@ -186,36 +217,25 @@ if args.context:
 
 for file in args.context_file or []:
     lograg(f"Adding system prompt from \"{cleanpath(file)}\"...")
-    try:
-        with open(file, "r", encoding="utf-8") as f:
-            snippet = strip_and_remove_comments(f.read())
-            system_prompt_lines.extend(snippet.splitlines())
-    except Exception as e: lograg_error(e)
+    snippet = load_and_strip_text(file)
+    system_prompt_lines.extend(snippet.splitlines())
 
 system_prompt = "\n".join(system_prompt_lines).strip()
-
-if len(system_prompt) > 0:
+if system_prompt:
     lograg_verbose(f"System prompt:\n{system_prompt}")
 
-#------------------------------------------------------------------------------
 # Chat instructions
-#------------------------------------------------------------------------------
-
 chat_init = args.chat_init or []
 
 if args.chat:
     for file in args.chat_init_file or []:
         lograg(f"Loading chat instructions from \"{cleanpath(file)}\"...")
-        try:
-            with open(file, "r", encoding="utf-8") as f:
-                chat_init_text = strip_and_remove_comments(f.read())
-                chat_init.append(chat_init_text)
-        except Exception as e: 
-            lograg_error(e)
+        chat_init_text = load_and_strip_text(file)
+        chat_init.append(chat_init_text)
 
-    chat_init_text = "\n".join(chat_init)
-    if len(chat_init_text.strip()) > 0:
-        lograg_verbose(f"Chat bot instructions:\n{chat_init_text}")
+chat_init_text = "\n".join(chat_init)
+if chat_init_text:
+    lograg_verbose(f"Chat bot instructions:\n{chat_init_text}")
 
 #------------------------------------------------------------------------------
 # Search for files
@@ -467,6 +487,7 @@ def lazy_load_vector_index(curr_index):
         lograg_verbose(f"Creating a new vector index in memory...")
         try:
             vector_index = VectorStoreIndex([])
+            vector_index.vector_store.persist()
         except Exception as e: 
             lograg_error(e, exit_code=1)
         
@@ -694,10 +715,10 @@ if args.chat:
     is_chat_mode = True
     chat_engine = None
     query_engine = None
-    curr_chat_mode_desc = args.chat_mode or "best"
-    curr_query_mode_desc = args.query_mode or "tree_summarize"
-
     show_lazy_banner = True
+
+    curr_chat_mode_alias = chat_query_mode_alias(args.chat_mode) if args.chat_mode else None
+    curr_chat_mode_alias = curr_chat_mode_alias or "agent"
     
     force_reload_llm = False
     thinking_message = f"...thinking... "
@@ -719,29 +740,33 @@ if args.chat:
                 curr_provider, curr_model, curr_server, _, curr_params = split_llm_config(chat_llm_config)
                 llm, streaming_supported, service_context = load_llm_config(chat_llm_config, set_service_context=False)
 
-                # FIXME: forcing reload
+                # FIXME: forcing reload, there must be a good way to do this?
                 vector_index = lazy_load_vector_index(None)
                 
                 chat_params = {
-                    "chat_mode": curr_chat_mode_desc,
-                    "service_context": service_context,
-                    "streaming": streaming_supported,
-                    "system_prompt": f"{system_prompt}\n{chat_init}",
+                    "service_context":  service_context,
+                    "streaming":        streaming_supported,
+                    "system_prompt":    system_prompt + '\n' + chat_init_text,
                 }
 
                 query_params = {
-                    "response_mode": curr_query_mode_desc,
-                    "service_context": service_context,
-                    "streaming": streaming_supported,
-                    "system_prompt": system_prompt,
+                    "service_context":  service_context,
+                    "streaming":        streaming_supported,
+                    "system_prompt":    system_prompt,
                 }
+
+                # FIXME - reinitializing both chat and query engines here, but only one will be used at a time
+                mode_truename = chat_query_mode_truename(curr_chat_mode_alias)
+                if mode_truename in llamaindex_chat_modes:
+                    chat_params["chat_mode"] = mode_truename
+                if mode_truename in llamaindex_query_modes:
+                    query_params["response_mode"] = mode_truename
 
                 chat_engine = vector_index.as_chat_engine(**chat_params)
                 query_engine = vector_index.as_query_engine(**query_params)
 
                 if show_lazy_banner:
                     lograg(f"Entering RAG chat (type \"bye\" to exit, CTRL-C to interrupt)...")
-                    lograg_verbose(f"\t- the LlamaIndex chat mode is \"{curr_chat_mode_desc}\"")
                     if args.chat_log:
                         lograg_verbose(f"\t- logging chat to \"{cleanpath(args.chat_log)}\"")
                     show_lazy_banner = False
@@ -749,8 +774,8 @@ if args.chat:
                 force_reload_llm = False
 
             chat_or_query = "chat" if is_chat_mode else "query"
-            curr_interactive_mode = curr_chat_mode_desc if is_chat_mode else curr_query_mode_desc
             chat_mode_print_style = "chat-mode" if is_chat_mode else "query-mode"
+            curr_interactive_alias = curr_chat_mode_alias
 
             if lograg_is_color():
                 lograg("")
@@ -758,11 +783,11 @@ if args.chat:
                 lograg_in_style(" ", style="chat-message", end="")
                 lograg_in_style(f" {curr_model} ", style="chat-model", end="")
                 lograg_in_style(" ", style="chat-message", end="")
-                lograg_in_style(f" {curr_interactive_mode} ", style=chat_mode_print_style, end="")
-                lograg_in_style(">", style="chat-prompt", end="")
-                lograg_in_style(" ", style="chat-message", end="")
+                lograg_in_style(f" {curr_interactive_alias} ", style=chat_mode_print_style, end="") 
+                lograg_in_style(":", style="chat-prompt", end="")
+                lograg_in_style(" ", style="chat-message", end="", flush=True)
             else:
-                print(f"{curr_provider} {curr_model} {chat_or_query}:{curr_interactive_mode}> ", end="")            
+                lograg(f"{curr_provider} {curr_model} {chat_or_query}:{curr_interactive_alias}: ", end="", flush=True)            
 
             message = input("").strip()
             if not message:
@@ -780,22 +805,26 @@ if args.chat:
                 break
 
             if command == "mode":
-                if message in llamaindex_chat_modes:
-                    is_chat_mode = True
-                    curr_chat_mode_desc = message
-                    chat_engine = None
-                    lograg(f"Chat response mode is \"{message}\"")
-                    continue
-                elif message in llamaindex_query_modes:
-                    is_chat_mode = False
-                    curr_query_mode_desc = message
-                    query_engine = None
-                    continue
-                    lograg(f"Query response mode is \"{message}\"")
-                else:
-                    lograg(f"Chat modes:  {llamaindex_chat_modes}")
-                    lograg(f"Query modes: {llamaindex_query_modes}")
-                    continue
+                mode_true_name = chat_query_mode_truename(message)
+                if mode_true_name:
+                    mode_alias = chat_query_mode_alias(mode_true_name)
+                    if mode_true_name in llamaindex_chat_modes:
+                        lograg(f"Setting chat response mode \"{mode_true_name}\" (alias \"{mode_alias}\")")
+                        is_chat_mode = True
+                        curr_chat_mode_alias = mode_alias
+                        force_reload_llm = True
+                        continue
+                    elif mode_true_name in llamaindex_query_modes:
+                        lograg(f"Setting query response mode \"{mode_true_name}\" (alias \"{mode_alias}\")")
+                        lograg_verbose(f"\tNOTE: query modes have no chat memory")
+                        is_chat_mode = False
+                        curr_chat_mode_alias = mode_alias
+                        force_reload_llm = True
+                        continue
+                # FIXME - print better help
+                lograg(f"Chat modes:  {llamaindex_chat_modes}")
+                lograg(f"Query modes: {llamaindex_query_modes}")
+                continue
 
             elif command == "clear":
                 chat_engine.reset()
@@ -817,6 +846,7 @@ if args.chat:
         response_tokens = []
 
         try:
+            response_text_style = "chat-response" if is_chat_mode else "query-response"
 
             if streaming_supported:
                 if is_chat_mode:
@@ -830,7 +860,7 @@ if args.chat:
                             continue
                         lograg(f"\r{' ' * len(thinking_message)}", end="\r")
                     response_tokens.append(token)
-                    lograg_in_style(token, style="chat-response", end="", flush=True)
+                    lograg_in_style(token, style=response_text_style, end="", flush=True)
 
             else:
                 if is_chat_mode:
@@ -839,7 +869,7 @@ if args.chat:
                     response_text = str(query_engine.query(query))
 
                 response_tokens = [response_text]
-                lograg_in_style(response_text, style="chat-response", end="", flush=True)
+                lograg_in_style(response_text, style=response_text_style, end="", flush=True)
 
             lograg("")
         except KeyboardInterrupt:

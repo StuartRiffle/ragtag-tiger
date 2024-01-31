@@ -93,6 +93,15 @@ def load_stock_text(path, sanitize=False, default_value=""):
         return text
     return default_value
 
+def load_and_strip_text(file):
+    try:
+        with open(file, "r", encoding="utf-8") as f:
+            text = strip_and_remove_comments(f.read())
+            return text
+    except Exception as e: 
+        lograg_error(e)
+    return None
+
 def cleanpath(path, resolve_stock_folder=True, make_unique=False):
     """Clean up a path, optionally making it absolute and unique"""
 
