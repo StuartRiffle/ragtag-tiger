@@ -8,7 +8,7 @@ import os, time, argparse, shlex
 program_name            = "RAG/TAG Tiger"
 program_version         = "0.1.0"
 program_license         = "MIT"
-program_copyright       = "Copyright (c) 2024 Stuart Riffle"
+program_copyright       = "(c) 2024 Stuart Riffle"
 program_description     = "Update and query a LlamaIndex vector index"
 program_repository      = "github.com/stuartriffle/ragtag-tiger"
 program_start_time      = time.time()
@@ -32,9 +32,9 @@ def human_size_type(size):
 parser = ResponseFileArgumentParser(description=program_description, fromfile_prefix_chars='@')
 
 arg = parser.add_argument
-arg("--quiet",          help="suppress all output except errors", action="store_true")
 arg("--verbose",        help="enable extended/debug output", action="store_true")
 arg("--version",        help="print the version number and exit", action="store_true")
+arg("--no-color",       help="disable color text output", action="store_true")
 
 arg = parser.add_argument_group("Vector database").add_argument
 arg("--index-load",     help="Load the vector index from a given path", metavar="PATH")
@@ -81,6 +81,11 @@ arg("--chat-init",      help="Extra instructions/personality for the chat LLM", 
 arg("--chat-init-file", help="File containing a snippet of chat LLM instructions", action="append", metavar="FILE")
 arg("--chat-log",       help="Append chat queries and responses to a text file", metavar="FILE")
 arg("--chat-mode",      help="Chat response mode", choices=llamaindex_chat_modes, default="best")
+arg("--chat-llm-config",help="Override chat LLM configuration", metavar="CFG")
+
+print(f'{program_name} {program_version}')
+print(f'{program_copyright}')
+print('')
 
 ragtag_flags = shlex.split(os.environ.get("RAGTAG_FLAGS", ""))
 for flag in ragtag_flags:
@@ -88,29 +93,35 @@ for flag in ragtag_flags:
 
 args = parser.parse_args()
 if args.version:
-    print(f'{program_name} v{program_version}')
     exit(0)
-
-from lograg import lograg, lograg_verbose, lograg_error, lograg_set_verbose
-lograg_set_verbose(args.verbose)
-
-lograg_verbose("")
-lograg(f"{program_name} v{program_version}")
-lograg_verbose(f"{program_copyright}\n{program_repository}\n")
 
 #------------------------------------------------------------------------------
 # Imports
 #------------------------------------------------------------------------------
    
-lograg("Waking up tiger...")
+print("Waking up tiger...")
 
 import json, tempfile, hashlib, humanfriendly
 from llama_index.text_splitter import CodeSplitter
 from files import *
 from extensions import *
+from lograg import *
 from timer import TimerUntil, time_since
-from llm import load_llm_config, split_llm_config
+from llm import load_llm_config, split_llm_config, set_global_service_context_for_llm
 from unpack import unpack_container_to_temp
+
+verbose_enabled = args.verbose
+lograg_set_verbose(verbose_enabled)
+
+if os.name == "nt":
+    try:
+        # Enable ANSI color codes in Windows
+        os.system("color")
+    except: pass
+
+running_in_terminal = os.isatty(os.sys.stdout.fileno())
+if args.no_color or not running_in_terminal:
+    lograg_set_color(False)
 
 lograg_verbose(f"\t...at your service ({time_since(program_start_time)})")
 
@@ -164,12 +175,11 @@ for file in args.query_list or []:
 system_prompt_lines = []
 
 if args.context:
-    lograg(f"Adding system prompt from the command line...")
     for snippet in args.context:
         system_prompt_lines.append(snippet)
 
 for file in args.context_file or []:
-    lograg(f"Adding system prompt from \"{file}\"...")
+    lograg(f"Adding system prompt from \"{cleanpath(file)}\"...")
     try:
         with open(file, "r", encoding="utf-8") as f:
             snippet = strip_and_remove_comments(f.read())
@@ -284,7 +294,7 @@ for file_path in files_to_index:
     ext = ext.lower()
     files_with_ext[ext] = files_with_ext.get(ext, 0) + 1
 
-if args.verbose and len(files_to_index) > 0:
+if verbose_enabled and len(files_to_index) > 0:
     lograg_verbose(f"Supported files found:")
     sorted_items = sorted(files_with_ext.items(), key=lambda x: x[1], reverse=True)
     for ext, count in sorted_items:
@@ -349,7 +359,7 @@ def load_document_nodes(splitter, file_list, show_progress=False):
         file_extractor=file_extractor_list, 
         exclude_hidden=True)
     
-    loaded_docs = doc_reader.load_data(show_progress=args.verbose)
+    loaded_docs = doc_reader.load_data(show_progress=verbose_enabled)
     parser = splitter or SimpleNodeParser.from_defaults()
     doc_nodes = parser.get_nodes_from_documents(loaded_docs)
     return doc_nodes
@@ -359,10 +369,10 @@ if len(files_to_index) > 0:
     try:
         non_code_files = [f for f in files_to_index if os.path.splitext(f)[1] not in code_ext]
         if len(non_code_files) > 0:
-            info = f" {len(non_code_files)}" if args.verbose else ""
+            info = f" {len(non_code_files)}" if verbose_enabled else ""
             lograg(f"Loading{info} documents...")
             with TimerUntil("all documents loaded"):
-                non_code_nodes = load_document_nodes(None, non_code_files, show_progress=args.verbose)
+                non_code_nodes = load_document_nodes(None, non_code_files, show_progress=verbose_enabled)
                 document_nodes.extend(non_code_nodes)
                 files_processed += len(non_code_files)
 
@@ -372,7 +382,7 @@ if len(files_to_index) > 0:
                 for extensions, code_splitter in source_code_splitters:
                     code_files = [f for f in files_to_index if os.path.splitext(f)[1] in extensions]
                     if len(code_files) > 0:
-                        code_nodes = load_document_nodes(code_splitter, code_files, show_progress=args.verbose)
+                        code_nodes = load_document_nodes(code_splitter, code_files, show_progress=verbose_enabled)
                         lograg_verbose(f"\t{len(code_files)} files parsed as \"{code_splitter.language}\"")
                         document_nodes.extend(code_nodes)
                         files_processed += len(code_files)
@@ -420,7 +430,9 @@ if args.llm_provider or args.llm_server or args.llm_api_key or args.llm_param:
 
     llm_config_list.insert(config_str, 0)
 
+moderator = None
 moderator_loaded_last = False
+
 if args.llm_config_mod:
     if args.llm_config_mod in llm_config_list:
         # FWIW, if the moderator goes last, it can generate summaries without being reloaded
@@ -428,145 +440,145 @@ if args.llm_config_mod:
         llm_config_list.append(args.llm_config_mod)
         moderator_loaded_last = True
 
-for llm_config in llm_config_list:
-    llm, streaming_supported = load_llm_config(llm_config)
-    curr_provider, curr_model, curr_server, _, curr_params = split_llm_config(llm_config)
-
-    #--------------------------------------------------------------------------
-    # Update the vector database
-    #--------------------------------------------------------------------------
-
+def lazy_load_vector_index(curr_index):
+    if curr_index:
+        return curr_index
+    
     from llama_index import VectorStoreIndex
 
+    if args.index_load:
+        info = f" from \"{cleanpath(args.index_load)}\"" if verbose_enabled else ""
+        lograg(f"Loading vector index{info}...")
+        try:
+            with TimerUntil("loaded"):
+                from llama_index import StorageContext, load_index_from_storage
+                storage_context = StorageContext.from_defaults(persist_dir=args.index_load)
+                vector_index = load_index_from_storage(storage_context, show_progress=verbose_enabled)            
+        except Exception as e: 
+            lograg_error(e)
+
     if not vector_index:
-        if args.index_load:
-            info = f" from \"{cleanpath(args.index_load)}\"" if args.verbose else ""
-            lograg(f"Loading vector index{info}...")
-            try:
-                with TimerUntil("loaded"):
-                    from llama_index import StorageContext, load_index_from_storage
-                    storage_context = StorageContext.from_defaults(persist_dir=args.index_load)
-                    vector_index = load_index_from_storage(storage_context, show_progress=args.verbose)            
-            except Exception as e: lograg_error(e)
+        lograg_verbose(f"Creating a new vector index in memory...")
+        try:
+            vector_index = VectorStoreIndex([])
+        except Exception as e: 
+            lograg_error(e, exit_code=1)
+        
+    if len(document_nodes) > 0:
+        info = f" {len(document_nodes)}" if verbose_enabled else ""
+        lograg(f"Indexing{info} document nodes...")
+        try:
+            with TimerUntil("indexing complete"):
+                vector_index.insert_nodes(document_nodes, show_progress=verbose_enabled)
+        except Exception as e: lograg_error(e)
 
-        if not vector_index:
-            lograg_verbose(f"Creating a new vector index in memory...")
-            try:
-                vector_index = VectorStoreIndex([])
-            except Exception as e: lograg_error(e, exit_code=1)
-            
-        if len(document_nodes) > 0:
-            info = f" {len(document_nodes)}" if args.verbose else ""
-            lograg(f"Indexing{info} document nodes...")
-            try:
-                with TimerUntil("indexing complete"):
-                    vector_index.insert_nodes(document_nodes, show_progress=args.verbose)
-            except Exception as e: lograg_error(e)
+    if args.index_store:
+        info = f" in \"{cleanpath(args.index_store)}\"" if verbose_enabled else ""
+        lograg(f"Storing vector index{info}...")
+        try:
+            with TimerUntil("index stored"):
+                os.makedirs(args.index_store)
+                vector_index.storage_context.persist(persist_dir=args.index_store)
+        except Exception as e: lograg_error(e)    
 
-        if args.index_store:
-            info = f" in \"{cleanpath(args.index_store)}\"" if args.verbose else ""
-            lograg(f"Storing vector index{info}...")
-            try:
-                with TimerUntil("index stored"):
-                    if not os.path.exists(args.index_store):
-                        os.makedirs(args.index_store)
-                    vector_index.storage_context.persist(persist_dir=args.index_store)
-            except Exception as e: lograg_error(e)
+    curr_index = vector_index
+    return vector_index
 
-    #------------------------------------------------------------------------------
-    # Initialize the query engine
-    #------------------------------------------------------------------------------
+tag_queries = (args.tag_queries or "").strip("\"' ")
+tag_responses = (args.tag_responses or "").strip("\"' ")
 
-    if vector_index:
+query_prefix = f"### {tag_queries}\n" if tag_queries else ""
+response_prefix = f"### {tag_responses}\n" if tag_responses else ""
+
+if queries and llm_config_list:
+    for llm_config in llm_config_list:
+        llm, streaming_supported = load_llm_config(llm_config)
+        curr_provider, curr_model, curr_server, _, curr_params = split_llm_config(llm_config)
+
+        vector_index = lazy_load_vector_index(vector_index)
         try:
             query_engine_params["streaming"] = streaming_supported
             query_engine = vector_index.as_query_engine(**query_engine_params)
+        except Exception as e: 
+            lograg_error(f"can't initialize query engine: {e}", exit_code=1)
 
-        except Exception as e: lograg_error(f"can't initialize query engine: {e}", exit_code=1)
+        #------------------------------------------------------------------------------
+        # Process all the queries
+        #------------------------------------------------------------------------------
 
-    #------------------------------------------------------------------------------
-    # Process all the queries
-    #------------------------------------------------------------------------------
+        json_log["comment"] = f"{program_name} v{program_version} ({program_repository})"
+        json_log["id"] = hashlib.md5("\n".join(queries).encode()).hexdigest()
+        json_log["timestamp"] = time.strftime("%Y-%m-%d %H:%M:%S UTC")
 
-    tag_queries = (args.tag_queries or "").strip("\"' ")
-    tag_responses = (args.tag_responses or "").strip("\"' ")
+        if len(queries) > 0:
+            query_count = f"{len(queries)} queries" if len(queries) > 1 else "query"
+            #lograg(f"Running {query_count}...")
+            with TimerUntil(f"all queries complete"):
+                for query_idx in range(len(queries)):
+                    query = queries[query_idx]
+                    query_log_exists = False
+                    for lograg_idx in range(len(json_log["queries"])):
+                        if json_log["queries"][lograg_idx]["query"] == query:
+                            query_log_exists = True
+                            break
 
-    query_prefix = f"### {tag_queries}\n" if tag_queries else ""
-    response_prefix = f"### {tag_responses}\n" if tag_responses else ""
+                    if not query_log_exists:
+                        query_record = { 
+                            "query": query,
+                            "response": "",
+                            "moderator": "",
+                            "id": "",
+                            "drafts": [],
+                        }
+                        lograg_idx = len(json_log["queries"])
+                        json_log["queries"].append(query_record)
 
-    json_log["comment"] = f"{program_name} v{program_version} ({program_repository})"
-    json_log["id"] = hashlib.md5("\n".join(queries).encode()).hexdigest()
-    json_log["timestamp"] = time.strftime("%Y-%m-%d %H:%M:%S UTC")
-
-    if len(queries) > 0:
-        query_count = f"{len(queries)} queries" if len(queries) > 1 else "query"
-        #lograg(f"Running {query_count}...")
-        with TimerUntil(f"all queries complete"):
-            for query_idx in range(len(queries)):
-                query = queries[query_idx]
-                query_lograg_exists = False
-                for lograg_idx in range(len(json_log["queries"])):
-                    if json_log["queries"][lograg_idx]["query"] == query:
-                        query_lograg_exists = True
-                        break
-
-                if not query_lograg_exists:
-                    query_record = { 
-                        "query": query,
-                        "response": "",
-                        "moderator": "",
-                        "id": "",
-                        "drafts": [],
+                    response_tokens = []
+                    response_record = {
+                        "params": curr_params or [],
+                        "provider": curr_provider,
+                        "model": curr_model or "",
+                        "server": curr_server or "",
                     }
-                    lograg_idx = len(json_log["queries"])
-                    json_log["queries"].append(query_record)
 
-                response_tokens = []
-                response_record = {
-                    "params": curr_params or [],
-                    "provider": curr_provider,
-                    "model": curr_model or "",
-                    "server": curr_server or "",
-                }
+                    try:
+                        with TimerUntil("query complete"):
+                            lograg_verbose(f"\n{query_prefix}{query}\n\t...thinking ", end="", flush=True)
+                            query_start_time = time.time()
 
-                try:
-                    with TimerUntil("query complete"):
-                        lograg_verbose(f"\n{query_prefix}{query}\n\t...thinking ", end="", flush=True)
-                        query_start_time = time.time()
+                            if streaming_supported:
+                                streaming_response = query_engine.query(query)
+                                for token in streaming_response.response_gen:
+                                    if len(response_tokens) == 0:
+                                        if not token.strip():
+                                            continue
+                                        lograg_verbose(f"({time_since(query_start_time)})\n{response_prefix}", end="", flush=True)
 
-                        if streaming_supported:
-                            streaming_response = query_engine.query(query)
-                            for token in streaming_response.response_gen:
-                                if len(response_tokens) == 0:
-                                    if not token.strip():
-                                        continue
-                                    lograg_verbose(f"({time_since(query_start_time)})\n{response_prefix}", end="", flush=True)
+                                    response_tokens.append(token)
+                                    lograg_verbose(token, end="", flush=True)
+                                lograg_verbose("")
+                                llm_response = "".join(response_tokens).strip()
+                            else:
+                                llm_response = str(query_engine.query(query))
+                                lograg_verbose(f"({time_since(query_start_time)})\n{response_prefix}{llm_response}")
 
-                                response_tokens.append(token)
-                                lograg_verbose(token, end="", flush=True)
-                            lograg_verbose("")
-                            llm_response = "".join(response_tokens).strip()
-                        else:
-                            llm_response = str(query_engine.query(query))
-                            lograg_verbose(f"({time_since(query_start_time)})\n{response_prefix}{llm_response}")
+                            transcript_lines.append(f"{query_prefix}{query}\n")
+                            transcript_lines.append(f"{response_prefix}{llm_response}\n\n")
 
-                        transcript_lines.append(f"{query_prefix}{query}\n")
-                        transcript_lines.append(f"{response_prefix}{llm_response}\n\n")
+                    except Exception as e:
+                        llm_response = "ERROR"
+                        response_record["error"] = str(e)
+                        lograg_verbose("")
+                        lograg_error(e)
 
-                except Exception as e:
-                    llm_response = "ERROR"
-                    response_record["error"] = str(e)
-                    lograg_verbose("")
-                    lograg_error(e)
+                    response_record["response"] = llm_response
+                    response_record["time"] = time.time() - query_start_time
 
-                response_record["response"] = llm_response
-                response_record["time"] = time.time() - query_start_time
+                    json_log["queries"][lograg_idx]["drafts"].append(response_record)
+                    if not "response" in json_log["queries"][lograg_idx]:
+                        json_log["queries"][lograg_idx]["response"] = llm_response
 
-                json_log["queries"][lograg_idx]["drafts"].append(response_record)
-                if not "response" in json_log["queries"][lograg_idx]:
-                    json_log["queries"][lograg_idx]["response"] = llm_response
-
-        lograg_verbose("")
+            lograg_verbose("")
 
 #------------------------------------------------------------------------------
 # Consolidate responses after querying multiple models
@@ -576,12 +588,14 @@ template_consolidate = load_stock_text("template/consolidate.txt")
 template_query       = load_stock_text("template/consolidate-query.txt")
 template_response    = load_stock_text("template/consolidate-response.txt")
 
-if args.llm_config_mod:
+if args.llm_config_mod and queries:
     lograg(f"Generating final answers...")
 
     with TimerUntil("complete"): 
         if not moderator_loaded_last:
             llm, _ = load_llm_config(args.llm_config_mod, set_service_context=True)
+        if not vector_index:
+            vector_index = lazy_load_vector_index(vector_index)
 
         query_engine_params["streaming"] = False
         query_engine_params["response_mode"] = args.llm_mod_mode
@@ -640,64 +654,77 @@ if args.llm_config_mod:
 # Logs or it didn't happen
 #------------------------------------------------------------------------------
 
-if args.query_log:
-    lograg(f"Appending query log to \"{cleanpath(args.query_log)}\"...")
-    try:
-        with open(args.query_log, "a", encoding="utf-8") as f:
-            f.write("\n".join(transcript_lines))
-    except Exception as e: lograg_error(e)
+if queries:
+    if args.query_log:
+        lograg(f"Appending query log to \"{cleanpath(args.query_log)}\"...")
+        try:
+            with open(args.query_log, "a", encoding="utf-8") as f:
+                f.write("\n".join(transcript_lines))
+        except Exception as e: lograg_error(e)
 
-if args.query_lograg_json:
-    lograg(f"Writing JSON log to \"{cleanpath(args.query_lograg_json)}\"...")
-    try:
-        with open(args.query_lograg_json, "w", encoding="utf-8") as f:
-            raw_text = json.dumps(json_log, indent=4)
-            f.write(raw_text)
-    except Exception as e: lograg_error(e)
-
-
-#------------------------------------------------------------------------------
-# Initialize chat engine
-#------------------------------------------------------------------------------
-
-if args.chat:
-    try:
-        chat_engine_params = query_engine_params.copy()
-        del chat_engine_params["response_mode"]
-        chat_engine_params["chat_mode"] = args.chat_mode
-        chat_engine_params["system_prompt"] = f"{system_prompt}\n{chat_init}"
-        chat_engine = vector_index.as_chat_engine(**chat_engine_params)
-    except Exception as e: lograg_error(e, exit_code=1)
+    if args.query_log_json:
+        lograg(f"Writing JSON log to \"{cleanpath(args.query_log_json)}\"...")
+        try:
+            with open(args.query_log_json, "w", encoding="utf-8") as f:
+                raw_text = json.dumps(json_log, indent=4)
+                f.write(raw_text)
+        except Exception as e: lograg_error(e)
 
 #------------------------------------------------------------------------------
 # Interactive chat mode
 #------------------------------------------------------------------------------
 
 if args.chat:
+    chat_llm_config = None
+    if llm_config_list:
+        chat_llm_config = llm_config_list[-1]
+    if args.llm_config_mod:
+        chat_llm_config = args.llm_config_mod
+    if args.chat_llm_config:
+        chat_llm_config = args.chat_llm_config
+    if not chat_llm_config:
+        lograg_error("no LLMs configured for chat use --chat-llm-config", exit_code=1)
+
+    is_chat_mode = True
+    chat_engine = None
+    query_engine = None
+    curr_chat_mode_desc = args.chat_mode or "best"
+    curr_query_mode_desc = args.query_mode or "tree_summarize"
+
+    vector_index = lazy_load_vector_index(vector_index)
+    llm, streaming_supported = load_llm_config(chat_llm_config, set_service_context=False)
+    curr_provider, curr_model, curr_server, _, curr_params = split_llm_config(chat_llm_config)
+    service_context = set_global_service_context_for_llm(llm)
+
     lograg(f"Entering RAG chat (type \"bye\" to exit, CTRL-C to interrupt)...")
     lograg_verbose(f"\t- the LlamaIndex chat mode is \"{args.chat_mode}\"")
     if args.chat_log:
         lograg_verbose(f"\t- logging chat to \"{cleanpath(args.chat_log)}\"")
     lograg("")
     
-    thinking_message = f"{response_prefix}...thinking... "
+    thinking_message = f"...thinking... "
     exit_commands = ["bye", "goodbye", "exit", "quit", "peace", "done", "stop", "end"]
-    user_prompt = query_prefix or "> "
-    curr_engine = chat_engine
 
     while True:
-        prompt_prefix = ""
-        if args.verbose:
-            curr_engine_desc = "chat" if curr_engine == chat_engine else "query"
-            curr_engine_mode = curr_engine.chat_mode if curr_engine == chat_engine else query_engine.response_mode
-            prompt_prefix = f"{curr_engine_desc}/{curr_engine_mode}"
-            if query_prefix:
-                prompt_prefix = f"({prompt_prefix}) "
+        chat_or_query = "chat" if is_chat_mode else "query"
+        curr_interactive_mode = curr_chat_mode_desc if is_chat_mode else curr_query_mode_desc
 
         try:
-            message = input(prompt_prefix + user_prompt).strip()
+            if lograg_is_color():
+                lograg_in_style(f" {curr_provider} ", style="chat-provider", end="")
+                lograg_in_style(" ", style="chat-message", end="")
+                lograg_in_style(f" {curr_model} ", style="chat-model", end="")
+                lograg_in_style(" ", style="chat-message", end="")
+                lograg_in_style(f" {curr_interactive_mode} ", style="chat-mode", end="")
+                lograg_in_style(">", style="chat-prompt", end="")
+                lograg_in_style(" ", style="chat-message", end="")
+            else:
+                print(f"{curr_provider} {curr_model} {chat_or_query}:{curr_interactive_mode}> ", end="")            
+
+            message = input("").strip()
             if not message:
                 continue
+
         except KeyboardInterrupt:
             continue
 
@@ -711,24 +738,15 @@ if args.chat:
 
             if command == "mode":
                 if message in llamaindex_chat_modes:
-                    # Chat mode
-                    curr_engine = chat_engine
-                    if message in llamaindex_chat_modes:
-                        chat_engine.set_chat_mode(message)
-                    else:
-                        lograg(f"Valid chat modes are: {'' if args.verbose else llamaindex_chat_modes}")
-                        lograg_verbose(load_stock_text("help/chat_modes.txt"))
+                    is_chat_mode = True
+                    curr_chat_mode_desc = message
+                    chat_engine = None
                     lograg(f"Chat response mode is \"{message}\"")
                 elif message in llamaindex_query_modes:
-                    # Query mode
-                    command, message = "query", message
-                    curr_engine = query_engine
-                    if message in llamaindex_query_modes:
-                        query_engine.set_response_mode(message)
-                    else:
-                        lograg(f"Valid query modes are: {llamaindex_query_modes}")
-                        lograg_verbose(load_stock_text("help/query_modes.txt"))
-                    lograg(f"Query response mode is \"{message}\"")                
+                    is_chat_mode = False
+                    curr_query_mode_desc = message
+                    query_engine = None
+                    lograg(f"Query response mode is \"{message}\"")
                 else:
                     lograg(f"Chat modes:  {llamaindex_chat_modes}")
                     lograg(f"Query modes: {llamaindex_query_modes}")
@@ -736,21 +754,13 @@ if args.chat:
 
             elif command == "clear":
                 chat_engine.reset()
-
-            elif command == "verbose":
-                args.verbose = (not message or message == "on")
-                lograg_set_verbose(args.verbose)
-                lograg(f"Verbose mode {'ON' if args.verbose else 'off'}")
                 continue
 
-            #elif command == "index":
-            # mode index exit verbose /help
-            # /provider /model /server /api-key /param 
-            # /cliche craz
-            # /clear /verbose /help
-            # /log /response 
-            # /device
-            continue
+            elif command == "verbose":
+                verbose_enabled = (not message or message == "on")
+                lograg_set_verbose(verbose_enabled)
+                lograg(f"Verbose mode {'ON' if verbose_enabled else 'off'}")
+                continue
 
         if args.chat_log:
             try:
@@ -758,27 +768,53 @@ if args.chat:
                     f.write(f"{query_prefix}{message}\n")
             except Exception as e: lograg_error(e)
 
-        lograg(thinking_message, end="", flush=True)
+        lograg_in_style(thinking_message, style="thinking-message", end="", flush=True)
         response_tokens = []
 
         try:
-            if curr_engine == chat_engine:
-                streaming_response = chat_engine.stream_chat(message)
-            else:
-                streaming_response = query_engine.query(query)
-            
-            for token in streaming_response.response_gen:
-                if len(response_tokens) == 0:
-                    if not token.strip():
-                        continue
-                    lograg(f"\r{' ' * len(thinking_message)}", end="\r")
-                    lograg(response_prefix, end="", flush=True)
+            if not chat_engine:
+                chat_params = {
+                    "chat_mode": curr_chat_mode_desc,
+                    "service_context": service_context,
+                    "streaming": streaming_supported,
+                    "system_prompt": f"{system_prompt}\n{chat_init}",
+                }
+                chat_engine = vector_index.as_chat_engine(**chat_params)
 
-                response_tokens.append(token)
-                lograg(token, end="", flush=True)
+            if not query_engine:
+                query_params = {
+                    "response_mode": curr_query_mode_desc,
+                    "service_context": service_context,
+                    "streaming": streaming_supported,
+                    "system_prompt": system_prompt,
+                }
+                query_engine = vector_index.as_query_engine(**query_params)
+
+            if streaming_supported:
+                if is_chat_mode:
+                    streaming_response = chat_engine.stream_chat(message)
+                else:
+                    streaming_response = query_engine.query(message)
+                for token in streaming_response.response_gen:
+                    if len(response_tokens) == 0:
+                        if not token.strip():
+                            continue
+                        lograg(f"\r{' ' * len(thinking_message)}", end="\r")
+                    response_tokens.append(token)
+                    lograg_in_style(token, style="chat-response", end="", flush=True)
+
+            else:
+                if is_chat_mode:
+                    response_text = str(chat_engine.query(message))
+                else:
+                    response_text = str(query_engine.query(query))
+                response_tokens = [response_text]
+                lograg_in_style(response_text, style="chat-response", end="", flush=True)
+
             lograg("")
         except KeyboardInterrupt:
-            lograg("-[BREAK]")
+            lograg_in_style("[BREAK]", style="error-message")
+            response_tokens = ["ERROR"]
 
         llm_response = "".join(response_tokens).strip()
 

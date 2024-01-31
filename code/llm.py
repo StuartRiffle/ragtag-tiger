@@ -17,6 +17,17 @@ default_timeout         = 180
 hf_model_nicknames      = { "default": "codellama/CodeLlama-7b-Instruct-hf" }
 default_llm_provider    = "huggingface"
 
+
+
+def set_global_service_context_for_llm(llm, embed_model="local"):
+    """Set the global service context to use a specific LLM and embed model"""
+    from llama_index import ServiceContext, set_global_service_context
+    service_context = ServiceContext.from_defaults(
+        embed_model=embed_model, 
+        llm=llm)
+    set_global_service_context(service_context)
+    return service_context
+
 def load_llm(provider, model, server, api_key, params, verbose=False, set_service_context=True):
     result = None
     streaming_supported = True
@@ -114,16 +125,13 @@ def load_llm(provider, model, server, api_key, params, verbose=False, set_servic
                     #system_prompt=system_prompt)
 
             if set_service_context:
-                from llama_index import ServiceContext, set_global_service_context
-                service_context = ServiceContext.from_defaults(
-                    embed_model="local", 
-                    llm=result)
-                set_global_service_context(service_context)
+                set_global_service_context_for_llm(result)
 
     except Exception as e: 
         lograg_error(f"failure initializing LLM: {e}", exit_code=1)
 
     return result, streaming_supported
+
 
 
 def split_llm_config(config):

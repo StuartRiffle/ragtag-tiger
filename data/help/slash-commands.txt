@@ -1,0 +1,9 @@
+/mode
+/clear
+/verbose 
+/quit 
+/param 
+/temp 
+/log
+/json
+/device

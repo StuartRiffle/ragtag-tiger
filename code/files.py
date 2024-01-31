@@ -70,9 +70,9 @@ def strip_and_remove_comments(text, comment_prefix="#"):
 
 def resolve_stock_data_prefix(path):
     # If path starts with +/ replace that with the data folder at the repo root
-    if path.replace(os.path.dirsep, "/").startswith("+/"):
-        data_path = os.path.join(os.path.dirname(__file__), "data")
-        path = os.path.join(data_path, path[1:])
+    if path.replace(os.path.sep, "/").startswith("+/"):
+        data_path = os.path.join(os.path.dirname(__file__), "../data")
+        path = os.path.join(data_path, path[2:])
     return path
 
 def load_stock_file(path):

@@ -1,4 +1,4 @@
-# RAG/TAG Tiger (C) 2024 Stuart Riffle - rule/answer-then-explain.txt
+# RAG/TAG Tiger (C) 2024 Stuart Riffle - rule/first-answer-then-explain.txt
 
 - First answer the query, then provide details.
 - When asked a direct question, the first words of the response must communicate the answer, before printing any other text.

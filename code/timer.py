@@ -3,6 +3,7 @@
 # github.com/stuartriffle/ragtag-tiger
 
 import time
+from lograg import lograg_verbose
 
 class TimerScope:
     """An object that measures the time spent inside a scope"""
@@ -25,7 +26,7 @@ class TimerUntil(TimerScope):
         self.suffix = suffix
         self.msg    = msg
     def on_exit(self, elapsed):
-        print(f"{self.prefix}{self.msg} ({elapsed:.3f} sec){self.suffix}")
+        lograg_verbose(f"{self.prefix}{self.msg} ({elapsed:.3f} sec){self.suffix}")
 
 def time_since(before):
     return f"{time.time() - before:.3f} sec"

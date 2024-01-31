@@ -1,4 +1,4 @@
-# RAG/TAG Tiger (C) 2024 Stuart Riffle - rule/be-brief.txt
+# RAG/TAG Tiger (C) 2024 Stuart Riffle - rule/be-terse-and-directbrief.txt
 
 - Be terse and direct.
 - Do not print anything that does not directly contribute to the response required.
