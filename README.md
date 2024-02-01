@@ -56,7 +56,7 @@ If that fails, go to step 4.
 
 ### 5) Sanity check
 ```
-python ragtag.py --help
+ragtag --help
 ```
 This is the part where it falls over because your CUDA drivers are too old or something like that. Or the virtual environment chokes on a half-downloaded package, and you spend an hour typing `pip uninstall` and `pip install` in alternation.
 
@@ -64,19 +64,24 @@ If Python wants more packages, please add them to requirements.txt and submit a 
 
 # Usage
 
+### Launching
+Run the program using the script `ragtag.sh` (or `ragtag.bat` for Windows) in the root of the repo. It's easier than typing `python code/ragtag-tiger.py` every time. 
+
+>**Pro-tip:** &nbsp;Put the repo in your path, so you can run **RAG/TAG Tiger** from any directory.
+
 The simplest way to perform a RAG query would be:
 ```
-python ragtag.py --source my/docs --query "But, why?"
+ragtag --source my/docs --query "But, why?"
 ```
 
 **But don't do that.** It will index your documents from scratch every time, which is slow. It's better to ingest all your files once, and save the resulting index:
 ```
-python ragtag.py --source my/docs --index-store my/index
+ragtag --source my/docs --index-store my/index
 ```
 
 Then use that index to perform your queries:
 ```
-python ragtag.py --index-load my/index --query "Really though, why?"
+ragtag --index-load my/index --query "Really though, why?"
 ```
 
 <img align="right" width="250px" style="padding:15px" src="docs/images/noidealol.jpg">
@@ -85,12 +90,9 @@ This is **still** slow, because the index can take a long time to load. It's jus
 
 To minimize overhead, try to either submit all your queries in one run, or leave a window open with the program idling in chat mode for ad-hoc use. 
 
-Be aware that there are multiple chat "modes", and the default mode does not generate the same output as a batched query. For query-style responses, type `/mode tree_summarize` at the chat prompt. 
+Be aware that there are multiple chat "modes", and the default mode does not generate the same output as a batched query. For query-style responses, type `/mode tree` at the chat prompt. 
 
-### Launching
->**Pro-tip:** &nbsp;Put the repo in your path, so you can run **RAG/TAG Tiger** from any directory. You will also find a `ragtag.bat` and `ragtag.sh` in the root of the repo, which let you launch the program without typing `python ragtag.py` every time. 
 
-The rest of these examples invoke `ragtag` instead of `python ragtag.py` because it's easier to read. 
 
 # Query and chat modes
 
@@ -100,22 +102,24 @@ The query modes are available in chat mode too as a convenience. They are proces
 
 | Query mode| Abbrev | |
 | --- | --- | --- |
-| `accumulate`              |`acc`| Condense responses for each chunk |
-| `compact`                 |`com`|Combine chunks, then refine |
-| `compact_accumulate`      |`comacc`| Combine chunks, condense responses, consolidate  |
-| `generation`              |`bare`| Ignore context, no RAG, just call LLM to generate responses |
-| `no_text`                 |`nodes`| Return context nodes without generating a response |
-| `refine`                  |`ref`| First node generates response, others refine it in series |
-| `simple_summarize`        |`sum`| Merge all the chunks, no RAG, just call the LLM |
-| `tree_summarize`          |`tree`| Generate summary prompt, populate tree with nodes (default)|
-| **Chat mode** | |
-| `simple`                  |`blind`| RAG lookup disabled |
-| `condense_question`       |`con`| Condense conversation history and message |
-| `context`                 |`look`| Look up message in the index |
-| `condense_plus_context`   |`conlook`| Look up condensed history and message |
-| `react`                   |``| ReAct agent loop with query engine tools |
-| `openai`                  |``| OpenAI agent loop |
-| `best`                    |`agent`| Auto-select between OpenAI and React (default)|
+| `accumulate`            |`acc`    | Condense responses for each chunk |
+| `compact`               |`com`    | Combine chunks, then refine |
+| `compact_accumulate`    |`comacc` | Combine chunks, condense responses, consolidate  |
+| `generation`            |`bare`   | Ignore context, no RAG, just call LLM to generate responses |
+| `no_text`               |`nodes`  | Return context nodes without generating a response |
+| `refine`                |`ref`    | First node generates response, others refine it in series |
+| `simple_summarize`      |`sum`    | Merge all the chunks, no RAG, just call the LLM |
+| `tree_summarize`        |`tree`   | Generate summary prompt, populate tree with nodes (default)|
+| **Chat mode**           |         | |
+| `simple`                |`blind`  | RAG lookup disabled |
+| `condense_question`     |`con`    | Condense conversation history and message |
+| `context`               |`look`   | Look up message in the index |
+| `condense_plus_context` |`conlook`| Look up condensed history and message |
+| `openai`                |`openai` | OpenAI agent loop |
+| `react`                 |`react`  | ReAct agent loop with query engine tools |
+| `best`                  |`agent`  | Auto-select between OpenAI and React (default)|
+
+Most of the modes have a shorter alias here for convenience, but you can use the original LlamaIndex identifiers too.
 
 # Prompts
 
@@ -126,13 +130,13 @@ The system prompt and chat instructions can be assembled from mix-and-match snip
 --context-file  +/rule/direct-answer-first.txt
 --context-file  +/character/tiger.txt
 --context-file  +/rule/never-break-character.txt
---context-file  +/rule/important-for-my-job.txt
---context       "Generate all output in French Pig Latin"
+--context-file  my_rules.txt
+--context       "All responses must rhyme, but poorly"
 ...(etc)...
 ```
 The files are just concatenated to produce the prompt.
 
-Notice the magic `+/` prefix on the paths. The same way `~/` is an alias for the home directory on unices, it works as a shortcut to the `data/` folder. That's so you can access the stock text files from wherever you run the program.
+Notice the magic `+/` prefix on the paths. The same way `~/` is an alias for the home directory on unices, it works as a shortcut to the `data/` folder in the repo. That's so you can access the stock text files from wherever you run the program.
 
 # Local inference
 
