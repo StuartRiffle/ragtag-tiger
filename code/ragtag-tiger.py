@@ -638,7 +638,7 @@ if queries and llm_config_list:
                     try:
                         with TimerUntil("query complete"):
                             if verbose_enabled:
-                                lograg_verbose(query_prefix)
+                                lograg_verbose(query_prefix, end="", flush=True)
                                 lograg_in_style(f"{query}", style="chat-message")
                                 lograg_verbose(f"\t...thinking ", end="", flush=True)
                                 
@@ -657,7 +657,7 @@ if queries and llm_config_list:
                                         lograg_in_style(token, style="chat-response", end="", flush=True)
                                 llm_response = "".join(response_tokens).strip()
                             else:
-                                llm_response = str(query_engine.query(query))
+                                llm_response = str(query_engine.query(query)).strip()
                                 lograg_verbose(f"({time_since(query_start_time)})")
                                 lograg_verbose(f"{response_prefix}")
                                 lograg_in_style(f"{llm_response}", style="chat-response", end="", flush=True)
@@ -858,12 +858,12 @@ if args.chat:
 
             if lograg_is_color():
                 lograg("")
-                lograg_in_style(f" {curr_provider} ", style="chat-provider", end="")
-                lograg_in_style(" ", style="chat-message", end="")
                 lograg_in_style(f" {curr_model} ", style="chat-model", end="")
-                lograg_in_style(" ", style="chat-message", end="")
+                lograg_in_style("-", style="chat-prompt", end="")
+                lograg_in_style(f" {curr_provider} ", style="chat-provider", end="")
+                lograg_in_style("-", style="chat-prompt", end="")
                 lograg_in_style(f" {curr_interactive_alias} ", style=chat_mode_print_style, end="") 
-                lograg_in_style(":", style="chat-prompt", end="")
+                lograg_in_style("-:", style="chat-prompt", end="")
                 lograg_in_style(" ", style="chat-message", end="", flush=True)
             else:
                 lograg(f"{curr_provider} {curr_model} {chat_or_query}:{curr_interactive_alias}: ", end="", flush=True)            

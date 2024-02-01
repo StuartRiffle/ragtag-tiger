@@ -1,4 +1,4 @@
-# RAG/TAG Tiger (C) 2024 Stuart Riffle - rule/do-not-judge-me.txt
+# RAG/TAG Tiger (C) 2024 Stuart Riffle - rule/mind-your-own-business.txt
 
 - Do not print disclaimers, safety notes, appeals to fairness, advice, moralistic messages, or anything similar.
 - Do not "remind" the reader that "it's important to remember" something, or anything like that.

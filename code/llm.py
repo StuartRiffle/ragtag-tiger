@@ -53,15 +53,26 @@ def load_llm(provider, model, server, api_key, params, verbose=False, set_servic
                 
             ### Google
             elif provider == "google":
-                api_key = api_key or os.environ.get("GEMINI_API_KEY", "")
+                gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
+                google_api_key = os.environ.get("GOOGLE_API_KEY", "")
                 model_name = model or google_model_default
-                lograg(f"Preparing Google model \"{model_name}\"...")
-                from llama_index.llms import PaLM
-                result = PaLM(
-                    api_key=api_key,
-                    model_name=model_name,
-                    generate_kwargs=model_kwargs)
-                streaming_supported = False
+                import google.generativeai as genai
+                genai.configure(api_key=google_api_key)
+                if "gemini" in str(model_name).lower():
+                    lograg(f"Preparing Google Gemini model \"{model_name}\"...")
+                    from llama_index.llms import Gemini
+                    result = Gemini(
+                        api_key=api_key or gemini_api_key,
+                        model_name=model_name,
+                        model_kwargs=model_kwargs)
+                else:
+                    lograg(f"Preparing Google PaLM model \"{model_name}\"...")
+                    from llama_index.llms import PaLM
+                    result = PaLM(
+                        api_key=api_key or google_api_key,
+                        model_name=model_name,
+                        generate_kwargs=model_kwargs)
+                    streaming_supported = False
                 
             ### Llama.cpp
             elif provider == "llamacpp":
