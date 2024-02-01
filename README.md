@@ -240,7 +240,7 @@ It does this as another RAG query. I don't know if that's a good idea or not yet
 | | | | 128k | `openai,gpt-4-1106-preview` |
 | **[Google](https://ai.google.dev/models)** | PaLM | | 8k | `google,text-bison-001` |
 | | Gemini | | 30k | `google,models/gemini-pro` |
-|  **[Perplexity](https://perplexity.ai/discover)** | CodeLlama | 33B | 16k | `perplexity,codellama-34b-instruct` |
+|  **[Perplexity](https://docs.perplexity.ai/docs/model-cards)** | CodeLlama | 33B | 16k | `perplexity,codellama-34b-instruct` |
 | | Llama 2 | 70B | 4k | `perplexity,llama-2-70b-chat` |
 | **[Replicate](https://replicate.com/collections/language-models)** | Mixtral | 8x 7B | 32k | `replicate,mistralai/mixtral-8x7b-instruct-v0.1` |
 | | Nous Hermes 2 | 34B | 4k | `replicate,kcaverly/nous-hermes-2-yi-34b-gguf` |
@@ -337,6 +337,7 @@ ragtag --help
 | **`--ignore-types`**    | *EXT*      | Do not index these file extensions, even if supported             |
 | **`--size-limit`**      | *SIZE*     | Ignore huge text files unlikely to contain interesting content    |
 | **`--no-cache`**        |            | Do not use the local cache for loaders                            |
+| **`--gitignore`**       |            | Apply exclusions from .gitignore files (not used by default)      |
 | **Language model**      |            |                                                                   |
 | **`--llm-provider`**    | *NAME*     | Inference provider/interface                                      |
 | **`--llm-model`**       | *NAME*     | Model name/path/etc for provider                                  |

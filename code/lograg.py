@@ -16,7 +16,7 @@ lograg_color_themes = {
         "chat-model":       ["light_grey",  "on_blue"],
         "chat-mode":        ["light_grey",  "on_dark_grey"],
         "query-mode":       ["white",  "on_green"],
-        "chat-message":     ["white",       "on_black"],
+        "chat-message":     ["light_cyan",       "on_black"],
         "chat-response":    ["light_yellow",      "on_black"],
         "query-response":   ["light_green",      "on_black"],
         "chat-prompt":      ["dark_grey",      "on_black"],

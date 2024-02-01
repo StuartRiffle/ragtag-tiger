@@ -1,0 +1,3 @@
+# RAG/TAG Tiger (C) 2024 Stuart Riffle - rule/do-not-restate-queries.txt
+
+- Do not begin your response by re-stating the user's query.

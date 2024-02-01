@@ -102,20 +102,23 @@ def load_and_strip_text(file):
         lograg_error(e)
     return None
 
-def cleanpath(path, resolve_stock_folder=True, make_unique=False):
+def cleanpath(path, resolve_stock_folder=True, make_unique=False, lowercase=True, forward_slashes=True):
     """Clean up a path, optionally making it absolute and unique"""
 
     if resolve_stock_folder:
         # Access built-in files like stock chat instructions
         path = resolve_stock_data_prefix(path)
 
+    if make_unique:
+        # Canonical form to allow identification redundant file references
+        path = os.path.abspath(os.path.realpath(path))
+    
     path = os.path.normpath(path)
 
-    # Canonical form to allow identification redundant file references
-    if make_unique:
-        path = os.path.realpath(path)
-        path = os.path.abspath(path)
-        path = os.path.normcase(path)
-        path = os.path.normpath(path)
+    if lowercase:
+        path = path.lower()
+
+    if forward_slashes:
+        path = path.replace("\\", "/")
 
     return path        

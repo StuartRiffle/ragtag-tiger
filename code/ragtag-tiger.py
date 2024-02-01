@@ -96,6 +96,7 @@ arg("--ignore-archives",help="Do not index files inside zip/tar/etc archives", a
 arg("--ignore-types",   help="Do not index these file extensions, even if supported", action="append", metavar="EXT")
 arg("--size-limit",     help="Ignore huge text files unlikely to contain interesting", type=human_size_type, default=0, metavar="SIZE")
 arg("--no-cache-load",  help="Do not use the local cache for loaders", action="store_true")
+arg("--gitignore",      help="Apply rules from .gitignore files found", action="store_true")
 
 arg = parser.add_argument_group("Language model").add_argument
 arg("--llm-provider",   help="Inference provider/interface", choices=["openai", "google", "llamacpp", "huggingface", "perplexity", "replicate"], metavar="NAME")
@@ -155,7 +156,7 @@ running_in_terminal = os.isatty(os.sys.stdout.fileno())
 if running_in_terminal and not args.no_color:
     if os.name == "nt":
         try:
-            # Enable ANSI color codes in Windows
+            # Makes ANSI color codes work in Windows
             os.system("color")
         except: pass
 else:
@@ -164,13 +165,14 @@ else:
 from files import cleanpath
 printable_prog_name = cleanpath(os.sys.argv[0], make_unique=True)
 command_line_args = " ".join(shlex.quote(arg) for arg in os.sys.argv[1:])
-command_line_args = command_line_args.replace(" --", "\n\t--")
-lograg_verbose(f"({printable_prog_name})\n\t{command_line_args}")
+command_line_args = command_line_args.replace(" --", "\n\t    --")
+lograg_verbose(f"\t{printable_prog_name}\n\t    {command_line_args}")
 
 import json, tempfile, hashlib, humanfriendly
 from llama_index.text_splitter import CodeSplitter
 from files import *
 from extensions import *
+from tqdm import tqdm
 from timer import TimerUntil, time_since
 from llm import load_llm_config, split_llm_config
 from unpack import unpack_container_to_temp
@@ -280,8 +282,10 @@ if len(search_specs) > 0:
                         lograg_verbose(f"Temporary files will be stored in \"{temp_folder}\"")
                         lograg(f"Unpacking {len(containers)} containers...")
                     except Exception as e:
-                        lograg_error(f"failed creating temporary folder \"{temp_folder}\": {e}", exit_code=1)
+                        lograg_error(f"failed creating temporary folder, can't unpack containers: {e}")
+                        break
 
+            if temp_folder:
                 unpacked_files = unpack_container_to_temp(container, temp_folder)
                 all_unpacked_files.extend(unpacked_files)
 
@@ -290,6 +294,39 @@ if len(search_specs) > 0:
 
 files_to_index = [cleanpath(f) for f in files_to_index]
 files_to_index = sorted(set(files_to_index))
+
+#------------------------------------------------------------------------------
+# Apply .gitignore rules
+#------------------------------------------------------------------------------
+
+def identify_gitignored_files(file_list):
+    from gitignore import GitIgnore
+    gitignore_files = [f for f in file_list if os.path.basename(f) == ".gitignore"]
+
+    files_to_remove = set()
+    files_to_remove.update(gitignore_files)
+
+    for gitignore_file in gitignore_files:
+        try:
+            gitignore = GitIgnore.from_file(gitignore_file)
+            for filename in file_list:
+                if gitignore.ignored(filename):
+                    files_to_remove.add(filename)
+        except Exception as e:
+            lograg_error(f"error processing .gitignore file \"{gitignore_file}\": {e}")
+
+    return files_to_remove
+
+if args.gitignore and files_to_index:
+    gitignore_files = [f for f in files_to_index if os.path.basename(f) == ".gitignore"]
+    if gitignore_files:
+        with TimerUntil("done"):
+            lograg(f"Applying rules from {len(gitignore_files)} .gitignore files...")
+            files_to_ignore = identify_gitignored_files(files_to_index)
+
+            lograg_verbose(f"...identified {len(files_to_ignore)} files to ignore")
+            files_to_index = [f for f in files_to_index if f not in files_to_ignore]
+
 
 #------------------------------------------------------------------------------
 # Download any custom loaders needed
@@ -385,9 +422,9 @@ def load_document_nodes(splitter, file_list, show_progress=False):
         file_extractor=file_extractor_list, 
         exclude_hidden=True)
     
-    loaded_docs = doc_reader.load_data(show_progress=verbose_enabled)
+    loaded_docs = doc_reader.load_data(show_progress=show_progress)
     parser = splitter or SimpleNodeParser.from_defaults()
-    doc_nodes = parser.get_nodes_from_documents(loaded_docs)
+    doc_nodes = parser.get_nodes_from_documents(loaded_docs, show_progress=show_progress)
     return doc_nodes
 
 if len(files_to_index) > 0:
@@ -397,6 +434,7 @@ if len(files_to_index) > 0:
         if len(non_code_files) > 0:
             info = f" {len(non_code_files)}" if verbose_enabled else ""
             lograg(f"Loading{info} documents...")
+
             with TimerUntil("all documents loaded"):
                 non_code_nodes = load_document_nodes(None, non_code_files, show_progress=verbose_enabled)
                 document_nodes.extend(non_code_nodes)
@@ -404,14 +442,42 @@ if len(files_to_index) > 0:
 
         if len(non_code_files) < len(files_to_index):
             lograg(f"Chunking source code...")
-            with TimerUntil("all code chunked"):
+
+            with TimerUntil("code chunked"):
+                failed_files = set()
+                total_code_files_chunked = 0
                 for extensions, code_splitter in source_code_splitters:
                     code_files = [f for f in files_to_index if os.path.splitext(f)[1] in extensions]
-                    if len(code_files) > 0:
+                    if not code_files:
+                        continue
+
+                    num_files_chunked = 0
+                    try:
                         code_nodes = load_document_nodes(code_splitter, code_files, show_progress=verbose_enabled)
-                        lograg_verbose(f"\t{len(code_files)} files parsed as \"{code_splitter.language}\"")
                         document_nodes.extend(code_nodes)
-                        files_processed += len(code_files)
+                        num_files_chunked += len(code_files)
+                    except Exception as e:
+                        # Something in that batch failed, so [sigh] process them one at a time
+                        lograg_verbose(f"\tError while chunking a batch of {len(code_files)} files, isolating: {e}")
+                        progress_bar = tqdm(code_files, desc=f"Chunking individually", leave=False, disable=not verbose_enabled)
+                        for code_filename in progress_bar:
+                            try:
+                                code_nodes = load_document_nodes(code_splitter, [code_filename], show_progress=False)
+                                document_nodes.extend(code_nodes)
+                                num_files_chunked += 1
+                            except: 
+                                failed_files.add(code_filename)
+                        
+
+                    files_processed += num_files_chunked
+
+                    if num_files_chunked > 0:
+                        lograg_verbose(f"\t{num_files_chunked} files parsed as \"{code_splitter.language}\"")
+                    total_code_files_chunked += num_files_chunked
+                    
+                if failed_files:
+                    fail_message = f", {len(failed_files)} files failed parsing" if failed_files else ""
+                lograg_verbose(f"\t{total_code_files_chunked} total code files processed{fail_message}")
 
     except Exception as e: lograg_error(e)
 
@@ -472,6 +538,7 @@ def lazy_load_vector_index(curr_index):
     
     from llama_index import VectorStoreIndex
 
+    vector_index = None
     if args.index_load:
         info = f" from \"{cleanpath(args.index_load)}\"" if verbose_enabled else ""
         lograg(f"Loading vector index{info}...")
@@ -479,14 +546,14 @@ def lazy_load_vector_index(curr_index):
             with TimerUntil("loaded"):
                 from llama_index import StorageContext, load_index_from_storage
                 storage_context = StorageContext.from_defaults(persist_dir=args.index_load)
-                vector_index = load_index_from_storage(storage_context, show_progress=verbose_enabled)            
+                vector_index = load_index_from_storage(storage_context, show_progress=verbose_enabled, insert_batch_size=5000)            
         except Exception as e: 
             lograg_error(e)
 
     if not vector_index:
         lograg_verbose(f"Creating a new vector index in memory...")
         try:
-            vector_index = VectorStoreIndex([])
+            vector_index = VectorStoreIndex([], insert_batch_size=5000)
             vector_index.vector_store.persist()
         except Exception as e: 
             lograg_error(e, exit_code=1)
@@ -514,8 +581,8 @@ def lazy_load_vector_index(curr_index):
 tag_queries = (args.tag_queries or "").strip("\"' ")
 tag_responses = (args.tag_responses or "").strip("\"' ")
 
-query_prefix = f"### {tag_queries}\n" if tag_queries else ""
-response_prefix = f"### {tag_responses}\n" if tag_responses else ""
+query_prefix = f"### {tag_queries}\n" if tag_queries and not lograg_is_color() else ""
+response_prefix = f"### {tag_responses}\n" if tag_responses and not lograg_is_color() else ""
 
 if queries and llm_config_list:
     for llm_config in llm_config_list:
@@ -570,27 +637,35 @@ if queries and llm_config_list:
 
                     try:
                         with TimerUntil("query complete"):
-                            lograg_verbose(f"\n{query_prefix}{query}\n\t...thinking ", end="", flush=True)
+                            if verbose_enabled:
+                                lograg_verbose(query_prefix)
+                                lograg_in_style(f"{query}", style="chat-message")
+                                lograg_verbose(f"\t...thinking ", end="", flush=True)
+                                
                             query_start_time = time.time()
-
                             if streaming_supported:
                                 streaming_response = query_engine.query(query)
                                 for token in streaming_response.response_gen:
                                     if len(response_tokens) == 0:
                                         if not token.strip():
+                                            # Ignore leading whitespace in response
                                             continue
                                         lograg_verbose(f"({time_since(query_start_time)})\n{response_prefix}", end="", flush=True)
 
                                     response_tokens.append(token)
-                                    lograg_verbose(token, end="", flush=True)
-                                lograg_verbose("")
+                                    if verbose_enabled:
+                                        lograg_in_style(token, style="chat-response", end="", flush=True)
                                 llm_response = "".join(response_tokens).strip()
                             else:
                                 llm_response = str(query_engine.query(query))
-                                lograg_verbose(f"({time_since(query_start_time)})\n{response_prefix}{llm_response}")
+                                lograg_verbose(f"({time_since(query_start_time)})")
+                                lograg_verbose(f"{response_prefix}")
+                                lograg_in_style(f"{llm_response}", style="chat-response", end="", flush=True)
 
                             transcript_lines.append(f"{query_prefix}{query}\n")
                             transcript_lines.append(f"{response_prefix}{llm_response}\n\n")
+
+                            lograg_verbose("")
 
                     except Exception as e:
                         llm_response = "ERROR"
@@ -605,7 +680,6 @@ if queries and llm_config_list:
                     if not "response" in json_log["queries"][lograg_idx]:
                         json_log["queries"][lograg_idx]["response"] = llm_response
 
-            lograg_verbose("")
 
 #------------------------------------------------------------------------------
 # Consolidate responses after querying multiple models
@@ -644,7 +718,10 @@ if args.llm_config_mod and queries:
                     llm_response = drafts[response_idx]
                     prompt += f"### RESPONSE {response_idx + 1}\n\n{llm_response['response']}\n\n"
 
-                lograg_verbose(f"{query_prefix}{query}\n\t...consolidating responses, please hold... ", end="", flush=True)
+                lograg_verbose(f"{query_prefix}", end="", flush=True)
+                if verbose_enabled:
+                    lograg_in_style(query, style="chat-message")
+                    lograg_verbose(f"\t...consolidating responses, please hold... ", end="", flush=True)
 
                 try:
                     with TimerUntil("done", prefix=""):
@@ -667,7 +744,9 @@ if args.llm_config_mod and queries:
                 json_log["queries"][query_record_idx]["evaluation"] = evaluation
                 json_log["queries"][query_record_idx]["response"] = summary
 
-                lograg_verbose(f"{response_prefix}{summary}\n")
+                lograg_verbose(response_prefix, end="", flush=True)
+                if verbose_enabled:
+                    lograg_in_style(summary, style="chat-response")
 
                 transcript_lines.append(f"## Query {query_record_idx + 1}\n{query.strip()}\n\n")
                 transcript_lines.append(f"### Validation\n\n{validation.strip()}\n\n")
@@ -891,10 +970,5 @@ if args.chat:
 if temp_folder:
     clean_up_temporary_files()
 
-lograg_verbose(f"\nTiger out, peace ({time_since(program_start_time)})")
-
-
-
-
-
-
+lograg_verbose(f"\nTiger out, peace.")
+lograg_verbose(f"({time_since(program_start_time)})")

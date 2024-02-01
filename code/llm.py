@@ -17,7 +17,7 @@ default_timeout         = 180
 hf_model_nicknames      = { "default": "codellama/CodeLlama-7b-Instruct-hf" }
 default_llm_provider    = "huggingface"
 
-def load_llm(provider, model, server, api_key, params, verbose=False, set_service_context=True):
+def load_llm(provider, model, server, api_key, params, verbose=False, set_service_context=True, torch_device=None):
     result = None
     streaming_supported = True
     try:
@@ -66,9 +66,9 @@ def load_llm(provider, model, server, api_key, params, verbose=False, set_servic
             ### Llama.cpp
             elif provider == "llamacpp":
                 if torch.cuda.is_available():
-                    # FIXME - this does nothing?
+                    # FIXME - this does nothing? Always on CPU
                     model_kwargs["n_gpu_layers"] = -1
-                lograg(f"Preparing llama.cpp model \"{os.path.normpath(model)}\"...")
+                lograg(f"Preparing llama.cpp model \"{cleanpath(model)}\"...")
                 from llama_index.llms import LlamaCPP
                 result = LlamaCPP(
                     model_path=model,
@@ -90,7 +90,7 @@ def load_llm(provider, model, server, api_key, params, verbose=False, set_servic
             elif provider == "replicate":
                 api_key = api_key or os.environ.get("REPLICATE_API_TOKEN", "")
                 model_name = model or replicate_default
-                lograg(f"Preparing Replicate model \"model_name)\"...")
+                lograg(f"Preparing Replicate model \"{model_name}\"...")
                 from llama_index.llms import Replicate
                 result = Replicate(
                     model=model_name,
@@ -109,8 +109,8 @@ def load_llm(provider, model, server, api_key, params, verbose=False, set_servic
                 from llama_index.llms import HuggingFaceLLM
                 result = HuggingFaceLLM(
                     model_name=model_name,
-                    model_kwargs=model_kwargs) 
-                    #device_map=args.torch_device or "auto",
+                    model_kwargs=model_kwargs,
+                    device_map=torch_device or "auto")
                     #system_prompt=system_prompt)
 
             from llama_index import ServiceContext, set_global_service_context
