@@ -61,7 +61,7 @@ def unpack_container_to_temp(container_file, temp_folder):
 
         elif container_type in mime_file_types:
             file_bytes = open(container_file, "rb").read()
-            unpack_mime(file_bytes, output_folder, container_type)
+            unpack_mime(file_bytes, output_folder, container_file, container_type)
 
         unpacked_files = [os.path.join(output_folder, f) for f in os.listdir(output_folder)]
 
