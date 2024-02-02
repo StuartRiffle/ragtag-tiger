@@ -972,7 +972,7 @@ if args.chat:
 #------------------------------------------------------------------------------
 
 if temp_folder:
-    clean_up_temporary_files()
+    clean_up_temporary_files(temp_folder)
 
 lograg_verbose(f"\nTiger out, peace.")
 lograg_verbose(f"({time_since(program_start_time)})")
