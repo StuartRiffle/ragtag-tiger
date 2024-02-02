@@ -540,7 +540,7 @@ def lazy_load_vector_index(curr_index):
     if curr_index:
         return curr_index
     
-    from llama_index import VectorStoreIndex
+    from llama_index import VectorStoreIndex, StorageContext, ServiceContext
 
     vector_index = None
     if args.index_load:
@@ -548,7 +548,7 @@ def lazy_load_vector_index(curr_index):
         lograg(f"Loading vector index{info}...")
         try:
             with TimerUntil("loaded"):
-                from llama_index import StorageContext, load_index_from_storage
+                from llama_index import load_index_from_storage
                 storage_context = StorageContext.from_defaults(persist_dir=args.index_load)
                 vector_index = load_index_from_storage(storage_context, show_progress=verbose_enabled, insert_batch_size=5000)            
         except Exception as e: 
@@ -557,7 +557,8 @@ def lazy_load_vector_index(curr_index):
     if not vector_index:
         lograg_verbose(f"Creating a new vector index in memory...")
         try:
-            vector_index = VectorStoreIndex([], insert_batch_size=5000)
+            local_service_context = ServiceContext.from_defaults(embed_model="local")
+            vector_index = VectorStoreIndex([], insert_batch_size=5000, service_context=local_service_context)
             vector_index.vector_store.persist()
         except Exception as e: 
             lograg_error(e, exit_code=1)

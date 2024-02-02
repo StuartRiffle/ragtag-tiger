@@ -29,7 +29,7 @@ def load_llm(provider, model, server, api_key, params, verbose=False, set_servic
                 api_key = api_key or os.environ.get("OPENAI_API_KEY", "")
                 if not server:
                     model_name = model or openai_model_default
-                    lograg(f"Preparing OpenAI model \"{model_name}\"...")
+                    lograg(f"OpenAI model \"{model_name}\"...")
                     from llama_index.llms import OpenAI
                     result = OpenAI(
                         model=model_name,
@@ -59,14 +59,14 @@ def load_llm(provider, model, server, api_key, params, verbose=False, set_servic
                 import google.generativeai as genai
                 genai.configure(api_key=google_api_key)
                 if "gemini" in str(model_name).lower():
-                    lograg(f"Preparing Google Gemini model \"{model_name}\"...")
+                    lograg(f"Google Gemini model \"{model_name}\"...")
                     from llama_index.llms import Gemini
                     result = Gemini(
                         api_key=api_key or gemini_api_key,
                         model_name=model_name,
                         model_kwargs=model_kwargs)
                 else:
-                    lograg(f"Preparing Google PaLM model \"{model_name}\"...")
+                    lograg(f"Google PaLM model \"{model_name}\"...")
                     from llama_index.llms import PaLM
                     result = PaLM(
                         api_key=api_key or google_api_key,
@@ -79,7 +79,7 @@ def load_llm(provider, model, server, api_key, params, verbose=False, set_servic
                 if torch.cuda.is_available():
                     # FIXME - this does nothing? Always on CPU
                     model_kwargs["n_gpu_layers"] = -1
-                lograg(f"Preparing llama.cpp model \"{cleanpath(model)}\"...")
+                lograg(f"llama.cpp model \"{cleanpath(model)}\"...")
                 from llama_index.llms import LlamaCPP
                 result = LlamaCPP(
                     model_path=model,
@@ -90,7 +90,7 @@ def load_llm(provider, model, server, api_key, params, verbose=False, set_servic
             elif provider == "perplexity":
                 api_key = api_key or os.environ.get("PERPLEXITYAI_API_KEY", "")
                 model_name = model or perplexity_default
-                lograg(f"Preparing Perplexity model \"{model_name}\"...")
+                lograg(f"Perplexity model \"{model_name}\"...")
                 from llama_index.llms import Perplexity
                 result = Perplexity(
                     api_key=api_key,
@@ -101,7 +101,7 @@ def load_llm(provider, model, server, api_key, params, verbose=False, set_servic
             elif provider == "replicate":
                 api_key = api_key or os.environ.get("REPLICATE_API_TOKEN", "")
                 model_name = model or replicate_default
-                lograg(f"Preparing Replicate model \"{model_name}\"...")
+                lograg(f"Replicate model \"{model_name}\"...")
                 from llama_index.llms import Replicate
                 result = Replicate(
                     model=model_name,
@@ -115,7 +115,7 @@ def load_llm(provider, model, server, api_key, params, verbose=False, set_servic
                 if model_name in hf_model_nicknames:
                     model_desc = f" (\"{model_name}\")"
                     model_name = hf_model_nicknames[model_name]
-                lograg(f"Preparing HuggingFace model \"{model_name}\"{model_desc}...")
+                lograg(f"HuggingFace model \"{model_name}\"{model_desc}...")
 
                 from llama_index.llms import HuggingFaceLLM
                 result = HuggingFaceLLM(
