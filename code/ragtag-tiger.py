@@ -557,7 +557,7 @@ def lazy_load_vector_index(curr_index):
     if not vector_index:
         lograg_verbose(f"Creating a new vector index in memory...")
         try:
-            local_service_context = ServiceContext.from_defaults(embed_model="local")
+            local_service_context = ServiceContext.from_defaults(llm=None, embed_model="local")
             vector_index = VectorStoreIndex([], insert_batch_size=5000, service_context=local_service_context)
             vector_index.vector_store.persist()
         except Exception as e: 
