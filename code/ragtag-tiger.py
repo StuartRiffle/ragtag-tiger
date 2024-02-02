@@ -582,6 +582,9 @@ def lazy_load_vector_index(curr_index):
     curr_index = vector_index
     return vector_index
 
+if files_processed and not queries:
+    vector_index = lazy_load_vector_index(vector_index)
+
 tag_queries = (args.tag_queries or "").strip("\"' ")
 tag_responses = (args.tag_responses or "").strip("\"' ")
 
