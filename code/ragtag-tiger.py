@@ -270,7 +270,9 @@ if len(search_specs) > 0:
 
             if args.ignore_archives:
                 archives, _ = separate_files_by_extension(containers, archive_file_types)
-                containers.remove(archives)
+                for arch in archives:
+                    if arch in containers:
+                        containers.remove(arch)
             if not containers:
                 break
 
@@ -344,6 +346,8 @@ supported_ext.update(chunk_as_text)
 if args.ignore_types:
     ignored_extenstions = []
     for ext in args.ignore_types:
+        if not ext.startswith("."):
+            ext = "." + ext
         if ext in supported_ext:
             supported_ext.remove(ext)
             ignored_extenstions.append(ext)
