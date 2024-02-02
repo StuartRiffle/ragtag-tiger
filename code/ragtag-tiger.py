@@ -80,6 +80,7 @@ arg = parser.add_argument
 arg("--verbose",        help="enable extended/debug output", action="store_true")
 arg("--version",        help="print the version number and exit", action="store_true")
 arg("--no-color",       help="disable color text output", action="store_true")
+arg("--no-delete-temp", help="for debugging, do not clean up working files", action="store_true")
 
 arg = parser.add_argument_group("Vector database").add_argument
 arg("--index-load",     help="Load the vector index from a given path", metavar="PATH")
@@ -269,9 +270,12 @@ if len(search_specs) > 0:
 
             if args.ignore_archives:
                 archives, _ = separate_files_by_extension(containers, archive_file_types)
-                for arch in archives:
-                    if arch in containers:
-                        containers.remove(arch)
+                if archives:
+                    lograg_verbose(f"Ignoring {len(archives)} archive files...")
+                    for arch in archives:
+                        if arch in containers:
+                            containers.remove(arch)
+
             if not containers:
                 break
 
@@ -286,9 +290,9 @@ if len(search_specs) > 0:
                         lograg_error(f"failed creating temporary folder, can't unpack containers: {e}")
                         break
 
-            if temp_folder:
-                unpacked_files = unpack_container_to_temp(container, temp_folder)
-                all_unpacked_files.extend(unpacked_files)
+                if temp_folder:
+                    unpacked_files = unpack_container_to_temp(container, temp_folder)
+                    all_unpacked_files.extend(unpacked_files)
 
             # Unpack nested containers
             files_to_check = all_unpacked_files
@@ -478,8 +482,7 @@ if len(files_to_index) > 0:
                         lograg_verbose(f"\t{num_files_chunked} files parsed as \"{code_splitter.language}\"")
                     total_code_files_chunked += num_files_chunked
                     
-                if failed_files:
-                    fail_message = f", {len(failed_files)} files failed parsing" if failed_files else ""
+                fail_message = f", {len(failed_files)} files failed parsing" if failed_files else ""
                 lograg_verbose(f"\t{total_code_files_chunked} total code files processed{fail_message}")
 
     except Exception as e: lograg_error(e)
@@ -488,7 +491,7 @@ if len(files_to_index) > 0:
 # Delete temporary files
 #------------------------------------------------------------------------------
 
-if temp_folder:
+if temp_folder and not args.no_delete_temp:
     clean_up_temporary_files(temp_folder)
     if os.path.exists(temp_folder):
         lograg_verbose(f"\t(will try again before exiting)")
@@ -979,7 +982,7 @@ if args.chat:
 # Summary
 #------------------------------------------------------------------------------
 
-if temp_folder:
+if temp_folder and not args.no_delete_temp:
     clean_up_temporary_files(temp_folder)
 
 lograg_verbose(f"\nTiger out, peace.")
