@@ -431,8 +431,8 @@ def load_document_nodes(splitter, file_list, show_progress=False):
     doc_nodes = parser.get_nodes_from_documents(loaded_docs, show_progress=show_progress)
     return doc_nodes
 
+files_processed = 0
 if len(files_to_index) > 0:
-    files_processed = 0
     try:
         non_code_files = [f for f in files_to_index if os.path.splitext(f)[1] not in code_ext]
         if len(non_code_files) > 0:
