@@ -24,4 +24,4 @@ termcolor
 gitignore
 tdqm
 humanfriendly
-
+accelerate

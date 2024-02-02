@@ -90,7 +90,7 @@ This is **still** slow, because the index can take a long time to load. It's jus
 
 To minimize overhead, try to either submit all your queries in one run, or leave a window open with the program idling in chat mode for ad-hoc use. 
 
-Be aware that there are multiple chat "modes", and the default mode does not generate the same output as a batched query. For query-style responses, type `/mode tree` at the chat prompt. 
+Be aware that there are multiple chat "modes", and the default mode may not generate the same output as a batched query. For query-style responses, type `/mode tree` at the chat prompt. 
 
 
 

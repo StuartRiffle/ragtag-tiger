@@ -15,7 +15,6 @@ program_start_time      = time.time()
 
 llamaindex_chat_modes   = ["best",  "condense_question", "context", "condense_plus_context", "simple",  "react", "openai"]
 llamaindex_query_modes  = ["compact", "accumulate", "compact_accumulate", "generation", "no_text", "refine", "simple_summarize", "tree_summarize"]
-
 llamaindex_alias_to_mode = {
     "agent":     "best",
     "con":       "condense_question",
@@ -40,6 +39,7 @@ for alias, mode in llamaindex_alias_to_mode.items():
 
 llamaindex_alias_set = set(llamaindex_alias_to_mode.keys())
 llamaindex_truename_set = set(llamaindex_mode_to_alias.keys())
+llamaindex_mode_identifiers = llamaindex_alias_set | llamaindex_truename_set
 
 def chat_query_mode_is_valid(mode):
     return mode in llamaindex_query_modes or mode in llamaindex_alias_set
@@ -58,9 +58,8 @@ def chat_query_mode_truename(mode):
         return llamaindex_alias_to_mode[mode]
     return None
 
-
-
-
+def chat_query_mode_is_chat(mode):
+    return chat_query_mode_truename(mode) in llamaindex_chat_modes
 
 class ResponseFileArgumentParser(argparse.ArgumentParser):
     """Ignore comments and whitespace in response files"""
@@ -127,7 +126,7 @@ arg("--chat",           help="Enter chat after any query processing", action="st
 arg("--chat-init",      help="Extra instructions/personality for the chat LLM", action="append", metavar="TEXT")
 arg("--chat-init-file", help="File containing a snippet of chat LLM instructions", action="append", metavar="FILE")
 arg("--chat-log",       help="Append chat queries and responses to a text file", metavar="FILE")
-arg("--chat-mode",      help="Chat response mode", choices=llamaindex_chat_modes, default="best")
+arg("--chat-mode",      help="Chat response mode", choices=llamaindex_mode_identifiers, default="tree_summarize")
 arg("--chat-llm-config",help="Override chat LLM configuration", metavar="CFG")
 
 print(f'{program_name} {program_version}')
@@ -491,9 +490,10 @@ if len(files_to_index) > 0:
 
 if temp_folder:
     clean_up_temporary_files(temp_folder)
-
-if temp_folder:
-    lograg_verbose(f"\t(will try again before exiting)")
+    if os.path.exists(temp_folder):
+        lograg_verbose(f"\t(will try again before exiting)")
+    else:
+        temp_folder = None
 
 #------------------------------------------------------------------------------
 # Process the queries on all given LLM configurations in turn
@@ -598,6 +598,9 @@ if queries and llm_config_list:
         curr_provider, curr_model, curr_server, _, curr_params = split_llm_config(llm_config)
         vector_index = lazy_load_vector_index(vector_index)
        
+        if not curr_model:
+            curr_model = llm.model_name
+
         try:
             query_engine_params["streaming"] = streaming_supported
             query_engine = vector_index.as_query_engine(**query_engine_params)
@@ -647,7 +650,7 @@ if queries and llm_config_list:
                         with TimerUntil("query complete"):
                             if verbose_enabled:
                                 lograg_verbose(query_prefix, end="", flush=True)
-                                lograg_in_style(f"{query}", style="chat-message")
+                                lograg_in_style(f"{query}", style="batch-query")
                                 lograg_verbose(f"\t...thinking ", end="", flush=True)
                                 
                             query_start_time = time.time()
@@ -662,13 +665,13 @@ if queries and llm_config_list:
 
                                     response_tokens.append(token)
                                     if verbose_enabled:
-                                        lograg_in_style(token, style="chat-response", end="", flush=True)
+                                        lograg_in_style(token, style="batch-response", end="", flush=True)
                                 llm_response = "".join(response_tokens).strip()
                             else:
                                 llm_response = str(query_engine.query(query)).strip()
                                 lograg_verbose(f"({time_since(query_start_time)})")
                                 lograg_verbose(f"{response_prefix}")
-                                lograg_in_style(f"{llm_response}", style="chat-response", end="", flush=True)
+                                lograg_in_style(f"{llm_response}", style="batch-response", end="", flush=True)
 
                             transcript_lines.append(f"{query_prefix}{query}\n")
                             transcript_lines.append(f"{response_prefix}{llm_response}\n\n")
@@ -728,7 +731,7 @@ if args.llm_config_mod and queries:
 
                 lograg_verbose(f"{query_prefix}", end="", flush=True)
                 if verbose_enabled:
-                    lograg_in_style(query, style="chat-message")
+                    lograg_in_style(query, style="batch-query")
                     lograg_verbose(f"\t...consolidating responses, please hold... ", end="", flush=True)
 
                 try:
@@ -754,7 +757,7 @@ if args.llm_config_mod and queries:
 
                 lograg_verbose(response_prefix, end="", flush=True)
                 if verbose_enabled:
-                    lograg_in_style(summary, style="chat-response")
+                    lograg_in_style(summary, style="query-response")
 
                 transcript_lines.append(f"## Query {query_record_idx + 1}\n{query.strip()}\n\n")
                 transcript_lines.append(f"### Validation\n\n{validation.strip()}\n\n")
@@ -799,15 +802,15 @@ if args.chat:
     if not chat_llm_config:
         lograg_error("no LLMs configured for chat use --chat-llm-config", exit_code=1)
 
-    is_chat_mode = True
     chat_engine = None
     query_engine = None
     show_lazy_banner = True
 
     curr_chat_mode_alias = chat_query_mode_alias(args.chat_mode) if args.chat_mode else None
     curr_chat_mode_alias = curr_chat_mode_alias or "agent"
-    
-    force_reload_llm = False
+    is_chat_mode = chat_query_mode_is_chat(curr_chat_mode_alias)
+    force_reload_llm = True
+
     thinking_message = f"...thinking... "
     exit_commands = ["bye", "goodbye", "exit", "quit", "peace", "done", "stop", "end"]
 
@@ -866,15 +869,16 @@ if args.chat:
 
             if lograg_is_color():
                 lograg("")
-                lograg_in_style(f" {curr_model} ", style="chat-model", end="")
-                lograg_in_style("-", style="chat-prompt", end="")
+                if curr_model:
+                    lograg_in_style(f" {curr_model} ", style="chat-model", end="")
+                    lograg_in_style("-", style="chat-prompt", end="")
                 lograg_in_style(f" {curr_provider} ", style="chat-provider", end="")
                 lograg_in_style("-", style="chat-prompt", end="")
                 lograg_in_style(f" {curr_interactive_alias} ", style=chat_mode_print_style, end="") 
-                lograg_in_style("-:", style="chat-prompt", end="")
+                lograg_in_style(":", style="chat-prompt", end="")
                 lograg_in_style(" ", style="chat-message", end="", flush=True)
             else:
-                lograg(f"{curr_provider} {curr_model} {chat_or_query}:{curr_interactive_alias}: ", end="", flush=True)            
+                lograg(f"{curr_provider}:{curr_model or ''} ({chat_or_query} {curr_interactive_alias}): ", end="", flush=True)            
 
             message = input("").strip()
             if not message:
