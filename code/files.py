@@ -42,7 +42,7 @@ def separate_files_by_extension(file_list, extensions):
     return matching_files, non_matching_files
 
 def clean_up_temporary_files(tempdir, verbose=False):
-    if tempdir and os.file.exists(tempdir) and os.path.isdir(tempdir):
+    if tempdir and os.path.exists(tempdir) and os.path.isdir(tempdir):
         info = f" \"{tempdir}\"" if verbose else ""
         lograg(f"Removing temporary folder{info}...")
         time_before = time.time()
