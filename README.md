@@ -16,7 +16,7 @@
 - consolidates multiple RAG responses using a "moderator" LLM that writes the final output
 - supports pseudo-interactive chat from the command line, switchable chat/query response modes
 
-It's mostly the same boilerplate/glue code you were going to have to write anyway, so if this saves you an afternoon of sifting through machine-generated LlamaIndex tutorials and arguing with Copilot, please feel free to buy me a coffee.
+It's mostly boilerplate/glue code that you were going to have to write anyway, so if this saves you an afternoon of sifting through machine-generated LlamaIndex tutorials and arguing with Copilot, please feel free to buy me a coffee.
 
 # Setup
 The steps are the same as other Python programs.
@@ -28,7 +28,7 @@ Details will vary by OS, but on Debian/Ubuntu you would use `apt` to install the
 sudo apt update -y
 sudo apt-get install -y build-essential cmake git python3 python3-venv pip
 ```
-On Windows you can use [WSL](https://learn.microsoft.com/en-us/windows/wsl/), or something native like [Chocolatey](https://chocolatey.org/install):
+On Windows you can do the same under [WSL](https://learn.microsoft.com/en-us/windows/wsl/), or use something native like [Chocolatey](https://chocolatey.org/install):
 ```
 choco install /y python git cuda
 ```
@@ -44,8 +44,6 @@ python3 -m venv .venv
 . .venv/bin/activate
 ```
 >**Windows Trap:** &nbsp; the command to activate the environment is actually `.venv\Scripts\activate.bat` instead of the one above. but typing `.venv\Scripts\activate`, without the `.bat` _does not work_. 
-
-[Conda](https://conda.io) is another way to manage your Python environment. Just use something. 
 
 ### 4) Install dependencies
 ```
@@ -65,9 +63,7 @@ If Python wants more packages, please add them to requirements.txt and submit a 
 # Usage
 
 ### Launching
-Run the program using the script `ragtag.sh` (or `ragtag.bat` for Windows) in the root of the repo. It's easier than typing `python code/ragtag-tiger.py` every time. 
-
->**Pro-tip:** &nbsp;Put the repo in your path, so you can run **RAG/TAG Tiger** from any directory.
+Run the program using the script `ragtag.sh` (or `ragtag.bat` for Windows) in the root of the repo. It's easier than typing `python code/ragtag-tiger.py` every time. I would recomment just putting it in your path, so you can run **RAG/TAG Tiger** from any directory.
 
 The simplest way to perform a RAG query would be:
 ```
@@ -255,6 +251,17 @@ It does this as another RAG query. I don't know if that's a good idea or not yet
 | **[HuggingFace](https://huggingface.co/spaces/HuggingFaceH4/open_llm_leaderboard)** | Goliath | 120B | 4k | `huggingface,thebloke/goliath-120b-awq` |
 | | BLOOM | 176B | 2k | `huggingface,thebloke/bloomchat-176b-v1-gptq` |
 | | Falcon | 180B | 2k | `huggingface,thebloke/falcon-180B-chat-awq` |
+
+
+```
+--llm-config  google,models/gemini-pro
+--llm-config  replicate,mistralai/mixtral-8x7b-instruct-v0.1
+--llm-config  perplexity,llama-2-70b-chat
+--llm-config  perplexity,codellama-70b-instruct
+--llm-config  openai,gpt-3.5-turbo-instruct
+--llm-config  openai,gpt-4
+(etc...)
+```
 
 <br>
 

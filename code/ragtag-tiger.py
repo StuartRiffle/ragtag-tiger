@@ -579,7 +579,7 @@ def lazy_load_vector_index(curr_index):
         lograg(f"Storing vector index{info}...")
         try:
             with TimerUntil("index stored"):
-                os.makedirs(args.index_store)
+                os.makedirs(args.index_store, exist_ok=True)
                 vector_index.storage_context.persist(persist_dir=args.index_store)
         except Exception as e: lograg_error(e)    
 

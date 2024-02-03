@@ -61,7 +61,8 @@ def unpack_mime(file_bytes, output_folder, container_file, container_type):
 
             if not filename:
                 try:
-                    image_type = imghdr.what(None, h=part_content)
+                    # FIXME - this does not work (?)
+                    image_type = imghdr.what(None, h=bytes(part_content))
                     if image_type:
                         filename = f"guessed-imghdr.{image_type}"
                 except: pass
@@ -89,7 +90,7 @@ def unpack_container_to_temp(container_file, temp_folder):
     unpacked_files = []
 
     try:
-        os.makedirs(output_folder)
+        os.makedirs(output_folder, exist_ok=True)
         container_type = os.path.splitext(container_file)[1]
 
         if container_type in archive_file_types:
