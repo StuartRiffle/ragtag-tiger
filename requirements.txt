@@ -25,3 +25,6 @@ gitignore
 tdqm
 humanfriendly
 accelerate
+docx2txt
+openpyxl
+nbconvert
