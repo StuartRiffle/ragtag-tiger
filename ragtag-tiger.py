@@ -148,7 +148,7 @@ if args.version:
    
 print("Waking up tiger...")
 
-from lograg import *
+from code.lograg import *
 verbose_enabled = args.verbose
 lograg_set_verbose(verbose_enabled)
 
@@ -162,7 +162,7 @@ if running_in_terminal and not args.no_color:
 else:
     lograg_set_color(False)
 
-from files import cleanpath
+from code.files import cleanpath
 printable_prog_name = cleanpath(os.sys.argv[0], make_unique=True)
 command_line_args = " ".join(shlex.quote(arg) for arg in os.sys.argv[1:])
 command_line_args = command_line_args.replace(" --", "\n\t    --")
@@ -170,12 +170,12 @@ lograg_verbose(f"\t{printable_prog_name}\n\t    {command_line_args}")
 
 import json, tempfile, hashlib, humanfriendly
 from llama_index.text_splitter import CodeSplitter
-from files import *
-from extensions import *
+from code.files import *
+from code.extensions import *
 from tqdm import tqdm
 from timer import TimerUntil, time_since
-from llm import load_llm_config, split_llm_config
-from unpack import unpack_container_to_temp
+from code.llm import load_llm_config, split_llm_config
+from code.unpack import unpack_container_to_temp
 
 lograg_verbose(f"\t...at your service ({time_since(program_start_time)})")
 

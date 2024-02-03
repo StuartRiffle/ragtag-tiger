@@ -63,7 +63,7 @@ If Python wants more packages, please add them to requirements.txt and submit a 
 # Usage
 
 ### Launching
-Run the program using the script `ragtag.sh` (or `ragtag.bat` for Windows) in the root of the repo. It's easier than typing `python code/ragtag-tiger.py` every time. I would recomment just putting it in your path, so you can run **RAG/TAG Tiger** from any directory.
+Run the program using the script `ragtag.sh` (or `ragtag.bat` for Windows) in the root of the repo. It's easier than typing `python ragtag-tiger.py` every time. I would recomment just putting it in your path, so you can run **RAG/TAG Tiger** from any directory.
 
 The simplest way to perform a RAG query would be:
 ```

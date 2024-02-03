@@ -1,2 +1,2 @@
 #!/bin/bash
-python3 code/ragtag-tiger.py "$@"
+python3 ./ragtag-tiger.py "$@"
