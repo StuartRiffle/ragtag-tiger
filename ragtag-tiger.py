@@ -474,13 +474,11 @@ if len(files_to_index) > 0:
                                 num_files_chunked += 1
                             except: 
                                 failed_files.add(code_filename)
-                        
 
                     files_processed += num_files_chunked
-
+                    total_code_files_chunked += num_files_chunked
                     if num_files_chunked > 0:
                         lograg_verbose(f"\t{num_files_chunked} files parsed as \"{code_splitter.language}\"")
-                    total_code_files_chunked += num_files_chunked
                     
                 fail_message = f", {len(failed_files)} files failed parsing" if failed_files else ""
                 lograg_verbose(f"\t{total_code_files_chunked} total code files processed{fail_message}")

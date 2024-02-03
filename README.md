@@ -7,7 +7,7 @@
 <img align="right" width="200px" style="padding:10px" src="docs/images/tiger.jpg">
 
 **RAG/TAG Tiger** is a simple [LlamaIndex](https://github.com/run-llama/llama_index) wrapper that:
-- provides a command line interface for doing primitive RAG queries on local ddsocuments/code
+- provides a command line interface for doing primitive RAG queries on local documents/code
 - runs queries using an in-process LLM, a local inference server, or a commercial endpoint
 - loads/updates/stores vector indices to avoid redundant processing
 - auto-downloads custom file loaders from the [LlamaIndex hub](https://llamahub.ai) 
@@ -26,7 +26,7 @@ Details will vary by OS, but on Debian/Ubuntu you would use `apt` to install the
 sudo apt update -y
 sudo apt-get install -y build-essential cmake git python3 python3-venv pip
 ```
-On Windows you can do the same under [WSL](https://learn.microsoft.com/en-us/windows/wsl/), or use something native like [Chocolatey](https://chocolatey.org/install):
+On Windows you can use [WSL](https://learn.microsoft.com/en-us/windows/wsl/) to do the same, or use something native like [Chocolatey](https://chocolatey.org/install):
 ```
 choco install /y python git cuda
 ```
@@ -41,8 +41,11 @@ cd ragtag
 python3 -m venv .venv
 . .venv/bin/activate
 ```
->**Windows Trap:** &nbsp; the command to activate the environment is actually `.venv\Scripts\activate.bat` instead of the one above. but typing `.venv\Scripts\activate`, without the `.bat` _does not work_. 
-
+On Windows the command to activate the environment is different:
+```
+python3 -m venv .venv
+.venv\Scripts\activate.bat
+```
 ### 4) Install dependencies
 ```
 pip install --upgrade pip
@@ -61,7 +64,7 @@ If Python wants more packages, please add them to requirements.txt and submit a 
 # Usage
 
 ### Launching
-Run the program using the script `ragtag.sh` (or `ragtag.bat` for Windows) in the root of the repo. It's easier than typing `python ragtag-tiger.py` every time. I would recomment just putting it in your path, so you can run **RAG/TAG Tiger** from any directory.
+Run the program using the script `ragtag.sh` (or `ragtag.bat` for Windows) in the root of the repo. It's easier than typing `python ragtag-tiger.py` every time. I would recommend just putting the repo root in your path, so you can call **RAG/TAG Tiger** from any directory.
 
 The simplest way to perform a RAG query would be:
 ```
@@ -73,26 +76,24 @@ ragtag --source my/docs --query "But, why?"
 ragtag --source my/docs --index-store my/index
 ```
 
-Then use that index to perform your queries:
+Then re-use that index to perform your queries:
 ```
 ragtag --index-load my/index --query "Really though, why?"
 ```
 
 <img align="right" width="250px" style="padding:15px" src="docs/images/noidealol.jpg">
 
-This is **still** slow, because the index can take a long time to load. It's just not as slow as re-indexing everything. Use `--verbose` to see the actual timings.
+This is **still** slow, because the index can take a long time to load. It's just not *as* slow as re-indexing everything. Use `--verbose` to see the actual timings.
 
 To minimize overhead, try to either submit all your queries in one run, or leave a window open with the program idling in chat mode for ad-hoc use. 
 
-Be aware that there are multiple chat "modes", and the default mode may not generate the same output as a batched query. For query-style responses, type `/mode tree` at the chat prompt. 
-
-
+Be aware that there are multiple chat "modes", and the default mode may not generate the same output as a batched query. For responses like the batched queries, type `/mode tree` at the chat prompt. 
 
 # Query and chat modes
 
 The LlamaIndex query engine and chat engine both have multiple modes that enable different RAG techniques. They can be changed using `--query-mode`, `--chat-mode`, and `--llm-mod-mode`. You can also select using the `/mode` command at the chat prompt.
 
-The query modes are available in chat mode too as a convenience. They are processed by the query engine, not the chat engine, so they have no conversational memory.
+The *query* modes are available in chat mode too as a convenience. They are processed by the query engine, not the chat engine, so they have no conversational memory.
 
 | Query mode| Abbrev | |
 | --- | --- | --- |
@@ -111,9 +112,9 @@ The query modes are available in chat mode too as a convenience. They are proces
 | `condense_plus_context` |`conlook`| Look up condensed history and message |
 | `openai`                |`openai` | OpenAI agent loop |
 | `react`                 |`react`  | ReAct agent loop with query engine tools |
-| `best`                  |`agent`  | Auto-select between OpenAI and React (default)|
+| `best`                  |`agent`  | Auto-select between OpenAI and React agent (default)|
 
-Most of the modes have a shorter alias here for convenience, but you can use the original LlamaIndex identifiers too.
+The modes have a shorter alias here for convenience, but you can use the original LlamaIndex identifiers too.
 
 # Prompts
 
@@ -175,6 +176,7 @@ If that's not a problem:
 
 ### [Google](https://deepmind.google)
  - set `GOOGLE_APPLICATION_CREDENTIALS` and `GOOGLE_API_KEY` in your environment (override with `--llm-api-key`)
+ - you may also need `GEMINI_API_KEY` for access to _Gemini Pro_
  - change [models](https://ai.google.dev/models) using `--llm-model` (the default is `text-bison-001`)
 ```
 --llm-provider google  --llm-model models/gemini-pro
@@ -195,11 +197,10 @@ If that's not a problem:
 
 > **Windows trap:** &nbsp; You have to run `refreshenv` in an command prompt window after changing an environment variable to get the new value. This is easy to forget, and can make for some confusing error messages.
 
-If your inference provider is not here, there's a good chance they run an OpenAI API-compatible server somewhere anyway. Try this:
+If your inference provider is not here, there's a good chance they run an OpenAI API-compatible server somewhere anyway. If you can find the server URL, this should work the same for any provider:
 ```
 --llm-provider openai  --llm-server URL  --llm-model NAME
 ```
-
 
 # RAG gauntlet
 
