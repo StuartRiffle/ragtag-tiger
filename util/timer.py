@@ -3,7 +3,7 @@
 # github.com/stuartriffle/ragtag-tiger
 
 import time
-from lograg import lograg_verbose
+from .lograg import lograg_verbose
 
 class TimerScope:
     """An object that measures the time spent inside a scope"""

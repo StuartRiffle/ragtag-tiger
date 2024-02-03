@@ -3,8 +3,8 @@
 # github.com/stuartriffle/ragtag-tiger
 
 import os, pathspec, shutil, time
-from lograg import lograg, lograg_verbose, lograg_error
-from timer import time_since
+from .lograg import lograg, lograg_verbose, lograg_error
+from .timer import time_since
 
 def split_root_from_spec(spec):
     """Split off the root path from the wildcard part if possible"""

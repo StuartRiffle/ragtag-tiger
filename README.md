@@ -16,8 +16,6 @@
 - consolidates multiple RAG responses using a "moderator" LLM that writes the final output
 - supports pseudo-interactive chat from the command line, switchable chat/query response modes
 
-It's mostly boilerplate/glue code that you were going to have to write anyway, so if this saves you an afternoon of sifting through machine-generated LlamaIndex tutorials and arguing with Copilot, please feel free to buy me a coffee.
-
 # Setup
 The steps are the same as other Python programs.
 
@@ -132,7 +130,7 @@ The system prompt and chat instructions can be assembled from mix-and-match snip
 ```
 The files are just concatenated to produce the prompt.
 
-Notice the magic `+/` prefix on the paths. The same way `~/` is an alias for the home directory on unices, it works as a shortcut to the `data/` folder in the repo. That's so you can access the stock text files from wherever you run the program.
+Notice the magic `+/` prefix on the paths. The same way `~/` is an alias for the home directory on unices, it works as a shortcut to the `data/` folder in the repo, so you can access the stock text files from wherever you run the program.
 
 # Local inference
 
@@ -207,16 +205,18 @@ If your inference provider is not here, there's a good chance they run an OpenAI
 
 There's another, more compact way to configure inference providers, which is `--llm-config`
 ```
-provider[,model[,server[,api-key[,parameters...]]]]
+[alias=]provider[,model[,server[,api-key[,parameters...]]]]
 ```
 
-Basically, you just glue all the settings together with commas.
+Basically, you just glue all the settings together with commas. The alias is optional, and only used for convenience in chat mode, for switching between models with the `/connect` command.
 
-Most of the time, all you need is the first couple of fields, and you can skip unused fields by leaving them empty. For a complicated example, to connect with a local (OpenAI API-compatible) [text-generation-webui](https://github.com/oobabooga/text-generation-webui) server, using a couple of custom inference parameters:
+Most of the time, all you need is the first couple of fields, or even just the provider if you want to use the default model. You can skip unused fields by leaving them empty. For a complicated example, to connect with a local (OpenAI API-compatible) [text-generation-webui](https://github.com/oobabooga/text-generation-webui) server, using a couple of custom inference parameters:
 
 ```
---llm-config openai,,http://localhost:5000/v1,,temperature=1.6,top_p=0.9
+--llm-config local=openai,,http://localhost:5000/v1,,temperature=1.6,top_p=0.9
 ```
+In chat mode, `/connect local` will now switch to that LLM connection.
+
 <img align="right" width="250px" style="padding:10px" src="docs/images/yodawg.jpg">
 
 The point of this horrible format is that now you can submit a list of inference providers using multiple `--llm-config` arguments, and **RAG/TAG Tiger** will run your queries through *all* of them, allowing you to compare the responses.
@@ -252,17 +252,6 @@ It does this as another RAG query. I don't know if that's a good idea or not yet
 | | BLOOM | 176B | 2k | `huggingface,thebloke/bloomchat-176b-v1-gptq` |
 | | Falcon | 180B | 2k | `huggingface,thebloke/falcon-180B-chat-awq` |
 
-
-```
---llm-config  google,models/gemini-pro
---llm-config  replicate,mistralai/mixtral-8x7b-instruct-v0.1
---llm-config  perplexity,llama-2-70b-chat
---llm-config  perplexity,codellama-70b-instruct
---llm-config  openai,gpt-3.5-turbo-instruct
---llm-config  openai,gpt-4
-(etc...)
-```
-
 <br>
 
 # Workflow tips
@@ -285,7 +274,7 @@ ragtag \
 
 ### RAGTAG_FLAGS
 
-You can also set standard arguments in an environment variable called `RAGTAG_FLAGS`. They will be inserted at the beginning of your argument list.
+You can also set standard arguments in an environment variable called `RAGTAG_FLAGS`. They will be inserted at the beginning of your argument list. `--verbose` is a handy one.
 
 ### Response files
 
@@ -389,16 +378,8 @@ ragtag --help
 **A:**&nbsp; Not in production.
 
 **Q:**&nbsp; But why is there a tiger here at all? <br>
-**A:**&nbsp; I anthropomorphize small programs (they enjoy that), but honestly a lot of species could do RAG in a pinch, and my choice of tiger here was arbitrary. We can revisit this.
+**A:**&nbsp; I anthropomorphize small programs (they enjoy that), but honestly a lot of species could do RAG, and my choice of tiger was arbitrary. We can revisit this.
 
 **Q:**&nbsp; May I have a warranty of merchantability and fitness for my particular purpose? <br>
 **A:**&nbsp; No.
 
-**Q:**&nbsp; Good enough, how can I buy you that coffee? <br>
-**A:**&nbsp; For clarity, the coffee is a metaphor and contributions will be spent on drugs. 
-
-<a href="https://www.buymeacoffee.com/stuartriffle">
-  <img src="docs/images/coffee.png" width="200px">
-</a>
-
-Thank you for supporting open source software.

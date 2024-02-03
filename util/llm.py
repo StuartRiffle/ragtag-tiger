@@ -4,9 +4,9 @@
 
 import os
 import torch
-from files import *
-from lograg import lograg, lograg_verbose, lograg_error
-from timer import TimerUntil
+from .files import *
+from .lograg import lograg, lograg_verbose, lograg_error
+from .timer import TimerUntil
 
 openai_model_default    = "gpt-3.5-turbo-instruct"
 google_model_default    = "models/text-bison-001"
@@ -140,15 +140,21 @@ def load_llm(provider, model, server, api_key, params, verbose=False, set_servic
 
 
 def split_llm_config(config):
-    """Split an LLM from a config string like "provider,model,server,api-key,param1,param2,..." into its components"""
-    config   = config.strip("\"' ")
-    fields   = config.split(",")
+    """Split an LLM from a config string of format "[alias=]provider[,model[,server[,api-key[,parameters...]]]]" into its components"""
+
+    fields   = config.strip("\"' ").split(",")
     provider = fields[0].strip() if len(fields) > 0 else default_llm_provider
     model    = fields[1].strip() if len(fields) > 1 else None
     server   = fields[2].strip() if len(fields) > 2 else None
     api_key  = fields[3].strip() if len(fields) > 3 else None
     params   = fields[4:]        if len(fields) > 4 else []
-    return provider, model, server, api_key, params
+
+    alias = None
+    if "=" in provider:
+        alias, provider = provider.split("=", 1)
+        provider = provider.strip()
+
+    return provider, model, server, api_key, params, alias
 
 
 def load_llm_config(config, set_service_context=True):

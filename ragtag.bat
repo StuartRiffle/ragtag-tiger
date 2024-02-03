@@ -1,1 +1,1 @@
-@python "%~dp0\code\ragtag-tiger.py" %*
+@python "%~dp0\ragtag-tiger.py" %*

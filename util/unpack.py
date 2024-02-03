@@ -5,9 +5,9 @@
 import imghdr
 import mimetypes
 import os, email, hashlib, shutil, py7zr
-from files import cleanpath
-from extensions import archive_file_types, mime_file_types
-from lograg import lograg, lograg_verbose, lograg_error
+from .files import cleanpath
+from .extensions import archive_file_types, mime_file_types
+from .lograg import lograg, lograg_verbose, lograg_error
 
 shutil.register_unpack_format('7zip', ['.7z'], py7zr.unpack_7zarchive)
 

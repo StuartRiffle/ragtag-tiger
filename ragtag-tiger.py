@@ -148,7 +148,7 @@ if args.version:
    
 print("Waking up tiger...")
 
-from code.lograg import *
+from util.lograg import *
 verbose_enabled = args.verbose
 lograg_set_verbose(verbose_enabled)
 
@@ -162,7 +162,7 @@ if running_in_terminal and not args.no_color:
 else:
     lograg_set_color(False)
 
-from code.files import cleanpath
+from util.files import cleanpath
 printable_prog_name = cleanpath(os.sys.argv[0], make_unique=True)
 command_line_args = " ".join(shlex.quote(arg) for arg in os.sys.argv[1:])
 command_line_args = command_line_args.replace(" --", "\n\t    --")
@@ -170,12 +170,12 @@ lograg_verbose(f"\t{printable_prog_name}\n\t    {command_line_args}")
 
 import json, tempfile, hashlib, humanfriendly
 from llama_index.text_splitter import CodeSplitter
-from code.files import *
-from code.extensions import *
 from tqdm import tqdm
-from timer import TimerUntil, time_since
-from code.llm import load_llm_config, split_llm_config
-from code.unpack import unpack_container_to_temp
+from util.files import *
+from util.extensions import *
+from util.timer import TimerUntil, time_since
+from util.llm import load_llm_config, split_llm_config
+from util.unpack import unpack_container_to_temp
 
 lograg_verbose(f"\t...at your service ({time_since(program_start_time)})")
 
@@ -598,7 +598,7 @@ response_prefix = f"### {tag_responses}\n" if tag_responses and not lograg_is_co
 if queries and llm_config_list:
     for llm_config in llm_config_list:
         llm, streaming_supported, service_context = load_llm_config(llm_config)
-        curr_provider, curr_model, curr_server, _, curr_params = split_llm_config(llm_config)
+        curr_provider, curr_model, curr_server, _, curr_params, _ = split_llm_config(llm_config)
         vector_index = lazy_load_vector_index(vector_index)
        
         if not curr_model:
@@ -826,11 +826,7 @@ if args.chat:
                 query_engine = None
                 chat_engine = None
 
-                #import gc
-                #gc.collect()
-
-
-                curr_provider, curr_model, curr_server, _, curr_params = split_llm_config(chat_llm_config)
+                curr_provider, curr_model, curr_server, _, curr_params, _ = split_llm_config(chat_llm_config)
                 llm, streaming_supported, service_context = load_llm_config(chat_llm_config, set_service_context=False)
 
                 # FIXME: forcing reload, there must be a good way to do this?
@@ -985,5 +981,5 @@ if args.chat:
 if temp_folder and not args.no_delete_temp:
     clean_up_temporary_files(temp_folder)
 
-lograg_verbose(f"\nTiger out, peace.")
+lograg(f"Tiger out, peace.")
 lograg_verbose(f"({time_since(program_start_time)})")
