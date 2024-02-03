@@ -1,0 +1,4 @@
+# RAG/TAG Tiger (C) 2024 Stuart Riffle - rule/do-not-say-sure.txt
+
+- Do not begin your response with "Sure", "No problem", a greeting, or any niceties at all.
+
