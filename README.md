@@ -14,7 +14,7 @@
 - indexes documents inside of archive files and email attachments
 - uses syntax-aware chunking for source code
 - consolidates multiple RAG responses using a "moderator" LLM that writes the final output
-- supports pseudo-interactive chat from the command line, switchable chat/query response modes
+- supports pseudo-interactive chat from the command line, with switchable chat/query response modes
 
 # Setup
 The steps are the same as other Python programs.
@@ -252,7 +252,6 @@ It does this as another RAG query. I don't know if that's a good idea or not yet
 | **[HuggingFace](https://huggingface.co/spaces/HuggingFaceH4/open_llm_leaderboard)** | Goliath | 120B | 4k | `huggingface,thebloke/goliath-120b-awq` |
 | | BLOOM | 176B | 2k | `huggingface,thebloke/bloomchat-176b-v1-gptq` |
 | | Falcon | 180B | 2k | `huggingface,thebloke/falcon-180B-chat-awq` |
-
 <br>
 
 # Workflow tips
