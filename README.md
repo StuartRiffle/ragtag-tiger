@@ -197,9 +197,9 @@ If that's not a problem:
  - change [models](https://docs.together.ai/docs/inference-models) using `--llm-model` (the default is `codellama/CodeLlama-70b-Instruct-hf`)
  - note the provider is `openai` because we're using [together.ai](https://www.together.ai/)'s OpenAI API-compatibile endpoint by setting `--llm-server`
 ```
---llm-provider openai  --llm-model codellama/codellama-70b-instruct-hf  --llm-server https://api.together.xyz
+--llm-provider openai  --llm-server https://api.together.xyz  --llm-model codellama/codellama-70b-instruct-hf
 ```
-If your inference provider is not here, there's a good chance they run an OpenAI API-compatible server somewhere too. The same pattern should work the same for any compatible provider:
+If your service is not here, there's a good chance they run an OpenAI API-compatible server somewhere too. The same pattern should work the same for any compatible provider:
 ```
 --llm-provider openai  --llm-server URL  --llm-model NAME  --llm-api-key YOUR_KEY
 ```
@@ -251,7 +251,6 @@ It does this as another RAG query. I don't know if that's a good idea or not yet
 | **[webui](https://github.com/oobabooga/text-generation-webui)** | _(internal server)_ | | | `openai,,http://YOUR_SERVER:5000/v1` |
 | | _(your PC)_ | | | `openai,,http://127.0.0.1:5000/v1` |
 | **[HuggingFace](https://huggingface.co/spaces/HuggingFaceH4/open_llm_leaderboard)** | Goliath | 120B | 4k | `huggingface,thebloke/goliath-120b-awq` |
-| | BLOOM | 176B | 2k | `huggingface,thebloke/bloomchat-176b-v1-gptq` |
 | | Falcon | 180B | 2k | `huggingface,thebloke/falcon-180B-chat-awq` |
 <br>
 

@@ -2,4 +2,4 @@
 
 - Be terse and direct.
 - Err on the side of brevity.
-- Do not output anything unrelated to the response.
+- Stay on topic.
