@@ -194,17 +194,19 @@ If that's not a problem:
 ```
 ### [together.ai](https://www.together.ai/)
  - set `TOGETHERAI_API_KEY` in your environment (override with `--llm-api-key`)
+ - set `--llm-server` to the API endpoint, which is probably `https://api.together.xyz`
  - select a [model](https://docs.together.ai/docs/inference-models) using `--llm-model` (the default is `codellama/CodeLlama-70b-Instruct-hf`)
- - note the provider is `openai` because we're using [together.ai](https://www.together.ai/)'s OpenAI API-compatibile endpoint by setting `--llm-server`
+ - note the provider is `openai` because we're using [together.ai](https://www.together.ai/)'s OpenAI API-compatibile endpoint
 ```
---llm-provider openai  --llm-server https://api.together.xyz  --llm-model codellama/codellama-70b-instruct-hf
+--llm-provider openai  --llm-server https://api.together.xyz  --llm-model NousResearch/Nous-Hermes-2-Yi-34B
 ```
 ### [fireworks.ai](https://www.fireworks.ai/)
  - set `FIREWORKS_API_KEY` in your environment (override with `--llm-api-key`)
- - select a [model](https://readme.fireworks.ai/reference/requirements-and-limits) using `--llm-model`
- - note the provider is `openai` because we're using [fireworks.ai](https://www.fireworks.ai/)'s OpenAI API-compatibile endpoint by setting `--llm-server`
+ - set `--llm-server` to the API endpoint, which is probably `https://api.fireworks.ai/inference/v1 `
+ - select a [model](https://readme.fireworks.ai/reference/requirements-and-limits) using `--llm-model` (the default is `accounts/fireworks/models/mixtral-8x7b-instruct`)
+ - note the provider is `openai` because we're using [fireworks.ai](https://www.fireworks.ai/)'s OpenAI API-compatibile endpoint
 ```
---llm-provider openai  --llm-server https://api.fireworks.ai/inference/v1  --llm-model accounts/fireworks/models/mixtral-8x7b-instruct
+--llm-provider openai  --llm-server https://api.fireworks.ai/inference/v1  --llm-model accounts/fireworks/models/zephyr-7b-beta
 ```
 
 If your service is not here, there's a good chance they run an OpenAI API-compatible server somewhere too. The same pattern should work the same for any compatible provider:
