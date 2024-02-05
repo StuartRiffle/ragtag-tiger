@@ -13,6 +13,9 @@ google_model_default    = "models/text-bison-001"
 anthropic_model_default = "claude-2"
 perplexity_default      = "llama-2-70b-chat"
 replicate_default       = "mistralai/mixtral-8x7b-instruct-v0.1"
+fireworks_ai_default    = "accounts/fireworks/models/mixtral-8x7b-instruct"
+together_ai_default     = "codellama/CodeLlama-70b-Instruct-hf"
+
 default_timeout         = 180
 hf_model_nicknames      = { "default": "codellama/CodeLlama-7b-Instruct-hf" }
 default_llm_provider    = "huggingface"
@@ -38,14 +41,17 @@ def load_llm(provider, model, server, api_key, params, verbose=False, set_servic
                 
             ### OpenAI API-compatible third party server                
             elif provider == "openai" and server:
-                model_name = model or "default"
-                lograg(f"Model \"{model_name}\" on \"{server}\"...")
-
-                # Auto-populate API key for known providers
-                if "together" in server:  api_key = api_key or os.environ.get("TOGETHERAI_API_KEY", "")
-                if "fireworks" in server: api_key = api_key or os.environ.get("FIREWORKS_API_KEY", "")
+                # Auto-populate API key and model for known providers
+                if "together.ai" in server or "together.xyz" in server:
+                    api_key = api_key or os.environ.get("TOGETHERAI_API_KEY", "")
+                    model = model or together_ai_default
+                if "fireworks.ai" in server: 
+                    api_key = api_key or os.environ.get("FIREWORKS_API_KEY", "")
+                    model = model or fireworks_ai_default
                 api_key = api_key or os.environ.get("OPENAI_API_KEY", "") 
-                
+                model_name = model or "default"
+               
+                lograg(f"Model \"{model_name}\" on \"{server}\"...")
                 from llama_index.llms import OpenAILike
                 result = OpenAILike(
                     api_key=api_key,
@@ -64,6 +70,7 @@ def load_llm(provider, model, server, api_key, params, verbose=False, set_servic
                 model_name = model or google_model_default
                 import google.generativeai as genai
                 genai.configure(api_key=google_api_key)
+
                 if "gemini" in str(model_name).lower():
                     lograg(f"Google Gemini model \"{model_name}\"...")
                     from llama_index.llms import Gemini
