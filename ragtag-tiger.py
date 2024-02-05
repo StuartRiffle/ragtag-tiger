@@ -551,7 +551,7 @@ def lazy_load_vector_index(curr_index):
             with TimerUntil("loaded"):
                 from llama_index import load_index_from_storage
                 storage_context = StorageContext.from_defaults(persist_dir=args.index_load)
-                vector_index = load_index_from_storage(storage_context, show_progress=verbose_enabled, insert_batch_size=5000)            
+                vector_index = load_index_from_storage(storage_context, show_progress=verbose_enabled, insert_batch_size=10000)            
         except Exception as e: 
             lograg_error(e)
 
@@ -559,7 +559,7 @@ def lazy_load_vector_index(curr_index):
         lograg_verbose(f"Creating a new vector index in memory...")
         try:
             local_service_context = ServiceContext.from_defaults(llm=None, embed_model="local")
-            vector_index = VectorStoreIndex([], insert_batch_size=5000, service_context=local_service_context)
+            vector_index = VectorStoreIndex([], insert_batch_size=10000, service_context=local_service_context)
             vector_index.vector_store.persist()
         except Exception as e: 
             lograg_error(e, exit_code=1)
@@ -646,6 +646,11 @@ if queries and llm_config_list:
                         "model": curr_model or "",
                         "server": curr_server or "",
                     }
+                    known_end_markers = [
+                        "\n---------------------",
+                        "<|endoftext|>",
+                        "multiple",
+                    ]
 
                     try:
                         with TimerUntil("query complete"):
@@ -656,6 +661,8 @@ if queries and llm_config_list:
                                 
                             query_start_time = time.time()
                             if streaming_supported:
+                                last_token = ""
+                                last_token_count = 0
                                 streaming_response = query_engine.query(query)
                                 for token in streaming_response.response_gen:
                                     if len(response_tokens) == 0:
@@ -667,6 +674,12 @@ if queries and llm_config_list:
                                     response_tokens.append(token)
                                     if verbose_enabled:
                                         lograg_in_style(token, style="batch-response", end="", flush=True)
+
+                                    #check_marker = "".join(response_tokens).strip()
+                                    #for marker in known_end_markers:
+                                    #    if check_marker.endswith(marker):
+                                    #        break
+                                    
                                 llm_response = "".join(response_tokens).strip()
                             else:
                                 llm_response = str(query_engine.query(query)).strip()

@@ -1,8 +1,5 @@
 # RAG/TAG Tiger (C) 2024 Stuart Riffle - rule/be-terse-and-directbrief.txt
 
 - Be terse and direct.
-- Do not print anything that does not directly contribute to the response required.
-- Spend tokens carefully to get the most value from each one.
-- If you underexplain, the problem is easy to fix by spending more time to convey more detail.
-- When you overexplain, the wasted time is lost forever.
-- The first failure mode is better, so err on the side of brevity.
+- Err on the side of brevity.
+- Do not output anything unrelated to the response.

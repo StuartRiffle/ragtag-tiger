@@ -57,14 +57,12 @@ If that fails, go to step 4.
 ```
 ragtag --help
 ```
-This is the part where it falls over because your CUDA drivers are too old or something like that. Or the virtual environment chokes on a half-downloaded package, and you spend an hour typing `pip uninstall` and `pip install` in alternation.
-
-If Python wants more packages, please add them to requirements.txt and submit a pull request!
+This is the part where it falls over because your CUDA drivers are too old or something like that. Or the virtual environment chokes on a half-downloaded package, and you spend an hour typing `pip uninstall` and `pip install` in alternation. I cannot help you here.
 
 # Usage
 
 ### Launching
-Run the program using the script `ragtag.sh` (or `ragtag.bat` for Windows) in the root of the repo. It's easier than typing `python ragtag-tiger.py` every time. I would recommend just putting the repo root in your path, so you can call **RAG/TAG Tiger** from any directory.
+Run the program using the script `ragtag.sh` (or `ragtag.bat` for Windows) in the root of the repo. It's easier than typing `python ragtag-tiger.py`. Better still, put the repo root in your path, so you can call **RAG/TAG Tiger** from any directory.
 
 The simplest way to perform a RAG query would be:
 ```
@@ -185,7 +183,7 @@ If that's not a problem:
 ### [Perplexity](https://perplexity.ai)
  - set `PERPLEXITYAI_API_KEY` in your environment (override with `--llm-api-key`)
  - change [models](https://docs.perplexity.ai/docs/model-cards) using `--llm-model` (the default is `llama-2-70b-chat`)
- ```
+```
 --llm-provider perplexity  --llm-model codellama-34b-instruct
 ```
 ### [Replicate](https://replicate.com)
@@ -194,30 +192,32 @@ If that's not a problem:
  ```
 --llm-provider replicate  --llm-model mistralai/mistral-7b-instruct-v0.2
 ```
-
-> **Windows trap:** &nbsp; You have to run `refreshenv` in an command prompt window after changing an environment variable to get the new value. This is easy to forget, and can make for some confusing error messages.
-
-If your inference provider is not here, there's a good chance they run an OpenAI API-compatible server somewhere anyway. If you can find the server URL, this should work the same for any provider:
+### [together.ai](https://www.together.ai/)
+ - set `TOGETHERAI_API_KEY` in your environment (override with `--llm-api-key`)
+ - change [models](https://docs.together.ai/docs/inference-models) using `--llm-model` (the default is `codellama/CodeLlama-70b-Instruct-hf`)
+ - note the provider is `openai` because we're using [together.ai](https://www.together.ai/)'s OpenAI API-compatibile endpoint by setting `--llm-server`
 ```
---llm-provider openai  --llm-server URL  --llm-model NAME
+--llm-provider openai  --llm-model codellama/codellama-70b-instruct-hf  --llm-server https://api.together.xyz
+```
+If your inference provider is not here, there's a good chance they run an OpenAI API-compatible server somewhere too. The same pattern should work the same for any compatible provider:
+```
+--llm-provider openai  --llm-server URL  --llm-model NAME  --llm-api-key YOUR_KEY
 ```
 
 # RAG gauntlet
 
 There's another, more compact way to configure inference providers, which is `--llm-config`
 ```
-[alias=]provider[,model[,server[,api-key[,parameters...]]]]
+provider[,model[,server[,api-key[,parameters...]]]]
 ```
 
-Basically, you just glue all the settings together with commas. The alias is optional, and only used for convenience in chat mode, for switching between models with the `/connect` command.
+Basically, you just glue all the settings together with commas.
 
 Most of the time, all you need is the first couple of fields, or even just the provider if you want to use the default model. You can skip unused fields by leaving them empty. For a complicated example, to connect with a local (OpenAI API-compatible) [text-generation-webui](https://github.com/oobabooga/text-generation-webui) server, using a couple of custom inference parameters:
 
 ```
---llm-config local=openai,,http://localhost:5000/v1,,temperature=1.6,top_p=0.9
+--llm-config openai,,http://localhost:5000/v1,,temperature=1.6,top_p=0.9
 ```
-In chat mode, `/connect local` will now switch to that LLM connection.
-
 <img align="right" width="250px" style="padding:10px" src="docs/images/yodawg.jpg">
 
 The point of this horrible format is that now you can submit a list of inference providers using multiple `--llm-config` arguments, and **RAG/TAG Tiger** will run your queries through *all* of them, allowing you to compare the responses.
@@ -242,6 +242,7 @@ It does this as another RAG query. I don't know if that's a good idea or not yet
 | **[Replicate](https://replicate.com/collections/language-models)** | Mixtral | 8x 7B | 32k | `replicate,mistralai/mixtral-8x7b-instruct-v0.1` |
 | | Nous Hermes 2 | 34B | 4k | `replicate,kcaverly/nous-hermes-2-yi-34b-gguf` |
 | | Mistral | 7B | 4k | `replicate,mistralai/mistral-7b-instruct-v0.1` |
+|  **[Together.ai](https://api.together.xyz/playground)** | Falcon | 40B | 2k | `openai,togethercomputer/falcon-40b-instruct,https://api.together.xyz,YOUR_KEY` |
 | **[OpenAI API](https://platform.openai.com/docs/models)** | _(external server)_| | |  `openai,,http://COMPATIBLE_API_SERVER` <br>Any OpenAI API-compatible service will work|
 | **Local**| | | | |
 | **[llama.cpp](https://github.com/ggerganov/llama.cpp)** | _(internal server)_ | | | `openai,,http://YOUR_SERVER:8081` |
@@ -259,7 +260,7 @@ It does this as another RAG query. I don't know if that's a good idea or not yet
 ### Put your command in a shell script
 Commands can get long, but they are easier to edit if you put them in a shell script (or batch file), and split the parameters over multiple lines by ending them with `\` (or with `^` on Windows).
 
-For example, a script to consult with a dangerously unqualified virtual doctor, using a local LLM and a temporary document index for privacy:
+For example, a script to consult with a dangerously unqualified virtual doctor:
 ```
 ragtag \
     --source          my/personal/medical_data          \
@@ -364,8 +365,6 @@ ragtag --help
 | **`--chat-mode`**       | *MODE*     | Chat response mode                                                |
 
 <br>
-
-
 # FAQ
 
 **Q:**&nbsp; What does the name mean? <br>

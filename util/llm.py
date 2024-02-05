@@ -26,7 +26,6 @@ def load_llm(provider, model, server, api_key, params, verbose=False, set_servic
 
             ### OpenAI
             if provider == "openai":
-                api_key = api_key or os.environ.get("OPENAI_API_KEY", "")
                 if not server:
                     model_name = model or openai_model_default
                     lograg(f"OpenAI model \"{model_name}\"...")
@@ -38,11 +37,14 @@ def load_llm(provider, model, server, api_key, params, verbose=False, set_servic
                         additional_kwargs=model_kwargs,
                         verbose=verbose)
                 else:
-                    # API compatible server
+                    # OAI API compatible third party server
+                    if "together" in server: api_key = api_key or os.environ.get("TOGETHERAI_API_KEY", "")
+                    api_key = api_key or os.environ.get("OPENAI_API_KEY", "")
                     model_name = model or "default"
-                    lograg(f"Preparing model \"{model_name}\" on server \"{server}\"...")
+                    lograg(f"Model \"{model_name}\" on \"{server}\"...")
                     from llama_index.llms import OpenAILike
                     result = OpenAILike(
+                        api_key=api_key,
                         model=model_name,
                         additional_kwargs=model_kwargs,
                         api_base=server,
@@ -159,7 +161,7 @@ def split_llm_config(config):
 
 def load_llm_config(config, set_service_context=True):
     """Load an LLM from a config string like "provider,model,server,api-key,param1,param2,..."""
-    provider, model, server, api_key, params = split_llm_config(config)
+    provider, model, server, api_key, params, _ = split_llm_config(config)
     return load_llm(provider.lower(), model, server, api_key, params, set_service_context)
 
 
