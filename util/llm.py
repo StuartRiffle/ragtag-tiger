@@ -25,33 +25,37 @@ def load_llm(provider, model, server, api_key, params, verbose=False, set_servic
             model_kwargs = dict([param.split("=") for param in params]) if params else {}
 
             ### OpenAI
-            if provider == "openai":
-                if not server:
-                    model_name = model or openai_model_default
-                    lograg(f"OpenAI model \"{model_name}\"...")
-                    from llama_index.llms import OpenAI
-                    result = OpenAI(
-                        model=model_name,
-                        timeout=default_timeout,
-                        api_key=api_key,
-                        additional_kwargs=model_kwargs,
-                        verbose=verbose)
-                else:
-                    # OAI API compatible third party server
-                    if "together" in server: api_key = api_key or os.environ.get("TOGETHERAI_API_KEY", "")
-                    api_key = api_key or os.environ.get("OPENAI_API_KEY", "")
-                    model_name = model or "default"
-                    lograg(f"Model \"{model_name}\" on \"{server}\"...")
-                    from llama_index.llms import OpenAILike
-                    result = OpenAILike(
-                        api_key=api_key,
-                        model=model_name,
-                        additional_kwargs=model_kwargs,
-                        api_base=server,
-                        max_tokens=1000,
-                        max_iterations=100,
-                        timeout=default_timeout,
-                        verbose=verbose)
+            if provider == "openai" and not server:
+                model_name = model or openai_model_default
+                lograg(f"OpenAI model \"{model_name}\"...")
+                from llama_index.llms import OpenAI
+                result = OpenAI(
+                    model=model_name,
+                    timeout=default_timeout,
+                    api_key=api_key,
+                    additional_kwargs=model_kwargs,
+                    verbose=verbose)
+                
+            ### OpenAI API-compatible third party server                
+            elif provider == "openai" and server:
+                model_name = model or "default"
+                lograg(f"Model \"{model_name}\" on \"{server}\"...")
+
+                # Auto-populate API key for known providers
+                if "together" in server:  api_key = api_key or os.environ.get("TOGETHERAI_API_KEY", "")
+                if "fireworks" in server: api_key = api_key or os.environ.get("FIREWORKS_API_KEY", "")
+                api_key = api_key or os.environ.get("OPENAI_API_KEY", "") 
+                
+                from llama_index.llms import OpenAILike
+                result = OpenAILike(
+                    api_key=api_key,
+                    model=model_name,
+                    additional_kwargs=model_kwargs,
+                    api_base=server,
+                    max_tokens=1000,
+                    max_iterations=100,
+                    timeout=default_timeout,
+                    verbose=verbose)
                 
             ### Google
             elif provider == "google":

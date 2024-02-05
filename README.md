@@ -194,11 +194,19 @@ If that's not a problem:
 ```
 ### [together.ai](https://www.together.ai/)
  - set `TOGETHERAI_API_KEY` in your environment (override with `--llm-api-key`)
- - change [models](https://docs.together.ai/docs/inference-models) using `--llm-model` (the default is `codellama/CodeLlama-70b-Instruct-hf`)
+ - select a [model](https://docs.together.ai/docs/inference-models) using `--llm-model` (the default is `codellama/CodeLlama-70b-Instruct-hf`)
  - note the provider is `openai` because we're using [together.ai](https://www.together.ai/)'s OpenAI API-compatibile endpoint by setting `--llm-server`
 ```
 --llm-provider openai  --llm-server https://api.together.xyz  --llm-model codellama/codellama-70b-instruct-hf
 ```
+### [fireworks.ai](https://www.fireworks.ai/)
+ - set `FIREWORKS_API_KEY` in your environment (override with `--llm-api-key`)
+ - select a [model](https://readme.fireworks.ai/reference/requirements-and-limits) using `--llm-model`
+ - note the provider is `openai` because we're using [fireworks.ai](https://www.fireworks.ai/)'s OpenAI API-compatibile endpoint by setting `--llm-server`
+```
+--llm-provider openai  --llm-server https://api.fireworks.ai/inference/v1  --llm-model accounts/fireworks/models/mixtral-8x7b-instruct
+```
+
 If your service is not here, there's a good chance they run an OpenAI API-compatible server somewhere too. The same pattern should work the same for any compatible provider:
 ```
 --llm-provider openai  --llm-server URL  --llm-model NAME  --llm-api-key YOUR_KEY
