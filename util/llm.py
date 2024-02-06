@@ -17,19 +17,32 @@ fireworks_ai_default    = "accounts/fireworks/models/mixtral-8x7b-instruct"
 together_ai_default     = "codellama/CodeLlama-70b-Instruct-hf"
 
 default_timeout         = 180
-hf_model_nicknames      = { "default": "codellama/CodeLlama-7b-Instruct-hf" }
+default_temperature     = 0.1
+default_max_tokens      = 500
 default_llm_provider    = "huggingface"
+hf_model_nicknames      = { "default": "codellama/CodeLlama-7b-Instruct-hf" }
 
-def load_llm(provider, model, server, api_key, params, verbose=False, set_service_context=True, torch_device=None):
+def load_llm(provider, model, server, api_key, params, global_params, verbose=False, set_service_context=True, torch_device=None):
     result = None
     streaming_supported = True
     try:
         with TimerUntil("ready"):
-            model_kwargs = dict([param.split("=") for param in params]) if params else {}
+            all_params = global_params.copy()
+            model_params = dict([param.split("=") for param in params]) if params else {}
+            for k, v in model_params.items():
+                all_params[k] = v
+
+            model_kwargs = {}
+            for k, v in all_params.items():
+                model_kwargs[k] = float(v) if v.replace(".", "", 1).isdigit() else v
+
+            temperature = float(model_kwargs.get("temperature", default_temperature))
+            max_tokens = int(model_kwargs.get("max_tokens", default_max_tokens))
 
             ### OpenAI
             if provider == "openai" and not server:
                 model_name = model or openai_model_default
+                api_key = api_key or os.environ.get("OPENAI_API_KEY", "") 
                 lograg(f"OpenAI model \"{model_name}\"...")
                 from llama_index.llms import OpenAI
                 result = OpenAI(
@@ -37,6 +50,8 @@ def load_llm(provider, model, server, api_key, params, verbose=False, set_servic
                     timeout=default_timeout,
                     api_key=api_key,
                     additional_kwargs=model_kwargs,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
                     verbose=verbose)
                 
             ### OpenAI API-compatible third party server                
@@ -58,9 +73,10 @@ def load_llm(provider, model, server, api_key, params, verbose=False, set_servic
                     model=model_name,
                     additional_kwargs=model_kwargs,
                     api_base=server,
-                    max_tokens=1000,
                     max_iterations=100,
                     timeout=default_timeout,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
                     verbose=verbose)
                 
             ### Google
@@ -77,6 +93,8 @@ def load_llm(provider, model, server, api_key, params, verbose=False, set_servic
                     result = Gemini(
                         api_key=api_key or gemini_api_key,
                         model_name=model_name,
+                        max_tokens=max_tokens,
+                        temperature=temperature,
                         model_kwargs=model_kwargs)
                 else:
                     lograg(f"Google PaLM model \"{model_name}\"...")
@@ -97,6 +115,8 @@ def load_llm(provider, model, server, api_key, params, verbose=False, set_servic
                 result = LlamaCPP(
                     model_path=model,
                     model_kwargs=model_kwargs,
+                    max_new_tokens=max_tokens,
+                    temperature=temperature,
                     verbose=verbose)
                 
             ### Perplexity
@@ -108,6 +128,8 @@ def load_llm(provider, model, server, api_key, params, verbose=False, set_servic
                 result = Perplexity(
                     api_key=api_key,
                     model=model_name,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
                     model_kwargs=model_kwargs)
                 
             ### Replicate
@@ -118,6 +140,7 @@ def load_llm(provider, model, server, api_key, params, verbose=False, set_servic
                 from llama_index.llms import Replicate
                 result = Replicate(
                     model=model_name,
+                    temperature=temperature,
                     additional_kwargs=model_kwargs)
             
             ### HuggingFace
@@ -134,6 +157,7 @@ def load_llm(provider, model, server, api_key, params, verbose=False, set_servic
                 result = HuggingFaceLLM(
                     model_name=model_name,
                     model_kwargs=model_kwargs,
+                    max_new_tokens=max_tokens,
                     device_map=torch_device or "auto")
                     #system_prompt=system_prompt)
 
@@ -170,9 +194,9 @@ def split_llm_config(config):
     return provider, model, server, api_key, params, alias
 
 
-def load_llm_config(config, set_service_context=True):
+def load_llm_config(config, global_params, set_service_context=True):
     """Load an LLM from a config string like "provider,model,server,api-key,param1,param2,..."""
     provider, model, server, api_key, params, _ = split_llm_config(config)
-    return load_llm(provider.lower(), model, server, api_key, params, set_service_context)
+    return load_llm(provider.lower(), model, server, api_key, params, global_params, set_service_context)
 
 

@@ -519,13 +519,20 @@ json_log = {
     "queries": [],
 }
 
-if args.llm_provider or args.llm_server or args.llm_api_key or args.llm_param:
+llm_global_params = {}
+for param in args.llm_param or []:
+    try:
+        key, _, value = param.partition("=")
+        llm_global_params[key] = value
+    except:
+        lograg_error(f"invalid --llm-param, format must be key=value: \"{param}\"")
+
+if args.llm_provider or args.llm_server or args.llm_api_key:
     # Build a configuration string out of the individual options
     config_str = f"{args.llm_provider or 'huggingface'},{args.llm_model or ''},{args.llm_server or ''},{args.llm_api_key or ''}"
     for param in args.llm_param or []:
         config_str += f",{param.strip().replace(' ', '')}"
-
-    llm_config_list.insert(config_str, 0)
+    llm_config_list.insert(0, config_str)
 
 moderator = None
 moderator_loaded_last = False
@@ -595,7 +602,8 @@ response_prefix = f"### {tag_responses}\n" if tag_responses and not lograg_is_co
 
 if queries and llm_config_list:
     for llm_config in llm_config_list:
-        llm, streaming_supported, service_context = load_llm_config(llm_config)
+
+        llm, streaming_supported, service_context = load_llm_config(llm_config, llm_global_params)
         curr_provider, curr_model, curr_server, _, curr_params, _ = split_llm_config(llm_config)
         vector_index = lazy_load_vector_index(vector_index)
        
@@ -838,7 +846,7 @@ if args.chat:
                 chat_engine = None
 
                 curr_provider, curr_model, curr_server, _, curr_params, _ = split_llm_config(chat_llm_config)
-                llm, streaming_supported, service_context = load_llm_config(chat_llm_config, set_service_context=False)
+                llm, streaming_supported, service_context = load_llm_config(chat_llm_config, llm_global_params, set_service_context=False)
 
                 # FIXME: forcing reload, there must be a good way to do this?
                 vector_index = lazy_load_vector_index(None)
