@@ -106,6 +106,7 @@ arg("--llm-api-key",    help="API key for inference server (if needed)", metavar
 arg("--llm-param",      help="Inference parameter, like \"temperature=0.9\" etc", nargs="+", metavar="KVP")
 arg("--llm-config",     help="Condensed LLM config: provider,model,server,api-key,params...", action="append", metavar="CFG")
 arg("--llm-config-mod", help="Moderator LLM to consolidate the responses of multiple providers", metavar="CFG")
+arg("--llm-preset",     help="Canonical model name, provider chosen based on config.json", action="append", metavar="PRESET")
 arg("--llm-mod-mode",   help="Moderator query response mode", choices=llamaindex_query_modes, default="tree_summarize")
 arg("--llm-verbose",    help="enable extended/debug output from the LLM", action="store_true")
 arg("--torch-device",   help="Device override, like \"cpu\" or \"cuda:1\" (for second GPU)", metavar="DEVICE")
@@ -505,7 +506,6 @@ vector_index = None
 service_context = None
 query_engine = None
 transcript_lines = []
-llm_config_list = args.llm_config or []
 query_engine_params = {
     "response_mode":    args.query_mode,
     "system_prompt":    system_prompt,
@@ -519,6 +519,48 @@ json_log = {
     "queries": [],
 }
 
+
+configs_for_model = {}
+
+# load config.json
+config_json = load_stock_file("config.json")
+config_info = json.loads(config_json or "{}")
+
+def get_provider_preset_config(config_info, preset_name):
+    """Returns connection config string for the first provider supporting a given model preset name"""
+    providers = config_info.get("providers", {})
+    for _, info in providers.items():
+        con_info = info.get("connection", {})
+        con_protocol = con_info.get("protocol", "openai")
+        con_endpoint = con_info.get("endpoint", "")
+        con_api_key = con_info.get("api_key", "")
+        if con_api_key and con_api_key in os.environ:
+            con_api_key = os.environ[con_api_key]
+            models = info.get("model_names", {})
+            for model_name, local_name in models.items():
+                if model_name == preset_name:
+                    return f"{con_protocol},{local_name},{con_endpoint},{con_api_key}"
+    return None
+
+preset_list = []
+for preset_clump in args.llm_preset or []:
+    for preset_name in preset_clump.split(","):
+        if not preset_name in preset_list:
+            preset_list.append(preset_name)
+
+llm_config_list = args.llm_config or []
+
+if len(preset_list) > 0:
+    lograg(f"Resolving model presets...")
+    for preset_name in preset_list:
+        preset_config = get_provider_preset_config(config_info, preset_name)
+        if preset_config:
+            llm_config_list.append(preset_config)
+            preset_without_key = preset_config.rsplit(",", 1)[0].strip(",")
+            lograg_verbose(f"\t\"{preset_name}\" --> \"{preset_without_key}\"")
+        else:
+            lograg_error(f"no available provider for model preset \"{preset_name}\"")
+
 llm_global_params = {}
 for param in args.llm_param or []:
     try:
@@ -526,6 +568,7 @@ for param in args.llm_param or []:
         llm_global_params[key] = value
     except:
         lograg_error(f"invalid --llm-param, format must be key=value: \"{param}\"")
+
 
 if args.llm_provider or args.llm_server or args.llm_api_key:
     # Build a configuration string out of the individual options
@@ -536,6 +579,11 @@ if args.llm_provider or args.llm_server or args.llm_api_key:
 
 moderator = None
 moderator_loaded_last = False
+
+if args.llm_config_mod:
+    config_mod_preset = get_provider_preset_config(config_info, args.llm_config_mod)
+    if config_mod_preset:
+        args.llm_config_mod = config_mod_preset
 
 if args.llm_config_mod:
     if args.llm_config_mod in llm_config_list:
@@ -727,7 +775,7 @@ if args.llm_config_mod and queries:
 
     with TimerUntil("complete"): 
         if not moderator_loaded_last:
-            llm, _, _ = load_llm_config(args.llm_config_mod, set_service_context=True)
+            llm, _, _ = load_llm_config(args.llm_config_mod, llm_global_params, set_service_context=True)
         if not vector_index:
             vector_index = lazy_load_vector_index(vector_index)
 
