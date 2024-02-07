@@ -271,8 +271,6 @@ Ok, last one. The option `--llm-preset` allows for auto-selection of providers b
 
 That will use the information in `data/providers.json` to find a source for each of those models. Look inside that file for more information.
 
-<br>
-
 # Workflow tips
 
 ### Put your command in a shell script
@@ -361,6 +359,7 @@ ragtag --help
 | **`--llm-param`**       | *NAME=VAL* | Inference parameter, like `temperature=0.9` etc                   |
 | **`--llm-config`**      | *CONFIG*   | Condensed LLM config: provider,model,server,api-key,params...     |
 | **`--llm-config-mod`**  | *CONFIG*   | Moderator LLM to consolidate the responses of multiple providers  |
+| **`--llm-preset`**      | *PRESET*   | Canonical model name, provider chosen based on providers.json     |
 | **`--llm-mod-mode`**    | *MODE*     | Moderator query response mode                                     |
 | **`--llm-verbose`**     |            | Enable extended/debug output from the LLM                         |
 | **`--torch-device`**    | *DEVICE*   | Device override, like `cpu` or `cuda:1` (for second GPU)          |
@@ -383,6 +382,7 @@ ragtag --help
 | **`--chat-mode`**       | *MODE*     | Chat response mode                                                |
 
 <br>
+
 # FAQ
 
 **Q:**&nbsp; What does the name mean? <br>
