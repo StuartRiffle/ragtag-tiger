@@ -7,62 +7,24 @@
 #-----------------------------------------------------------------------------#
 
 A query is given below that has been run on multiple LLMs, each of which performed
-RAG analysis and generated a draft response. These are quite different systems
-and may have responded in different ways. The task of this model is to
-consolidate those drafts and produce a final response for the user. This is
-a standardized process with a fixed 3-part format for the output, which must
-be followed methodically and exactly.
+RAG analysis and generated a draft response. Your task is to consolidate the 
+information in those drafts and produce a precise, lucid, and insightful
+response to the user's query.
 
-Start the first part with the header `## VALIDATION`, then evaluate each response 
-against these considerations:
-
-1)  Note technical problems with the LLM output, like:
+Take note of any technical problems with the draft responses below, and
+ignore them. For example:
     - truncated output indicating a configuration error or missing tokens
     - gibberish or degenerate output, like a phrase repeated multiple times
     - fragments of the LLM system prompt or instructions leaking through
     - artifacts of unrelated training data, metadata, or transcripts
-    - runtime error messages
-2)  Make a list of overt errors and hallucinations. Propose corrections
-    only if they are known with high confidence.
-3)  Evaluate the response for relevance to the query. Note any sections that
-    don't contribute to the answer, are off-topic, redundant, overly 
-    conversational, or otherwise unhelpful in context.
-4)  Evaluate the response for apparent completeness. The RAG process may
-    have surfaced information out of context, too narrowly focused, based
-    on simple confusion about terminology, etc, and the response might 
-    not cover the full scope of the query. 
+    - things that look like exceptions or error messages
 
-Address these four points for each LLM's response in turn. 
+LLM responses sometimes include hallucinations or overt errors. Only include
+information in your response that is known to a high degree of confidence.
 
-The second part (`## EVALUATION`) must summarize the quality of all these 
-responses in aggregate. For example, do any responses directly contradict
-each other? Do some appear based on more sophisticated understanding? Are any 
-of them just plain wrong and should be ignored? As a matter of style, do any
-of them do a better job of explaining the answer? Add any notes that might help
-when composing or editing the final draft.
+Some responses may also contain irrelevant information. Cherry pick what is
+useful, and ignore anything that does not add value to the response.
 
-To end section two, stack rank the responses from best to worst.
+The original query and all draft responses follow. Begin the response immediately, 
+with no commentary.
 
-The third and final section (header `## SUMMARY`) will be presented to the user 
-as the response to their original query. Leverage the analysis you generated in 
-the first two sections, and consolidate the best information available
-into a single, coherent response for the user. If it doesn't look like a
-satisfactory reply will be possible, say so and explain why. That's more useful
-than an incomplete or potentially incorrect answer.
-
-To recap, produce output in three sections:
-
-VALIDATION - evaluate each response against the four criteria listed
-EVALUATION - summarize the quality of the responses and stack rank them
-SUMMARY    - consolidate this information into a high-quality final response
-
-This is very important for my job! You have been selected for your advanced
-analytical ability and excellent communication skills. Follow these instructions
-exactly and generate a precise, lucidly written, and insightful answer.
-
-The original query and all draft responses follow. Begin the first section
-of your response immediately, with no commentary.
-
-{{query}}
-
-{{responses}}

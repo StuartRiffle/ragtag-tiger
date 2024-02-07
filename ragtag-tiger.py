@@ -106,7 +106,7 @@ arg("--llm-api-key",    help="API key for inference server (if needed)", metavar
 arg("--llm-param",      help="Inference parameter, like \"temperature=0.9\" etc", nargs="+", metavar="KVP")
 arg("--llm-config",     help="Condensed LLM config: provider,model,server,api-key,params...", action="append", metavar="CFG")
 arg("--llm-config-mod", help="Moderator LLM to consolidate the responses of multiple providers", metavar="CFG")
-arg("--llm-preset",     help="Canonical model name, provider chosen based on config.json", action="append", metavar="PRESET")
+arg("--llm-preset",     help="Canonical model name, provider chosen based on providers.json", action="append", metavar="PRESET")
 arg("--llm-mod-mode",   help="Moderator query response mode", choices=llamaindex_query_modes, default="tree_summarize")
 arg("--llm-verbose",    help="enable extended/debug output from the LLM", action="store_true")
 arg("--torch-device",   help="Device override, like \"cpu\" or \"cuda:1\" (for second GPU)", metavar="DEVICE")
@@ -811,18 +811,13 @@ if args.llm_config_mod and queries:
                     lograg_error(f"failure generating summary: {e}")
                     continue
 
-                validation = full_analysis.split("## VALIDATION")[1].split("## EVALUATION")[0].strip()
-                evaluation = full_analysis.split("## EVALUATION")[1].split("## SUMMARY")[0].strip()
-                summary = full_analysis.split("## SUMMARY")[-1].strip()
-
-                if not validation or not evaluation or not summary:
+                summary = full_analysis.strip()
+                if not summary:
                     lograg_error(f"summary formatting error")
                     continue
 
                 json_log["queries"][query_record_idx]["id"] = hashlib.md5(query.encode()).hexdigest()
                 json_log["queries"][query_record_idx]["moderator"] = args.llm_config_mod
-                json_log["queries"][query_record_idx]["validation"] = validation
-                json_log["queries"][query_record_idx]["evaluation"] = evaluation
                 json_log["queries"][query_record_idx]["response"] = summary
 
                 lograg_verbose(response_prefix, end="", flush=True)
@@ -830,8 +825,6 @@ if args.llm_config_mod and queries:
                     lograg_in_style(summary, style="query-response")
 
                 transcript_lines.append(f"## Query {query_record_idx + 1}\n{query.strip()}\n\n")
-                transcript_lines.append(f"### Validation\n\n{validation.strip()}\n\n")
-                transcript_lines.append(f"### Evaluation\n\n{evaluation.strip()}\n\n")
                 transcript_lines.append(f"### Summary\n\n{summary.strip()}\n\n")
 
             except Exception as e: 

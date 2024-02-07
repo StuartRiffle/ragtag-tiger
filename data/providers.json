@@ -49,7 +49,6 @@
             },
             "model_names": {
                 "codellama-34b":    "codellama/CodeLlama-34b-Instruct-hf",
-                "codellama-70b":    "codellama/CodeLlama-70b-Instruct-hf",
                 "falcon-40b":       "togethercomputer/falcon-40b-instruct",
                 "llama-2-7b":       "togethercomputer/Llama-2-7B-32K-Instruct",
                 "llama-2-70b":      "togethercomputer/llama-2-70b-chat",
@@ -72,7 +71,7 @@
             },
             "model_names": {
                 "codellama-34b":    "meta/codellama-34b-instruct",
-                "codellama-70b":    "meta/codellama-70b-instruct",
+                "codellama-70b":    "meta/codellama-70b-instruct:a279116fe47a0f65701a8817188601e2fe8f4b9e04a518789655ea7b995851bf",
                 "falcon-40b":       "joehoover/falcon-40b-instruct",
                 "llama-2-7b":       "meta/llama-2-7b-chat",
                 "llama-2-70b":      "meta/llama-2-70b-chat",
