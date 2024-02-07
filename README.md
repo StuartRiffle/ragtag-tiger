@@ -262,6 +262,15 @@ It does this as another RAG query. I don't know if that's a good idea or not yet
 | | _(your PC)_ | | | `openai,,http://127.0.0.1:5000/v1` |
 | **[HuggingFace](https://huggingface.co/spaces/HuggingFaceH4/open_llm_leaderboard)** | Goliath | 120B | 4k | `huggingface,thebloke/goliath-120b-awq` |
 | | Falcon | 180B | 2k | `huggingface,thebloke/falcon-180B-chat-awq` |
+
+### Presets
+
+Ok, last one. The option `--llm-preset` allows for auto-selection of providers based on which models they support. Provider availability is determined by checking for API keys in the environment. For example:
+
+`--llm-preset codellama-70b,gemini,gpt-4,mixtral-8x7b`
+
+That will use the information in `data/providers.json` to find a source for each of those models. Look inside that file for more information.
+
 <br>
 
 # Workflow tips
