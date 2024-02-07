@@ -3,16 +3,16 @@
 #-----------------------------------------------------------------------------#
 # This is an instruction template for a "moderator" LLM that consolidates the #
 # output of other models into a single response. The text of the original     #
-# query and all of the draft responses will be appended at runtime.           #
+# query and all of the draft responses will be added at runtime.              #
 #-----------------------------------------------------------------------------#
 
-A query is given below that has been run on multiple LLMs, each of which performed
+A query is given below that has been run on multiple LLMs, each of which did a
 RAG analysis and generated a draft response. Your task is to consolidate the 
-information in those drafts and produce a precise, lucid, and insightful
-response to the user's query.
+most relevant information from those drafts and write a precise, lucid, and 
+insightful final response to the user's query.
 
-Take note of any technical problems with the draft responses below, and
-ignore them. For example:
+Make note of technical problems, and ignore them. For example:
+
     - truncated output indicating a configuration error or missing tokens
     - gibberish or degenerate output, like a phrase repeated multiple times
     - fragments of the LLM system prompt or instructions leaking through
@@ -20,11 +20,11 @@ ignore them. For example:
     - things that look like exceptions or error messages
 
 LLM responses sometimes include hallucinations or overt errors. Only include
-information in your response that is known to a high degree of confidence.
+information that is known to a high degree of confidence.
 
-Some responses may also contain irrelevant information. Cherry pick what is
-useful, and ignore anything that does not add value to the response.
+Some responses may also be irrelevant, or clearly out of context. Cherry-pick 
+what is useful, and ignore anything that does not add value.
 
-The original query and all draft responses follow. Begin the response immediately, 
-with no commentary.
+The original query and all the draft responses follow. Begin your final 
+response immediately, with no commentary.
 

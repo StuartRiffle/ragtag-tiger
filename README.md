@@ -267,9 +267,9 @@ It does this as another RAG query. I don't know if that's a good idea or not yet
 
 Ok, last one. The option `--llm-preset` allows for auto-selection of providers based on which models they support. Provider availability is determined by checking for API keys in the environment. For example:
 
-`--llm-preset codellama-70b,gemini,gpt-4,mixtral-8x7b`
+`--llm-preset codellama-70b,gemini-pro,gpt-4,mixtral-8x7b`
 
-That will use the information in `data/providers.json` to find a source for each of those models. Look inside that file for more information.
+That will use the information in `data/providers.json` to find an inference provider for each of those models. Look inside that file for more information.
 
 # Workflow tips
 

@@ -102,7 +102,7 @@ def load_and_strip_text(file):
         lograg_error(e)
     return None
 
-def cleanpath(path, resolve_stock_folder=True, make_unique=False, lowercase=True, forward_slashes=True):
+def cleanpath(path, resolve_stock_folder=True, make_unique=False, lowercase=False, forward_slashes=False):
     """Clean up a path, optionally making it absolute and unique"""
 
     if resolve_stock_folder:
