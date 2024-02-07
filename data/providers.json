@@ -1,56 +1,53 @@
 {
-    "comment": "RAG/TAG Tiger inference configuration, order providers by preference",
+    "_": [
+        "RAG/TAG Tiger inference provider config",
 
-    "models":
-    {
-        "codellama-34b":        {},
-        "codellama-70b":        {},
-        "falcon-40b":           {},
-        "gemini-pro":           {},
-        "gpt-3.5":              {},
-        "gpt-4":                {},
-        "llama-2-7b":           {},
-        "llama-2-70b":          {},
-        "llama-python-34b":     {},
-        "llama-python-70b":     {},
-        "mistral-7b":           {},
-        "mixtral-8x7b":         {},
-        "palm":                 {},
-        "phind-34b":            {},
-        "wizard-python-34b":    {},
-        "yi-34b":               {}
-    },
+        "There is a list of models in models.json, with simple canonical names",
+        "like 'codellama-70b`. (Only '-instruct' and '-chat' models are",
+        "used by the program, so one of those suffixes is implied).",
+
+        "A given provider will only support a subset of the models, and",
+        "may use different names internally to identify them. The",
+        "provider configurations below contain a list of the models",
+        "they offer and mappings to the internal names.",
+
+        "This gives a provider-independent way to select models for RAG,",
+        "which is the '--llm-preset' command line option. RAG/TAG Tiger",
+        "will detect available providers by finding their API keys in the",
+        "environment, then choose a provider for each model. Priority",
+        "is based on list order, so place your cheapest/fastest/preferred",
+        "providers first.",
+
+        "Check the README for more information about inference providers",
+        "in general. Only a few are listed here, basically just the ones",
+        "I was testing. If you add a new configuration, please submit a",
+        "pull request!"
+    ],
 
     "providers":
     {
-        "openai":
-        {
+        "openai": {
             "name":                 "OpenAI",
             "website":              "https://openai.com",
-            "connection":       
-            {       
+            "connection": {       
                 "api_key":          "OPENAI_API_KEY",
                 "protocol":         "openai"
             },      
-            "model_names":       
-            {       
+            "model_names": {       
                 "gpt-3.5":          "gpt-3.5-turbo-instruct",
                 "gpt-4":            "gpt-4"
             }
         },
 
-        "together":
-        {
+        "together": {
             "name":                 "together.ai",
             "website":              "https://together.ai",
-            "connection":       
-            {       
+            "connection": {       
                 "api_key":          "TOGETHERAI_API_KEY",
                 "protocol":         "openai",
                 "endpoint":         "https://api.together.xyz"
             },
-            "model_names":
-            {
+            "model_names": {
                 "codellama-34b":    "codellama/CodeLlama-34b-Instruct-hf",
                 "codellama-70b":    "codellama/CodeLlama-70b-Instruct-hf",
                 "falcon-40b":       "togethercomputer/falcon-40b-instruct",
@@ -66,17 +63,14 @@
             }
         },
 
-        "replicate":
-        {
+        "replicate": {
             "name":                 "Replicate",
             "website":              "https://replicate.com",
-            "connection":       
-            {       
+            "connection": {       
                 "api_key":          "REPLICATE_API_TOKEN",
                 "protocol":         "replicate"
             },
-            "model_names": 
-            {
+            "model_names": {
                 "codellama-34b":    "meta/codellama-34b-instruct",
                 "codellama-70b":    "meta/codellama-70b-instruct",
                 "falcon-40b":       "joehoover/falcon-40b-instruct",
@@ -88,18 +82,15 @@
             }
         },
 
-        "fireworks":
-        {
+        "fireworks": {
             "name":                 "fireworks.ai",
             "website":              "https://fireworks.ai",
-            "connection":
-            {
+            "connection": {
                 "api_key":          "FIREWORKS_API_KEY",
                 "protocol":         "openai",
                 "endpoint":         "https://api.fireworks.ai/inference/v1"
             },
-            "model_names":
-            {
+            "model_names": {
                 "codellama-34b":    "accounts/fireworks/models/llama-v2-34b-code-instruct",
                 "codellama-70b":    "accounts/fireworks/models/llama-v2-70b-code-instruct",
                 "llama-2-7b":       "accounts/fireworks/models/llama-v2-7b-chat",
@@ -113,13 +104,11 @@
         {
             "name":                 "Perplexity",
             "website":              "https://perplexity.ai",
-            "connection":
-            {
+            "connection": {
                 "api_key":          "PERPLEXITYAI_API_KEY",
                 "protocol":         "perplexity"
             },
-            "model_names":
-            {
+            "model_names": {
                 "codellama-34b":    "codellama-34b-instruct",
                 "codellama-70b":    "codellama-70b-instruct",
                 "llama-2-70b":      "llama-2-70b-chat",
@@ -132,13 +121,11 @@
         {
             "name":                 "Google",
             "website":              "https://deepmind.google",
-            "connection":       
-            {       
+            "connection": {       
                 "api_key":          "GOOGLE_API_KEY",
                 "protocol":         "google"
             },
-            "model_names":
-            {
+            "model_names": {
                 "palm":             "models/text-bison-001"
             }
         },
@@ -147,13 +134,11 @@
         {
             "name":                 "Google",
             "website":              "https://deepmind.google",
-            "connection":       
-            {       
+            "connection": {       
                 "api_key":          "GEMINI_API_KEY",
                 "protocol":         "google"
             },
-            "model_names":
-            {
+            "model_names": {
                 "gemini-pro":       "models/gemini-pro"
             }
         }

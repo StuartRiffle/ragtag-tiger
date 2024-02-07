@@ -523,23 +523,25 @@ json_log = {
 configs_for_model = {}
 
 # load config.json
-config_json = load_stock_file("config.json")
-config_info = json.loads(config_json or "{}")
+providers_config_json = load_stock_file("providers.json")
+providers_config_info = json.loads(providers_config_json or "{}")
 
-def get_provider_preset_config(config_info, preset_name):
+def get_provider_preset_config(config_info, preset_name, include_api_key=False):
     """Returns connection config string for the first provider supporting a given model preset name"""
     providers = config_info.get("providers", {})
     for _, info in providers.items():
         con_info = info.get("connection", {})
-        con_protocol = con_info.get("protocol", "openai")
-        con_endpoint = con_info.get("endpoint", "")
         con_api_key = con_info.get("api_key", "")
         if con_api_key and con_api_key in os.environ:
-            con_api_key = os.environ[con_api_key]
             models = info.get("model_names", {})
             for model_name, local_name in models.items():
                 if model_name == preset_name:
-                    return f"{con_protocol},{local_name},{con_endpoint},{con_api_key}"
+                    con_protocol = con_info.get("protocol", "openai")
+                    con_endpoint = con_info.get("endpoint", "")
+                    config = f"{con_protocol},{local_name},{con_endpoint}"
+                    if include_api_key:
+                        config += f",{os.environ[con_api_key]}"
+                    return config
     return None
 
 preset_list = []
@@ -553,11 +555,10 @@ llm_config_list = args.llm_config or []
 if len(preset_list) > 0:
     lograg(f"Resolving model presets...")
     for preset_name in preset_list:
-        preset_config = get_provider_preset_config(config_info, preset_name)
+        preset_config = get_provider_preset_config(providers_config_info, preset_name).strip(',')
         if preset_config:
             llm_config_list.append(preset_config)
-            preset_without_key = preset_config.rsplit(",", 1)[0].strip(",")
-            lograg_verbose(f"\t\"{preset_name}\" --> \"{preset_without_key}\"")
+            lograg_verbose(f"\t\"{preset_name}\" --> \"{preset_config}\"")
         else:
             lograg_error(f"no available provider for model preset \"{preset_name}\"")
 
@@ -568,7 +569,6 @@ for param in args.llm_param or []:
         llm_global_params[key] = value
     except:
         lograg_error(f"invalid --llm-param, format must be key=value: \"{param}\"")
-
 
 if args.llm_provider or args.llm_server or args.llm_api_key:
     # Build a configuration string out of the individual options
@@ -581,7 +581,7 @@ moderator = None
 moderator_loaded_last = False
 
 if args.llm_config_mod:
-    config_mod_preset = get_provider_preset_config(config_info, args.llm_config_mod)
+    config_mod_preset = get_provider_preset_config(providers_config_info, args.llm_config_mod)
     if config_mod_preset:
         args.llm_config_mod = config_mod_preset
 

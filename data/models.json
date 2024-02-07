@@ -1,0 +1,78 @@
+{
+    "_": [
+        "RAG/TAG Tiger standard model config",
+
+        "There is a list of models below, with simple canonical names",
+        "like 'codellama-70b`. (Only '-instruct' and '-chat' models are",
+        "used by the program, so one of those suffixes is implied).",
+
+        "A given provider will only support a subset of the models. The",
+        "provider configurations in providers.json contain a list of",
+        "the models offered by each provider."
+    ],
+
+    "models":
+    {
+        "codellama-70b": {
+            "families": ["codellama"],
+            "parameters": 70
+        },
+        "codellama-34b": {
+            "families": ["codellama"],
+            "parameters": 34
+        },
+        "falcon-40b": {
+            "families": ["falcon"],
+            "parameters": 40
+        },
+        "gemini-pro": {
+            "families": ["gemini"],
+            "parameters": 34
+        },
+        "gpt-3.5": {
+            "families": ["gpt"]
+        },
+        "gpt-4": {
+            "families": ["gpt"]
+        },
+        "llama-2-70b": {
+            "families": ["llama", "llama-2"],
+            "parameters": 70
+        },
+        "llama-2-7b": {
+            "families": ["llama", "llama-2"],
+            "parameters": 7
+        },
+        "llama-python-70b": {
+            "families": ["llama-python", "codellama-python"],
+            "parameters": 70
+        },
+        "llama-python-34b": {
+            "families": ["llama-python", "codellama-python"],
+            "parameters": 34
+        },
+        "mixtral-8x7b": {
+            "families": ["mistral", "mixtral"],
+            "parameters": 56
+        },
+        "mistral-7b": {
+            "families": ["mistral"],
+            "parameters": 7
+        },
+        "palm": {
+            "families": ["palm"]
+        },
+        "phind-34b": {
+            "families": ["phind", "codellama"],
+            "parameters": 34
+        },
+        "wizard-python-34b": {
+            "families": ["wizard", "wizard-python", "codellama"],
+            "parameters": 34
+        },
+        "yi-34b": {
+            "families": ["yi"],
+            "parameters": 34
+        }
+    }
+}

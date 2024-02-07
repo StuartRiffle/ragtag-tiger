@@ -67,7 +67,11 @@ def unpack_mime(file_bytes, output_folder, container_file, container_type):
                         filename = f"guessed-imghdr.{image_type}"
                 except: pass
 
-            output_filename = f"{filename_prefix}-{filename if filename else 'unknown'}"
+            if not filename:
+                # You can't say we didn't try
+                filename = "unknown"
+
+            output_filename = f"{filename_prefix}-{filename}"
             #part_content = part.get_payload(decode=True)
             #output_filename = f"{filename_prefix}-{part.get_filename()}"
 
