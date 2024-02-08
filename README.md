@@ -36,33 +36,15 @@ choco install /y python git cuda
 git clone https://github.com/stuartriffle/ragtag-tiger ragtag
 cd ragtag
 ```
-### 3) Create and activate a [virtual environment](https://docs.python.org/3/library/venv.html)
-```
-python3 -m venv .venv
-. .venv/bin/activate
-```
-On Windows the command to activate the environment is different:
-```
-python -m venv .venv
-.venv\Scripts\activate.bat
-```
-### 4) Install dependencies
-```
-pip install --upgrade pip
-pip install -r requirements.txt
-```
-If that fails, go to step 4.
+### 3) Launch the program
 
-### 5) Sanity check
-```
-ragtag --help
-```
-This is the part where it falls over because your CUDA drivers are too old or something like that. Or the virtual environment chokes on a half-downloaded package, and you spend an hour typing `pip uninstall` and `pip install` in alternation. I cannot help you here.
+Run the program using the bash script `ragtag` (or `ragtag.bat` for Windows) in the root of the repo. It will create a virtual environment and install dependencies on the first run automatically.
+
+> Also put the repo in your path so that you can invoke it by typing `ragtag` from any folder.
+
+Now comes the part where it falls over because your CUDA drivers are too old or something like that. Or the virtual environment chokes on a half-downloaded package, and you spend an hour typing `pip uninstall` and `pip install` in alternation. I cannot help you here.
 
 # Usage
-
-### Launching
-Run the program using the bash script `ragtag` (or `ragtag.bat` for Windows) in the root of the repo. It's easier than typing `python ragtag-tiger.py`. Better still, put the repo root in your path, so you can call **RAG/TAG Tiger** from any directory.
 
 The simplest way to perform a RAG query would be:
 ```
