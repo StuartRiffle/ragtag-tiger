@@ -1,2 +1,23 @@
 #!/bin/bash
-python3 "$(dirname "$0")/ragtag-tiger.py" "$@"
+set -e
+
+REPO_PATH="$(dirname "$0")"
+SCRIPT_NAME="$REPO_PATH/ragtag-tiger.py"
+
+if [ ! -d "$REPO_PATH/.venv" ]; then
+    echo "Creating virtual environment..."
+    python3 -m venv "$REPO_PATH/.venv"
+    source "$REPO_PATH/.venv/bin/activate"
+
+    echo "Installing package requirements..."
+    pip install --upgrade pip
+    pip install -r "$REPO_PATH/requirements.txt"
+
+    echo "Testing installation..."
+    $SCRIPT_NAME --version || echo "ERROR: can't initialize ragtag-tiger environment"
+else
+    echo "Activating virtual environment..."
+    source "$REPO_PATH/.venv/bin/activate"
+fi
+
+python3 $SCRIPT_NAME "$@"
