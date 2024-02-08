@@ -36,11 +36,11 @@ choco install /y python git cuda
 git clone https://github.com/stuartriffle/ragtag-tiger ragtag
 cd ragtag
 ```
-### 3) Launch the program
+### 3) Launch with the script named `ragtag`
 
 Run the program using the bash script `ragtag` (or `ragtag.bat` for Windows) in the root of the repo. It will create a virtual environment and install dependencies on the first run automatically.
 
-> Also put the repo in your path so that you can invoke it by typing `ragtag` from any folder.
+> TIP: also put the repo in your path so that you can invoke it by typing `ragtag` from any folder.
 
 Now comes the part where it falls over because your CUDA drivers are too old or something like that. Or the virtual environment chokes on a half-downloaded package, and you spend an hour typing `pip uninstall` and `pip install` in alternation. I cannot help you here.
 
