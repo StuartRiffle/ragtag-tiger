@@ -29,7 +29,7 @@ def match_files_to_index(search_spec):
             matches = relative_pathspec.match_tree(file_spec_root)
             matches = [os.path.join(file_spec_root, match) for match in matches]
 
-            lograg_verbose(f"\t{len(matches)} files match \"{os.path.normpath(file_spec)}\" from \"{os.path.normpath(file_spec_root)}\"")
+            lograg_verbose(f"\t{len(matches)} files match \"{cleanpath(file_spec)}\" from \"{cleanpath(file_spec_root)}\"")
             all_matches.extend(matches)
 
     except Exception as e: lograg_error(e)

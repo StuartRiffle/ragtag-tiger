@@ -22,9 +22,9 @@ Make note of technical problems, and ignore them. For example:
 LLM responses sometimes include hallucinations or overt errors. Only include
 information that is known to a high degree of confidence.
 
-Some responses may also be irrelevant, or clearly out of context. Cherry-pick 
-what is useful, and ignore anything that does not add value.
+Some draft responses may also be irrelevant, or clearly out of context. Cherry-
+pick what is useful, and ignore anything that does not add value.
 
-The original query and all the draft responses follow. Begin your final 
+The original query and all draft responses follow. Begin your final 
 response immediately, with no commentary.
 

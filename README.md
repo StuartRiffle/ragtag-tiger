@@ -43,7 +43,7 @@ python3 -m venv .venv
 ```
 On Windows the command to activate the environment is different:
 ```
-python3 -m venv .venv
+python -m venv .venv
 .venv\Scripts\activate.bat
 ```
 ### 4) Install dependencies
@@ -62,7 +62,7 @@ This is the part where it falls over because your CUDA drivers are too old or so
 # Usage
 
 ### Launching
-Run the program using the script `ragtag.sh` (or `ragtag.bat` for Windows) in the root of the repo. It's easier than typing `python ragtag-tiger.py`. Better still, put the repo root in your path, so you can call **RAG/TAG Tiger** from any directory.
+Run the program using the bash script `ragtag` (or `ragtag.bat` for Windows) in the root of the repo. It's easier than typing `python ragtag-tiger.py`. Better still, put the repo root in your path, so you can call **RAG/TAG Tiger** from any directory.
 
 The simplest way to perform a RAG query would be:
 ```
