@@ -38,7 +38,7 @@ cd ragtag
 ```
 ### 3) Launch with the script named `ragtag`
 
-Run the program using the bash script `ragtag` (or `ragtag.bat` for Windows) in the root of the repo. It will create a virtual environment and install dependencies on the first run automatically.
+Run the program using the bash script `ragtag` (or `ragtag.bat` for Windows) in the root of the repo. It will create a virtual environment and install dependencies on the first run automatically. It *should* "just work".
 
 > TIP: also put the repo in your path so that you can invoke it by typing `ragtag` from any folder.
 
