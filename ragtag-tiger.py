@@ -99,7 +99,7 @@ arg("--no-cache-load",  help="Do not use the local cache for loaders", action="s
 arg("--gitignore",      help="Apply rules from .gitignore files found", action="store_true")
 
 arg = parser.add_argument_group("Language model").add_argument
-arg("--llm-provider",   help="Inference provider/interface", choices=["openai", "google", "llamacpp", "huggingface", "perplexity", "replicate"], metavar="NAME")
+arg("--llm-provider",   help="Inference provider/interface", choices=["openai", "gemini", "llamacpp", "huggingface", "mistral", "perplexity", "replicate", "fireworks"], metavar="NAME")
 arg("--llm-model",      help="Model name/path/etc for provider", metavar="NAME")
 arg("--llm-server",     help="Inference server URL (if needed)", metavar="URL")
 arg("--llm-api-key",    help="API key for inference server (if needed)", metavar="KEY")
@@ -555,10 +555,10 @@ llm_config_list = args.llm_config or []
 if len(preset_list) > 0:
     lograg(f"Resolving model presets...")
     for preset_name in preset_list:
-        preset_config = get_provider_preset_config(providers_config_info, preset_name).strip(',')
+        preset_config = get_provider_preset_config(providers_config_info, preset_name)
         if preset_config:
             llm_config_list.append(preset_config)
-            lograg_verbose(f"\t\"{preset_name}\" --> \"{preset_config}\"")
+            lograg_verbose(f"\t\"{preset_name}\" --> \"{preset_config.strip(',')}\"")
         else:
             lograg_error(f"no available provider for model preset \"{preset_name}\"")
 
@@ -1043,3 +1043,6 @@ if temp_folder and not args.no_delete_temp:
 
 lograg(f"Tiger out, peace.")
 lograg_verbose(f"({time_since(program_start_time)})")
+
+# This is here because MistralAI does not shut down cleanly  :/
+os._exit(0)

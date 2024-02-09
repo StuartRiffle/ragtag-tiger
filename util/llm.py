@@ -11,6 +11,7 @@ from .timer import TimerUntil
 openai_model_default    = "gpt-3.5-turbo-instruct"
 google_model_default    = "models/text-bison-001"
 anthropic_model_default = "claude-2"
+mistral_default         = "mistral-small"
 perplexity_default      = "llama-2-70b-chat"
 replicate_default       = "mistralai/mixtral-8x7b-instruct-v0.1"
 fireworks_ai_default    = "accounts/fireworks/models/mixtral-8x7b-instruct"
@@ -118,6 +119,19 @@ def load_llm(provider, model, server, api_key, params, global_params, verbose=Fa
                     max_new_tokens=max_tokens,
                     temperature=temperature,
                     verbose=verbose)
+                
+            ### Mistral
+            elif provider == "mistral":
+                api_key = api_key or os.environ.get("MISTRAL_API_KEY", None)
+                model_name = model or mistral_default
+                lograg(f"Mistral model \"{model_name}\"...")
+                from llama_index.llms import MistralAI
+                result = MistralAI(
+                    api_key=api_key,
+                    model=model_name,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    additional_kwargs=model_kwargs)
                 
             ### Perplexity
             elif provider == "perplexity":

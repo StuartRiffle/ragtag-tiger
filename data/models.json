@@ -51,13 +51,16 @@
             "families": ["llama-python", "codellama-python"],
             "parameters": 34
         },
-        "mixtral-8x7b": {
+        "mistral": {
             "families": ["mistral", "mixtral"],
-            "parameters": 56
         },
         "mistral-7b": {
             "families": ["mistral"],
             "parameters": 7
+        },
+        "mixtral-8x7b": {
+            "families": ["mistral", "mixtral"],
+            "parameters": 56
         },
         "palm": {
             "families": ["palm"]

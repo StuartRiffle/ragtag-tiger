@@ -1,5 +1,4 @@
 @echo off
-setlocal, enabledelayedexpansion
 
 if not exist "%~dp0.venv" (
     echo Creating virtual environment...

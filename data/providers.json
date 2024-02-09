@@ -39,6 +39,22 @@
             }
         },
 
+        "mistral":
+        {
+            "name":                 "Mistral AI",
+            "website":              "https://mistral.ai/",
+            "connection": {       
+                "api_key":          "MISTRAL_API_KEY",
+                "protocol":         "mistral",
+                "NOT_endpoint":         "https://api.mistral.ai"
+            },
+            "model_names": {
+                "mistral-7b":       "mistral-tiny",
+                "mixtral-8x7b":     "mistral-small",
+                "mistral":          "mistral-medium"
+            }
+        },
+
         "together": {
             "name":                 "together.ai",
             "website":              "https://together.ai",
