@@ -10,7 +10,7 @@ def split_root_from_spec(spec):
     """Split off the root path from the wildcard part if possible"""
     for pos in range(len(spec)):
         if spec[pos] == "*" or spec[pos] == "?":
-            sep_pos = spec.rfind(os.path.sep, 0, pos)
+            sep_pos = spec.replace(os.path.sep, '/').rfind('/', 0, pos)
             if sep_pos >= 0:
                 return spec[:sep_pos + 1], spec[sep_pos + 1:]
     return "", spec
@@ -23,14 +23,16 @@ def match_files_to_index(search_spec):
             all_matches.append(search_spec)
         else:
             file_spec_root, file_spec = split_root_from_spec(search_spec)
-            file_spec_pattern = file_spec.replace(os.path.sep, '/') # required by pathspec
+            file_spec_pattern = file_spec.replace(os.path.sep, '/').lower() # required by pathspec
             relative_pathspec = pathspec.PathSpec.from_lines('gitwildmatch', [file_spec_pattern])
 
-            matches = relative_pathspec.match_tree(file_spec_root)
-            matches = [os.path.join(file_spec_root, match) for match in matches]
+            for dirpath, dirs, files in os.walk(file_spec_root):
+                for filename in files:
+                    if relative_pathspec.match_file(os.path.join(dirpath, filename).lower()):
+                        all_matches.append(os.path.join(dirpath, filename))
 
-            lograg_verbose(f"\t{len(matches)} files match \"{cleanpath(file_spec)}\" from \"{cleanpath(file_spec_root)}\"")
-            all_matches.extend(matches)
+            lograg_verbose(f"\t{len(all_matches)} files match \"{cleanpath(file_spec)}\" from \"{cleanpath(file_spec_root)}\"")
+
 
     except Exception as e: lograg_error(e)
     return all_matches
