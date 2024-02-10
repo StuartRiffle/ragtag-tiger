@@ -213,4 +213,3 @@ def load_llm_config(config, global_params, set_service_context=True):
     provider, model, server, api_key, params, _ = split_llm_config(config)
     return load_llm(provider.lower(), model, server, api_key, params, global_params, set_service_context)
 
-

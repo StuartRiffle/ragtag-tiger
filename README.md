@@ -153,15 +153,24 @@ If that's not a problem:
 ```
 --llm-provider openai  --llm-model gpt-4
 ```
-
-### [Google](https://deepmind.google)
+### [Google PaLM (legacy)](https://ai.google/discover/palm2)
  - set `GOOGLE_APPLICATION_CREDENTIALS` and `GOOGLE_API_KEY` in your environment (override with `--llm-api-key`)
- - you may also need `GEMINI_API_KEY` for access to _Gemini Pro_
- - change [models](https://ai.google.dev/models) using `--llm-model` (the default is `text-bison-001`)
+ - change [models](https://ai.google.dev/models/palm) using `--llm-model` (the default is `text-bison-001`)
 ```
---llm-provider google  --llm-model models/gemini-pro
+--llm-provider google  --llm-model text-bison-001
 ```
-
+### [Google Gemini](https://deepmind.google)
+ - set `GEMINI_API_KEY` in your environment (override with `--llm-api-key`)
+ - change [models](https://ai.google.dev/models) using `--llm-model` (the default is `models/gemini-pro`)
+```
+--llm-provider gemini  --llm-model models/gemini-ultra
+```
+### [Mistral](https://mistral.ai)
+ - set `MISTRAL_API_KEY` in your environment (override with `--llm-api-key`)
+ - change [models](https://docs.mistral.ai/platform/endpoints/) using `--llm-model` (the default is `mistral-small`)
+```
+--llm-provider mistral  --llm-model mistral-tiny
+```
 ### [Perplexity](https://perplexity.ai)
  - set `PERPLEXITYAI_API_KEY` in your environment (override with `--llm-api-key`)
  - change [models](https://docs.perplexity.ai/docs/model-cards) using `--llm-model` (the default is `llama-2-70b-chat`)
@@ -174,13 +183,30 @@ If that's not a problem:
  ```
 --llm-provider replicate  --llm-model mistralai/mistral-7b-instruct-v0.2
 ```
+### [Anyscale](https://anyscale.com)
+ - set `ANYSCALE_API_KEY` in your environment (override with `--llm-api-key`)
+ - set `--llm-server` to the API endpoint, which is probably `https://api.endpoints.anyscale.com/v1` 
+ - select a [model](https://docs.endpoints.anyscale.com/category/supported-models) using `--llm-model`
+ - note the provider is `openai` because we're using [Anyscale](https://anyscale.com)'s OpenAI API-compatibile endpoint
+```
+--llm-provider openai  --llm-serverhttps://api.endpoints.anyscale.com/v1  --llm-model meta-llama/Llama-2-70b-chat-hf
+```
 ### [together.ai](https://www.together.ai/)
  - set `TOGETHERAI_API_KEY` in your environment (override with `--llm-api-key`)
- - set `--llm-server` to the API endpoint, which is probably `https://api.together.xyz`
+ - set `--llm-server` to the API endpoint, which is probably `https://api.together.xyz` 
  - select a [model](https://docs.together.ai/docs/inference-models) using `--llm-model` (the default is `codellama/CodeLlama-70b-Instruct-hf`)
  - note the provider is `openai` because we're using [together.ai](https://www.together.ai/)'s OpenAI API-compatibile endpoint
 ```
 --llm-provider openai  --llm-server https://api.together.xyz  --llm-model NousResearch/Nous-Hermes-2-Yi-34B
+```
+### [Lepton AI](https://www.lepton.ai)
+ - set `LEPTON_API_KEY` in your environment (override with `--llm-api-key`)
+ - set `--llm-server` to the API endpoint, which **changes based on the model name**: `https://MODEL_NAME.lepton.run/api/v1/``
+ - select a [model](https://www.lepton.ai/references/llm_models#model-list) using `--llm-model`
+ - note the provider is `openai` because we're using [Lepton AI](https://www.lepton.ai)'s OpenAI API-compatibile endpoint
+ - also note how the server name contains the model name
+```
+--llm-provider openai  --llm-server https://mixtral-8x7b.lepton.run/api/v1/  --llm-model mixtral-8x7b
 ```
 ### [fireworks.ai](https://www.fireworks.ai/)
  - set `FIREWORKS_API_KEY` in your environment (override with `--llm-api-key`)
@@ -231,10 +257,11 @@ It does this as another RAG query. I don't know if that's a good idea or not yet
 | | Gemini | | 30k | `google,models/gemini-pro` |
 |  **[Perplexity](https://docs.perplexity.ai/docs/model-cards)** | CodeLlama | 33B | 16k | `perplexity,codellama-34b-instruct` |
 | | Llama 2 | 70B | 4k | `perplexity,llama-2-70b-chat` |
+|  **[Mistral]()** | Mixtral | 45B | 32k | `mistral,mistral-small` |
 | **[Replicate](https://replicate.com/collections/language-models)** | Mixtral | 8x 7B | 32k | `replicate,mistralai/mixtral-8x7b-instruct-v0.1` |
 | | Nous Hermes 2 | 34B | 4k | `replicate,kcaverly/nous-hermes-2-yi-34b-gguf` |
 | | Mistral | 7B | 4k | `replicate,mistralai/mistral-7b-instruct-v0.1` |
-|  **[Together.ai](https://api.together.xyz/playground)** | Falcon | 40B | 2k | `openai,togethercomputer/falcon-40b-instruct,https://api.together.xyz,YOUR_KEY` |
+| **[Together.ai](https://api.together.xyz/playground)** | Falcon | 40B | 2k | `openai,togethercomputer/falcon-40b-instruct,https://api.together.xyz,YOUR_KEY` |
 | **[OpenAI API](https://platform.openai.com/docs/models)** | _(external server)_| | |  `openai,,http://COMPATIBLE_API_SERVER` <br>Any OpenAI API-compatible service will work|
 | **Local**| | | | |
 | **[llama.cpp](https://github.com/ggerganov/llama.cpp)** | _(internal server)_ | | | `openai,,http://YOUR_SERVER:8081` |
