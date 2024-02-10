@@ -91,7 +91,8 @@ arg("--source",         help="Folder of files to be indexed recursively", action
 arg("--source-spec",    help="Index files matching a pathspec, like \"**/*.cpp\"", action="append", metavar="SPEC")
 arg("--source-list",    help="Text file with a list of filenames/pathspecs to index", action="append", metavar="FILE")
 arg("--custom-loader",  help="Download from hub, i.e. \"JPEGReader:jpg,jpeg\"", action="append", metavar="SPEC")
-arg("--index-unknown",  help="Index files with unrecognized extensions as text", action="store_true")
+arg("--index-as-text",  help="Index files with an unrecognized extension as text", action="append", metavar="EXT")
+arg("--index-unknown",  help="Index ALL files with unrecognized extensions as text", action="store_true")
 arg("--ignore-archives",help="Do not index files inside zip/tar/etc archives", action="store_true")
 arg("--ignore-types",   help="Do not index these file extensions, even if supported", action="append", metavar="EXT")
 arg("--size-limit",     help="Ignore huge text files unlikely to contain interesting", type=human_size_type, default=0, metavar="SIZE")
@@ -374,9 +375,14 @@ if verbose_enabled and len(files_to_index) > 0:
 
 unsupported_ext = set(files_with_ext.keys()) - supported_ext
 if len(unsupported_ext) > 0:
+    for to_index in args.index_as_text or []:
+        to_index = "." + to_index.strip(".")
+        if to_index in unsupported_ext:
+            unsupported_ext.remove(to_index)
+            lograg_verbose(f"NOTE: indexing {to_index} files as plain text")
     type_list = ", ".join(sorted(unsupported_ext)).replace(".", "").strip(", ").lower()
     if args.index_unknown:
-        lograg_verbose(f"WARNING: indexing unknown file types as plain text: {type_list}")
+        lograg_verbose(f"WARNING: indexing ALL unknown file types as plain text: {type_list}")
     else:
         lograg_verbose(f"Ignoring these unsupported file types: {type_list}")
         for ext in unsupported_ext:

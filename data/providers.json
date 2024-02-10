@@ -40,25 +40,7 @@
                 "gpt-4":                "gpt-4",
                 "gpt-4-32k":            "gpt-4-32k",
                 "gpt-4-turbo":          "gpt-4-turbo-preview",
-                "chatgpt":              "gpt-4-turbo-preview"
-            }
-        },
-
-        "lepton": {
-            "name":                     "Lepton AI",
-            "website":                  "https://www.lepton.ai",
-            "connection": {         
-                "protocol":             "openai",
-                "endpoint":             "https://{{model_name}}.lepton.run/api/v1/",
-                "api_key":              "LEPTON_API_KEY"
-            },  
-            "console":                  "https://dashboard.lepton.ai/",
-            "model_list":               "https://www.lepton.ai/references/llm_models#model-list",
-            "model_names": {    
-                "llama-2-7b":           "llama2-7b",
-                "llama-2-70b":          "llama2-70b",
-                "mistral-small":        "mixtral-8x7b",
-                "mixtral-8x7b":         "mixtral-8x7b"
+                "chatgpt":              "gpt-4"
             }
         },
 
@@ -81,6 +63,23 @@
             }
         },
 
+        "lepton": {
+            "name":                     "Lepton AI",
+            "website":                  "https://www.lepton.ai",
+            "connection": {         
+                "protocol":             "openai",
+                "endpoint":             "https://{{model_name}}.lepton.run/api/v1/",
+                "api_key":              "LEPTON_API_KEY"
+            },  
+            "console":                  "https://dashboard.lepton.ai/",
+            "model_list":               "https://www.lepton.ai/references/llm_models#model-list",
+            "model_names": {    
+                "llama-2-7b":           "llama2-7b",
+                "llama-2-70b":          "llama2-70b",
+                "mixtral-8x7b":         "mixtral-8x7b"
+            }
+        },
+
         "anyscale": {
             "name":                     "Anyscale",
             "website":                  "https://anyscale.com",
@@ -96,10 +95,8 @@
                 "codellama-70b":        "codellama/CodeLlama-70b-Instruct-hf",
                 "llama-2-7b":           "meta-llama/Llama-2-7b-chat-hf",
                 "llama-2-70b":          "meta-llama/Llama-2-70b-chat-hf",
-                "mistral-tiny":         "mistralai/Mistral-7B-Instruct-v0.1",
                 "mistral-7b":           "mistralai/Mistral-7B-Instruct-v0.1",
-                "mistral-small":        "mistralai/Mixtral-8x7B-Instruct-v0.1",
-                "mixtral-8x7b":         "mistralai/Mixtral-8x7B-Instruct-v0.1",
+                "mixtral-8x7b":         "mistralai/Mixtral-8x7B-Instruct-v0.1"
             }
         },
 
@@ -120,9 +117,7 @@
                 "llama-2-70b":          "togethercomputer/llama-2-70b-chat",
                 "codellama-python-34b": "codellama/CodeLlama-34b-Python-hf",
                 "codellama-python-70b": "codellama/CodeLlama-70b-Python-hf",
-                "mistral-tiny":         "mistralai/Mistral-7B-Instruct-v0.2",
                 "mistral-7b":           "mistralai/Mistral-7B-Instruct-v0.2",
-                "mistral-small":        "mistralai/Mixtral-8x7B-Instruct-v0.1",
                 "mixtral-8x7b":         "mistralai/Mixtral-8x7B-Instruct-v0.1",
                 "phind-34b":            "Phind/Phind-CodeLlama-34B-v2",
                 "wizard-python-34b":    "WizardLM/WizardCoder-Python-34B-V1.0",
@@ -145,9 +140,7 @@
                 "falcon-40b":           "joehoover/falcon-40b-instruct",
                 "llama-2-7b":           "meta/llama-2-7b-chat",
                 "llama-2-70b":          "meta/llama-2-70b-chat",
-                "mistral-tiny":         "mistralai/mistral-7b-instruct-v0.2",
                 "mistral-7b":           "mistralai/mistral-7b-instruct-v0.2",
-                "mistral-small":        "mistralai/mixtral-8x7b-instruct-v0.1",
                 "mixtral-8x7b":         "mistralai/mixtral-8x7b-instruct-v0.1",
                 "yi-34b":               "01-ai/yi-34b-chat"
             }
@@ -168,9 +161,7 @@
                 "codellama-70b":        "accounts/fireworks/models/llama-v2-70b-code-instruct",
                 "llama-2-7b":           "accounts/fireworks/models/llama-v2-7b-chat",
                 "llama-2-70b":          "accounts/fireworks/models/llama-v2-70b-chat",
-                "mistral-tiny":         "accounts/fireworks/models/mistral-7b-instruct",
                 "mistral-7b":           "accounts/fireworks/models/mistral-7b-instruct",
-                "mistral-small":        "accounts/fireworks/models/mixtral-8x7b-instruct",
                 "mixtral-8x7b":         "accounts/fireworks/models/mixtral-8x7b-instruct"
             }   
         },  
@@ -188,9 +179,7 @@
                 "codellama-34b":        "codellama-34b-instruct",
                 "codellama-70b":        "codellama-70b-instruct",
                 "llama-2-70b":          "llama-2-70b-chat",
-                "mistral-tiny":         "mistral-7b-instruct",
                 "mistral-7b":           "mistral-7b-instruct",
-                "mistral-small":        "mixtral-8x7b-instruct",
                 "mixtral-8x7b":         "mixtral-8x7b-instruct"
             }
         },

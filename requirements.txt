@@ -30,3 +30,4 @@ docx2txt
 openpyxl
 nbconvert
 mistralai
+cryptography
